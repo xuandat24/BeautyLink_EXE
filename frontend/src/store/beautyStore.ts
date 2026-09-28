@@ -24,7 +24,6 @@ interface MemoryState {
   favorites: string[];
   notifications: PushNotification[];
   soundEnabled: boolean;
-  autoSimulationEnabled: boolean;
 }
 
 let memoryState: MemoryState = {
@@ -37,7 +36,6 @@ let memoryState: MemoryState = {
   favorites: cache.get<string[]>(STORAGE_KEYS.FAVORITES) || [],
   notifications: notificationService.getStoredNotifications(),
   soundEnabled: notificationService.isSoundEnabled(),
-  autoSimulationEnabled: notificationService.isAutoSimEnabled(),
 };
 
 const listeners = new Set<() => void>();
@@ -129,7 +127,7 @@ export function useBeautyStore() {
   }, []);
 
   const addNotification = useCallback((notification: PushNotification) => {
-    memoryState.notifications = [notification, ...memoryState.notifications];
+    memoryState.notifications = [notification, ...memoryState.notifications].slice(0, 50);
     notificationService.saveNotifications(memoryState.notifications);
     notify();
   }, []);
@@ -158,12 +156,6 @@ export function useBeautyStore() {
     notify();
   }, []);
 
-  const setAutoSimulationEnabled = useCallback((value: boolean | ((previous: boolean) => boolean)) => {
-    memoryState.autoSimulationEnabled = typeof value === 'function' ? value(memoryState.autoSimulationEnabled) : value;
-    notificationService.setAutoSimEnabled(memoryState.autoSimulationEnabled);
-    notify();
-  }, []);
-
   return {
     ...state,
     setSelectedCity,
@@ -182,6 +174,5 @@ export function useBeautyStore() {
     markAllNotificationsRead,
     clearAllNotifications,
     setSoundEnabled,
-    setAutoSimulationEnabled,
   };
 }

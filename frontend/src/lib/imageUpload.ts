@@ -3,7 +3,16 @@ const MAX_STORED_CHARACTERS = 1_900_000;
 const MAX_EDGE = 1400;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
-export const prepareImageUpload = (file: File): Promise<string> => {
+interface ImageUploadOptions {
+  maxStoredCharacters?: number;
+  maxEdge?: number;
+  quality?: number;
+}
+
+export const prepareImageUpload = (file: File, options: ImageUploadOptions = {}): Promise<string> => {
+  const maxStoredCharacters = options.maxStoredCharacters ?? MAX_STORED_CHARACTERS;
+  const maxEdge = options.maxEdge ?? MAX_EDGE;
+  const quality = options.quality ?? 0.82;
   if (!ALLOWED_TYPES.has(file.type)) {
     return Promise.reject(new Error('Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP.'));
   }
@@ -19,7 +28,7 @@ export const prepareImageUpload = (file: File): Promise<string> => {
       image.onerror = () => reject(new Error('Tệp ảnh không hợp lệ.'));
       image.onload = () => {
         try {
-          const scale = Math.min(1, MAX_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
+          const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
           const width = Math.max(1, Math.round(image.naturalWidth * scale));
           const height = Math.max(1, Math.round(image.naturalHeight * scale));
           const canvas = document.createElement('canvas');
@@ -33,8 +42,8 @@ export const prepareImageUpload = (file: File): Promise<string> => {
           context.fillStyle = '#ffffff';
           context.fillRect(0, 0, width, height);
           context.drawImage(image, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-          if (dataUrl.length > MAX_STORED_CHARACTERS) {
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          if (dataUrl.length > maxStoredCharacters) {
             reject(new Error('Ảnh vẫn quá lớn sau khi tối ưu. Hãy chọn ảnh nhỏ hơn.'));
             return;
           }

@@ -16,7 +16,7 @@ import {
   ChevronDown,
   ArrowRight,
 } from 'lucide-react';
-import { PushNotification } from '../data/notificationsData';
+import type { PushNotification } from '../types';
 import { getCategoryShortcuts } from '../data/categoryCatalog';
 import type { ServiceCategory } from '../types';
 import { NotificationCenterDropdown } from './NotificationCenterDropdown';
@@ -43,13 +43,8 @@ interface HeaderProps {
   onMarkAllAsRead?: () => void;
   onMarkAsRead?: (id: string) => void;
   onClearAllNotifications?: () => void;
-  onTriggerTestPush?: () => void;
   soundEnabled?: boolean;
   onToggleSound?: () => void;
-  autoSimulationEnabled?: boolean;
-  onToggleAutoSimulation?: () => void;
-  onOpenDeal?: (dealTitle: string, salonName: string, price: number, originalPrice: number) => void;
-  onOpenVouchers?: () => void;
   onOpenAccount?: () => void;
   serviceCategories?: ServiceCategory[];
   onSelectServiceCategory?: (category: ServiceCategory) => void;
@@ -70,13 +65,8 @@ export const Header: React.FC<HeaderProps> = ({
   onMarkAllAsRead,
   onMarkAsRead,
   onClearAllNotifications,
-  onTriggerTestPush,
   soundEnabled = true,
   onToggleSound,
-  autoSimulationEnabled = true,
-  onToggleAutoSimulation,
-  onOpenDeal,
-  onOpenVouchers,
   onOpenAccount,
   serviceCategories = [],
   onSelectServiceCategory,
@@ -379,8 +369,8 @@ export const Header: React.FC<HeaderProps> = ({
                     setIsNotifOpen((prev) => !prev);
                   }}
                   className="relative p-2 rounded-full bg-pink-50 hover:bg-pink-100 text-[#B42D58] border border-pink-200/70 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                  title="Thông báo & Flash Sale (Rê hoặc dí chuột vào để xem ngay)"
-                  aria-label="Thông báo và khuyến mãi"
+                  title="Thông báo tài khoản và lịch hẹn"
+                  aria-label="Thông báo"
                 >
                   <Bell className="w-4 h-4 text-[#EB0F51]" />
                   {unreadNotificationsCount > 0 && (
@@ -400,13 +390,8 @@ export const Header: React.FC<HeaderProps> = ({
                   onMarkAllAsRead={onMarkAllAsRead || (() => {})}
                   onMarkAsRead={onMarkAsRead || (() => {})}
                   onClearAll={onClearAllNotifications || (() => {})}
-                  onTriggerTestPush={onTriggerTestPush || (() => {})}
                   soundEnabled={soundEnabled}
                   onToggleSound={onToggleSound || (() => {})}
-                  autoSimulationEnabled={autoSimulationEnabled}
-                  onToggleAutoSimulation={onToggleAutoSimulation || (() => {})}
-                  onOpenDeal={onOpenDeal || (() => {})}
-                  onOpenVouchers={onOpenVouchers || (() => {})}
                 />
               </div>
             )}
@@ -627,7 +612,7 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <span className="flex items-center gap-1.5">
                   <Bell className="w-4 h-4 text-[#EB0F51]" />
-                  <span>Thông báo & Flash Sale</span>
+                  <span>Thông báo</span>
                 </span>
                 {unreadNotificationsCount > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-[#EB0F51] text-white text-[10px] font-black">

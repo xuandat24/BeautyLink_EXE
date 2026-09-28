@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, EyeOff, ImagePlus, LoaderCircle, Pencil, Plus, Save, Store, Trash2, X } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, ImagePlus, LoaderCircle, LocateFixed, MapPin, Pencil, Plus, Save, Store, Trash2, X } from 'lucide-react';
 import { getApiErrorMessage } from '../lib/api';
 import { prepareImageUpload } from '../lib/imageUpload';
 import { platformApi } from '../services/platformApi';
@@ -30,12 +30,15 @@ export const SupplierStorePage: React.FC<SupplierStorePageProps> = ({ profile, o
     description: profile.description || '',
     addressLine: profile.addressLine,
     imageUrl: profile.imageUrl || null as string | null,
+    latitude: profile.latitude ?? null as number | null,
+    longitude: profile.longitude ?? null as number | null,
   });
   const [services, setServices] = useState<SupplierService[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
   const [error, setError] = useState('');
   const [editor, setEditor] = useState<SupplierService | 'new' | null>(null);
@@ -70,6 +73,14 @@ export const SupplierStorePage: React.FC<SupplierStorePageProps> = ({ profile, o
 
   const saveProfile = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!profileForm.imageUrl) {
+      setError('Vui lòng tải ảnh đại diện hoặc ảnh bìa của cơ sở trước khi lưu.');
+      return;
+    }
+    if (profileForm.latitude == null || profileForm.longitude == null) {
+      setError('Vui lòng xác định GPS của cơ sở trước khi lưu.');
+      return;
+    }
     setSavingProfile(true); setError(''); setProfileMessage('');
     try {
       const updated = await platformApi.updateSupplierProfile(profileForm);
@@ -80,6 +91,20 @@ export const SupplierStorePage: React.FC<SupplierStorePageProps> = ({ profile, o
     } finally {
       setSavingProfile(false);
     }
+  };
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) { setError('Trình duyệt này không hỗ trợ định vị GPS.'); return; }
+    setLocating(true); setError('');
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setProfileForm((current) => ({ ...current, latitude: Number(coords.latitude.toFixed(7)), longitude: Number(coords.longitude.toFixed(7)) }));
+        setProfileMessage('Đã cập nhật vị trí GPS của cơ sở.');
+        setLocating(false);
+      },
+      () => { setError('Không thể lấy vị trí. Hãy cho phép quyền định vị và thử lại ngay tại cơ sở.'); setLocating(false); },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
+    );
   };
 
   const saveService = async (payload: SupplierServicePayload) => {
@@ -116,6 +141,10 @@ export const SupplierStorePage: React.FC<SupplierStorePageProps> = ({ profile, o
           <Field label="Tên gian hàng *"><input required maxLength={160} value={profileForm.name} onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })} className="field" /></Field>
           <Field label="Loại hình kinh doanh *"><input required maxLength={120} value={profileForm.businessType} onChange={(event) => setProfileForm({ ...profileForm, businessType: event.target.value })} className="field" /></Field>
           <Field label="Địa chỉ *"><input required maxLength={255} value={profileForm.addressLine} onChange={(event) => setProfileForm({ ...profileForm, addressLine: event.target.value })} className="field" /></Field>
+          <div className="rounded-2xl border border-pink-100 bg-pink-50/50 p-4">
+            <div className="flex items-start gap-3"><MapPin className="mt-0.5 h-5 w-5 shrink-0 text-[#EB0F51]" /><div className="min-w-0 flex-1"><p className="text-xs font-black text-slate-800">Vị trí GPS của cơ sở *</p><p className="mt-1 text-[11px] leading-4 text-slate-500">Dùng để tính khoảng cách thật trong mục “Gần bạn”. Chỉ tọa độ cửa hàng được hiển thị, không phải vị trí cá nhân.</p></div></div>
+            <button type="button" onClick={detectLocation} disabled={locating} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-pink-200 bg-white px-3 py-2.5 text-xs font-black text-[#B42D58] hover:bg-pink-100 disabled:opacity-50">{locating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : profileForm.latitude != null ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <LocateFixed className="h-4 w-4" />}{locating ? 'Đang định vị...' : profileForm.latitude != null ? `Đã định vị · ${profileForm.latitude.toFixed(5)}, ${profileForm.longitude?.toFixed(5)}` : 'Lấy vị trí hiện tại'}</button>
+          </div>
           <Field label="Giới thiệu"><textarea rows={4} maxLength={1500} value={profileForm.description} onChange={(event) => setProfileForm({ ...profileForm, description: event.target.value })} className="field resize-none" /></Field>
         </div>
         {profileMessage && <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{profileMessage}</p>}

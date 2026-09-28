@@ -17,6 +17,8 @@ interface NearYouSectionProps {
   isLoading?: boolean;
   onSelectSalon: (salon: Salon) => void;
   onViewAll: () => void;
+  locationPermission?: 'idle' | 'loading' | 'ready' | 'denied';
+  onEnableLocation?: () => void;
 }
 
 export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
@@ -24,6 +26,8 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
   isLoading = false,
   onSelectSalon,
   onViewAll,
+  locationPermission = 'idle',
+  onEnableLocation,
 }) => {
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
@@ -96,7 +100,9 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
           </span>
         </div>
 
-        {/* Action Button: Opens the Unified Shared Filter & All Services Modal */}
+        <div className="flex flex-wrap items-center gap-2">
+        {locationPermission !== 'ready' && <button type="button" onClick={onEnableLocation} disabled={locationPermission === 'loading'} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"><Navigation className={`h-3.5 w-3.5 ${locationPermission === 'loading' ? 'animate-pulse' : ''}`} />{locationPermission === 'loading' ? 'Đang định vị...' : locationPermission === 'denied' ? 'Thử lại GPS' : 'Dùng vị trí của tôi'}</button>}
+        {locationPermission === 'ready' && <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-700"><CheckCircle className="h-3.5 w-3.5" />Khoảng cách GPS thật</span>}
         <button
           type="button"
           onClick={onViewAll}
@@ -108,6 +114,7 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
           <span>Bộ lọc & Xem tất cả ({isLoading ? '...' : salons.length})</span>
           <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
         </button>
+        </div>
       </div>
 
       {/* Category Filter Tabs */}
@@ -239,7 +246,7 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
                   {/* Distance Overlay */}
                   <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded text-[11px] font-semibold flex items-center gap-1">
                     <MapPin className="w-3 h-3 text-[#EB0F51]" />
-                    <span>{salon.distanceKm} km</span>
+                    <span>{salon.hasExactDistance ? `${salon.distanceKm} km` : 'Bật GPS để đo'}</span>
                   </div>
                 </div>
 

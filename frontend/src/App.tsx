@@ -27,14 +27,10 @@ import { SupplierSchedulePage } from './components/SupplierSchedulePage';
 import { MyBookingsPage } from './components/MyBookingsPage';
 import { StaffReportsPage } from './components/StaffReportsPage';
 
-// Push Notification components & helpers
-import { notificationService } from './services/notificationService';
-
 // Central Store & Types (Enterprise Modular Architecture)
 import { useBeautyStore } from './store/beautyStore';
 import {
   HotDeal,
-  PushNotification,
   Salon,
   NewPartner,
   CurrentUser,
@@ -50,6 +46,17 @@ const logoFor = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).
 const categoryForCard = (slug: string): Salon['category'] => ({ spa: 'spa', nails: 'nail', hair: 'salon-toc', skincare: 'clinic', makeup: 'tham-my-vien' }[slug] as Salon['category']) || 'spa';
 const districtFrom = (address: string) => address.match(/(Quận\s+[^,]+|Phú Nhuận|Bình Thạnh|Tân Bình|Thủ Đức)/i)?.[1] || 'TP. Hồ Chí Minh';
 
+type GeoPoint = { latitude: number; longitude: number };
+const distanceInKm = (from: GeoPoint, to: GeoPoint) => {
+  const radius = 6371;
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const latitudeDelta = radians(to.latitude - from.latitude);
+  const longitudeDelta = radians(to.longitude - from.longitude);
+  const value = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(radians(from.latitude)) * Math.cos(radians(to.latitude)) * Math.sin(longitudeDelta / 2) ** 2;
+  return radius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+};
+
 const toDeal = (service: BeautyService, index: number): HotDeal => ({
   id: `service-${service.id}`, serviceId: service.id, title: service.name, brandName: service.supplierName,
   brandLogo: logoFor(service.supplierName), image: service.imageUrl, originalPrice: service.originalPrice || service.price,
@@ -60,14 +67,21 @@ const toDeal = (service: BeautyService, index: number): HotDeal => ({
   district: districtFrom(service.supplierAddress),
 });
 
-const toSalon = (service: BeautyService, index: number): Salon => ({
+const toSalon = (service: BeautyService, index: number, userLocation: GeoPoint | null): Salon => {
+  const hasCoordinates = service.supplierLatitude != null && service.supplierLongitude != null;
+  const exactDistance = userLocation && hasCoordinates
+    ? distanceInKm(userLocation, { latitude: service.supplierLatitude!, longitude: service.supplierLongitude! })
+    : null;
+  return ({
   id: `supplier-${service.supplierId}`, serviceId: service.id, name: service.supplierName,
   category: categoryForCard(service.categorySlug), categoryLabel: service.supplierBusinessType,
-  address: service.supplierAddress, district: districtFrom(service.supplierAddress), distanceKm: 0.8 + (index % 8) * 0.7,
+  address: service.supplierAddress, district: districtFrom(service.supplierAddress), distanceKm: exactDistance == null ? 0.8 + (index % 8) * 0.7 : Number(exactDistance.toFixed(1)),
   rating: service.rating, reviewsCount: service.supplierReviewCount, image: service.supplierImageUrl || service.imageUrl,
   logo: logoFor(service.supplierName), badge: 'Đã xác minh',
   isFeatured: true, minPrice: service.price, maxPrice: service.originalPrice || service.price,
-});
+  hasExactDistance: exactDistance != null,
+  });
+};
 
 const toNewPartner = (service: BeautyService): NewPartner => ({
   id: `new-supplier-${service.supplierId}`, serviceId: service.id, name: service.supplierName,
@@ -92,14 +106,11 @@ export default function App() {
     setCurrentUser,
     logout,
     notifications,
-    addNotification,
     markNotificationRead,
     markAllNotificationsRead,
     clearAllNotifications,
     soundEnabled,
     setSoundEnabled,
-    autoSimulationEnabled,
-    setAutoSimulationEnabled,
   } = useBeautyStore();
 
   // Initialize SEO meta tags once
@@ -114,6 +125,8 @@ export default function App() {
   const [isRewardsModalOpen, setIsRewardsModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [isBlogModalOpen, setIsBlogModalOpen] = useState(false);
+  const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
+  const [locationPermission, setLocationPermission] = useState<'idle' | 'loading' | 'ready' | 'denied'>('idle');
 
   useEffect(() => {
     if (!locationConfirmed) setIsLocationModalOpen(true);
@@ -189,8 +202,6 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const [simulationPoolIndex, setSimulationPoolIndex] = useState(0);
-
   // Data loading state with Skeleton Effect support to avoid Layout Shift
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [homepageServices, setHomepageServices] = useState<BeautyService[]>([]);
@@ -204,6 +215,16 @@ export default function App() {
       setToastMessage(null);
     }, 2800);
   }, []);
+
+  const requestUserLocation = useCallback(() => {
+    if (!navigator.geolocation) { setLocationPermission('denied'); showToast('Trình duyệt không hỗ trợ định vị GPS.'); return; }
+    setLocationPermission('loading');
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => { setUserLocation({ latitude: coords.latitude, longitude: coords.longitude }); setLocationPermission('ready'); showToast('Đã sắp xếp cơ sở theo khoảng cách thật từ bạn.'); },
+      () => { setLocationPermission('denied'); showToast('Không thể lấy vị trí. Bạn có thể cấp quyền GPS rồi thử lại.'); },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 120000 },
+    );
+  }, [showToast]);
 
   useEffect(() => {
     let active = true;
@@ -281,35 +302,6 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     showToast('Đã đăng xuất tài khoản.');
   };
-
-  // Dispatch a simulated push notification
-  const dispatchSimulatedNotification = useCallback((customNotif?: Partial<PushNotification>) => {
-    const generated = notificationService.generateSimulated(simulationPoolIndex);
-    const newNotif: PushNotification = {
-      ...generated,
-      ...customNotif,
-    };
-    setSimulationPoolIndex((prev) => prev + 1);
-    addNotification(newNotif);
-  }, [simulationPoolIndex, addNotification]);
-
-  // Initial showcase notification after 5 seconds on fresh visit
-  useEffect(() => {
-    if (!autoSimulationEnabled) return;
-    const timer = setTimeout(() => {
-      dispatchSimulatedNotification();
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [autoSimulationEnabled, dispatchSimulatedNotification]);
-
-  // Recurring simulated push notification every 50 seconds
-  useEffect(() => {
-    if (!autoSimulationEnabled) return;
-    const interval = setInterval(() => {
-      dispatchSimulatedNotification();
-    }, 50000);
-    return () => clearInterval(interval);
-  }, [autoSimulationEnabled, dispatchSimulatedNotification]);
 
   const handleMarkAllAsRead = () => {
     markAllNotificationsRead();
@@ -420,8 +412,9 @@ export default function App() {
   const nearbySalons = useMemo(() => {
     const unique = new Map<number, BeautyService>();
     homepageServices.filter((service) => service.supplierNearbyFeatured).forEach((service) => { if (!unique.has(service.supplierId)) unique.set(service.supplierId, service); });
-    return [...unique.values()].map(toSalon);
-  }, [homepageServices]);
+    return [...unique.values()].map((service, index) => toSalon(service, index, userLocation))
+      .sort((left, right) => left.distanceKm - right.distanceKm);
+  }, [homepageServices, userLocation]);
   const newPartners = useMemo(() => {
     const unique = new Map<number, BeautyService>();
     homepageServices.filter((service) => service.supplierNewPartner).forEach((service) => { if (!unique.has(service.supplierId)) unique.set(service.supplierId, service); });
@@ -552,13 +545,8 @@ export default function App() {
         onMarkAllAsRead={handleMarkAllAsRead}
         onMarkAsRead={handleMarkAsRead}
         onClearAllNotifications={handleClearAllNotifications}
-        onTriggerTestPush={() => dispatchSimulatedNotification()}
         soundEnabled={soundEnabled}
         onToggleSound={() => setSoundEnabled((prev) => !prev)}
-        autoSimulationEnabled={autoSimulationEnabled}
-        onToggleAutoSimulation={() => setAutoSimulationEnabled((prev) => !prev)}
-        onOpenDeal={handleOpenBooking}
-        onOpenVouchers={() => setIsVoucherModalOpen(true)}
       />
 
       {/* Main Homepage Flow (Replicating exact UI/UX from the screenshots) */}
@@ -592,6 +580,8 @@ export default function App() {
         <NearYouSection
           salons={nearbySalons}
           isLoading={isLoadingServices}
+          locationPermission={locationPermission}
+          onEnableLocation={requestUserLocation}
           onSelectSalon={handleSelectSalon}
           onViewAll={handleViewAllNearby}
         />

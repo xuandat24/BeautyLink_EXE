@@ -52,6 +52,7 @@ public class DevelopmentDataSeeder implements CommandLineRunner {
         Supplier supplier = new Supplier(); supplier.setOwner(owner); supplier.setName("Lumière Beauty House"); supplier.setSlug("lumiere-beauty-house");
         supplier.setBusinessType("Studio làm đẹp đa dịch vụ");
         supplier.setDescription("Không gian làm đẹp tuyển chọn với đội ngũ chuyên viên giàu kinh nghiệm."); supplier.setLocation(benNghe); supplier.setAddressLine("18 Lê Thánh Tôn, Phường Bến Nghé");
+        supplier.setLatitude(10.7786); supplier.setLongitude(106.7044);
         supplier.setImageUrl("https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=1200&q=85"); supplier.setVerificationStatus(VerificationStatus.VERIFIED); supplier.setRating(4.9); supplier.setReviewCount(248); suppliers.save(supplier);
         Practitioner linh = practitioner(supplier, "Nguyễn Ngọc Linh", "Makeup artist & skincare specialist", "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80");
         Practitioner minh = practitioner(supplier, "Trần Gia Minh", "Hair stylist", "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80");

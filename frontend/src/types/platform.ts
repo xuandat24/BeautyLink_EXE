@@ -26,6 +26,8 @@ export interface SupplierProfile {
   locationName: string;
   addressLine: string;
   imageUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
   rating: number;
   reviewCount: number;
@@ -47,6 +49,12 @@ export interface SupplierRegistrationRequest {
   addressLine: string;
   description?: string;
   specialty?: string;
+  cccdNumber: string;
+  cccdFrontImage: string;
+  cccdBackImage: string;
+  imageUrl: string;
+  latitude: number;
+  longitude: number;
 }
 
 export interface LocationOption {
@@ -95,6 +103,8 @@ export interface BeautyService {
   supplierDemo: boolean;
   supplierNearbyFeatured: boolean;
   supplierNewPartner: boolean;
+  supplierLatitude?: number | null;
+  supplierLongitude?: number | null;
 }
 
 export interface SupplierService {

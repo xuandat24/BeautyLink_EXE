@@ -28,17 +28,26 @@ public final class ApiDtos {
             @NotNull Long locationId,
             @NotBlank @Size(max = 255) String addressLine,
             @Size(max = 1500) String description,
-            @Size(max = 160) String specialty) {}
+            @Size(max = 160) String specialty,
+            @NotBlank @Pattern(regexp = "^[0-9]{12}$", message = "CCCD phải gồm đúng 12 chữ số") String cccdNumber,
+            @NotBlank @Size(max = 1_200_000) String cccdFrontImage,
+            @NotBlank @Size(max = 1_200_000) String cccdBackImage,
+            @NotBlank @Size(max = 2_000_000) String imageUrl,
+            @NotNull @DecimalMin("-90.0") @DecimalMax("90.0") Double latitude,
+            @NotNull @DecimalMin("-180.0") @DecimalMax("180.0") Double longitude) {}
     public record SupplierResponse(Long id, String name, String slug, String businessType, String description,
                                    Long locationId, String locationName, String addressLine, String imageUrl,
-                                   VerificationStatus verificationStatus, double rating, int reviewCount) {}
+                                   Double latitude, Double longitude, VerificationStatus verificationStatus,
+                                   double rating, int reviewCount) {}
     public record SupplierRegistrationResponse(AuthResponse auth, SupplierResponse supplier) {}
     public record UpdateSupplierProfileRequest(
             @NotBlank @Size(min = 2, max = 160) String name,
             @NotBlank @Size(max = 120) String businessType,
             @Size(max = 1500) String description,
             @NotBlank @Size(max = 255) String addressLine,
-            @Size(max = 2_000_000) String imageUrl) {}
+            @NotBlank @Size(max = 2_000_000) String imageUrl,
+            @NotNull @DecimalMin("-90.0") @DecimalMax("90.0") Double latitude,
+            @NotNull @DecimalMin("-180.0") @DecimalMax("180.0") Double longitude) {}
 
     public record LocationResponse(Long id, String name, String slug, LocationType type, Long parentId) {}
     public record CategoryResponse(Long id, String slug, String name, String description, String imageUrl) {}
@@ -64,7 +73,8 @@ public final class ApiDtos {
                                   String supplierAddress, double rating, List<PractitionerResponse> practitioners,
                                   BigDecimal originalPrice, String highlightText, boolean featured,
                                   String supplierImageUrl, String supplierBusinessType, int supplierReviewCount,
-                                  boolean supplierDemo, boolean supplierNearbyFeatured, boolean supplierNewPartner) {}
+                                  boolean supplierDemo, boolean supplierNearbyFeatured, boolean supplierNewPartner,
+                                  Double supplierLatitude, Double supplierLongitude) {}
     public record AvailabilityResponse(Long practitionerId, LocalDate date, List<LocalTime> availableSlots) {}
 
     public record CreateBookingRequest(

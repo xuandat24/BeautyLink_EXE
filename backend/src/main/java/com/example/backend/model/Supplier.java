@@ -15,6 +15,8 @@ public class Supplier {
     @Column(length = 1500) private String description;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "location_id") private Location location;
     @Column(nullable = false, length = 255) private String addressLine;
+    @Column private Double latitude;
+    @Column private Double longitude;
     @Lob @Column(columnDefinition = "LONGTEXT") private String imageUrl;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private VerificationStatus verificationStatus = VerificationStatus.PENDING;
     @Column(nullable = false) private double rating = 0;
@@ -31,6 +33,8 @@ public class Supplier {
     public String getDescription() { return description; } public void setDescription(String description) { this.description = description; }
     public Location getLocation() { return location; } public void setLocation(Location location) { this.location = location; }
     public String getAddressLine() { return addressLine; } public void setAddressLine(String addressLine) { this.addressLine = addressLine; }
+    public Double getLatitude() { return latitude; } public void setLatitude(Double latitude) { this.latitude = latitude; }
+    public Double getLongitude() { return longitude; } public void setLongitude(Double longitude) { this.longitude = longitude; }
     public String getImageUrl() { return imageUrl; } public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
     public VerificationStatus getVerificationStatus() { return verificationStatus; } public void setVerificationStatus(VerificationStatus verificationStatus) { this.verificationStatus = verificationStatus; }
     public double getRating() { return rating; } public void setRating(double rating) { this.rating = rating; }
