@@ -4,7 +4,19 @@
 
 BeautyLink is a full-stack marketplace that connects customers with third-party beauty providers such as makeup artists, hair salons, nail studios, spas, massage centers, and skincare clinics.
 
-> Project status: the main discovery, authentication, scheduling, booking, supplier, and support flows are functional. Payments are intentionally simulated and do not charge real money.
+> Project status: the main discovery, authentication, scheduling, booking, supplier, and support flows are functional. The VNPAY-QR checkout is intentionally simulated and does not charge real money.
+
+## Latest frontend update (2026-09-29)
+
+- Added a dismissible discovery popup that lets guests and signed-in users choose Hà Nội or Thành phố Hồ Chí Minh and a service category before browsing.
+- Added Vietnamese/English switching across the primary homepage, authentication, discovery, service, and booking flows.
+- Added remember-login behavior, a compact partner-registration entry point, and a small logout confirmation toast.
+- Reworked the header to give search more space, made categories more compact, and moved notifications to a floating bottom-right control without continuously generated deal alerts.
+- Added browser location handling with a clearly labelled approximate network fallback when device GPS is unavailable. Suppliers can still enter exact store coordinates manually.
+- Replaced the multi-option mock payment selector with a dedicated, responsive VNPAY-QR demo checkout containing a locally generated QR image, transaction summary, instructions, expiry timer, and booking confirmation step.
+- Improved cart dismissal, supplier registration/store forms, dashboard messaging, and responsive presentation throughout the updated flows.
+
+The current VNPAY-QR screen is a UI simulation. It is not connected to VNPAY Sandbox, does not collect banking credentials, and never confirms a real payment. A production or sandbox integration must generate signed payment requests on the backend and verify VNPAY return/IPN signatures before marking a booking paid.
 
 ## Features
 
@@ -14,8 +26,10 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 - Browse database-backed service categories and providers.
 - Search services, view prices, ratings, availability, and practitioners.
 - Register or sign in with JWT authentication.
+- Optionally remember the signed-in session on the current browser.
 - Book an available appointment and view it in **Tổng quan & Lịch hẹn**.
-- Allow GPS access to sort the **Gần bạn** section by real distance.
+- Allow location access to sort the **Gần bạn** section by device coordinates, with an explicitly labelled approximate network fallback on devices without GPS.
+- Continue from booking details to the simulated VNPAY-QR checkout.
 - Cancel eligible appointments and submit support reports.
 
 ### Supplier
@@ -46,7 +60,7 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 | Layer | Technology |
 |---|---|
 | Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 4 |
-| Client state/API | React hooks, Axios, localStorage persistence |
+| Client state/API | React hooks, Axios, localStorage persistence, QRCode |
 | Backend | Java 25, Spring Boot 3.5, Spring Web |
 | Authentication | Spring Security, JWT, BCrypt |
 | Persistence | Spring Data JPA, Hibernate |
@@ -228,7 +242,7 @@ Guests do not have database accounts. They can browse the catalog but must regis
 2. Open a category or service.
 3. Select a service, practitioner, date, and available time.
 4. Sign in as a customer when prompted.
-5. Confirm the simulated payment and booking.
+5. Continue to the VNPAY-QR demo page, inspect the transaction details, and confirm the simulated payment.
 6. Open the customer account page or `#bookings` to see the appointment.
 
 ### Configure a supplier schedule
@@ -448,9 +462,9 @@ The frontend displays a local BeautyLink placeholder when an external supplier i
 - Secrets remain in ignored environment files.
 - Supplier CCCD fields are encrypted at application level with AES-256-GCM and a unique random nonce for each value. Duplicate detection uses keyed HMAC; public catalog/profile responses never contain CCCD data.
 - Supplier identity uploads are restricted to decoded JPG, PNG, or WEBP images, resized/re-encoded in the browser, and size-limited before submission.
-- GPS permission is requested by the browser only when a user or supplier selects the location action. Production GPS requires HTTPS, which Vercel provides.
+- Location permission is requested only when a user or supplier selects the location action. If device positioning times out, the frontend may use an approximate IP-based location and labels it accordingly; suppliers should verify exact business coordinates before saving.
 - Supplier data is public only after verification. `SUPPLIER_AUTO_VERIFY=true` is intended only for local demonstrations.
-- Real payment processing is not implemented yet.
+- Real payment processing is not implemented. The VNPAY-QR page generates demo QR data locally; VNPAY merchant secrets must never be stored in the frontend or committed to Git.
 
 ## Contributing
 

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { HotDeal } from '../data/mockData';
 import { HotDealCardSkeleton } from './Skeleton';
+import { useLanguage } from '../lib/language';
 
 interface HotDealsSectionProps {
   deals: HotDeal[];
@@ -22,6 +23,7 @@ interface HotDealsSectionProps {
 
 // Isolated Countdown Component so 1-second ticks do not trigger re-render of deal cards
 const FlashSaleCountdown = React.memo(() => {
+  const { text } = useLanguage();
   const [timeLeft, setTimeLeft] = useState({ hours: 5, minutes: 42, seconds: 18 });
 
   useEffect(() => {
@@ -43,7 +45,7 @@ const FlashSaleCountdown = React.memo(() => {
   return (
     <div className="hidden md:flex items-center gap-1.5 bg-pink-50 border border-pink-200 px-3 py-1 rounded-full text-xs font-bold text-[#B42D58]">
       <Clock className="w-3.5 h-3.5 text-[#EB0F51]" />
-      <span>Kết thúc sau:</span>
+      <span>{text('Kết thúc sau:', 'Ends in:')}</span>
       <span className="bg-[#EB0F51] text-white px-1.5 py-0.5 rounded font-mono tabular-nums">
         {String(timeLeft.hours).padStart(2, '0')}
       </span>
@@ -66,6 +68,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
   onAddToCart,
   onViewAll,
 }) => {
+  const { text } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -112,7 +115,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
           <h2 className="text-xl sm:text-2xl font-black text-[#EB0F51] tracking-tight uppercase flex items-center gap-2">
-            <span>KHUYẾN MÃI HOT</span>
+            <span>{text('KHUYẾN MÃI HOT', 'HOT DEALS')}</span>
             <span className="inline-block p-1 rounded-full bg-pink-100 text-[#EB0F51] animate-bounce">
               🔥
             </span>
@@ -128,10 +131,10 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
           onClick={onViewAll}
           disabled={isLoading}
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-pink-50 hover:bg-pink-100/90 border border-pink-200 text-xs font-bold text-[#B42D58] hover:text-[#B42D58] transition-all cursor-pointer group shadow-xs self-start sm:self-auto disabled:opacity-50"
-          title="Mở bộ lọc nâng cao & xem tất cả ưu đãi"
+          title={text('Mở bộ lọc nâng cao & xem tất cả ưu đãi', 'Open filters and view all deals')}
         >
           <SlidersHorizontal className="w-3.5 h-3.5 text-[#EB0F51]" />
-          <span>Bộ lọc & Xem tất cả ({isLoading ? '...' : deals.length})</span>
+          <span>{text('Bộ lọc & Xem tất cả', 'Filters & View all')} ({isLoading ? '...' : deals.length})</span>
           <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
         </button>
       </div>
@@ -148,14 +151,14 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
       ) : deals.length === 0 ? (
         <div className="bg-pink-50/50 rounded-2xl border border-pink-200/70 p-8 text-center space-y-3">
           <p className="text-sm font-bold text-slate-700">
-            Hiện chưa có ưu đãi nào khả dụng
+            {text('Hiện chưa có ưu đãi nào khả dụng', 'No deals are currently available')}
           </p>
           <button
             type="button"
             onClick={onViewAll}
             className="px-4 py-1.5 rounded-full bg-[#EB0F51] text-white text-xs font-bold shadow hover:bg-[#B42D58] transition-all cursor-pointer"
           >
-            Xem tất cả dịch vụ
+            {text('Xem tất cả dịch vụ', 'View all services')}
           </button>
         </div>
       ) : (
@@ -166,7 +169,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
             <button
               type="button"
               onClick={() => scroll('left')}
-              aria-label="Xem khuyến mãi trước"
+              aria-label={text('Xem khuyến mãi trước', 'Previous deals')}
               className="absolute -left-3 sm:-left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 backdrop-blur-md shadow-xl shadow-pink-500/15 border border-pink-100 flex items-center justify-center text-[#6366f1] hover:text-[#EB0F51] hover:scale-110 active:scale-95 transition-all cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5 text-[#6366f1]" strokeWidth={2.5} />
@@ -178,7 +181,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
             <button
               type="button"
               onClick={() => scroll('right')}
-              aria-label="Xem thêm khuyến mãi tiếp theo"
+              aria-label={text('Xem thêm khuyến mãi tiếp theo', 'More deals')}
               className="absolute -right-3 sm:-right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 backdrop-blur-md shadow-xl shadow-pink-500/15 border border-pink-100 flex items-center justify-center text-[#6366f1] hover:text-[#EB0F51] hover:scale-110 active:scale-95 transition-all cursor-pointer"
             >
               <ChevronRight className="w-5 h-5 text-[#6366f1]" strokeWidth={2.5} />
@@ -237,7 +240,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
                         <span>{deal.rating}</span>
                       </div>
                       <span className="text-slate-400 text-[10px]">
-                        {deal.duration || '60 phút'}
+                        {deal.duration || text('60 phút', '60 minutes')}
                       </span>
                     </div>
 
@@ -266,7 +269,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
                           ? 'bg-emerald-500 text-white'
                           : 'bg-pink-50 hover:bg-[#EB0F51] text-[#EB0F51] hover:text-white border border-pink-200 hover:border-transparent'
                       }`}
-                      title="Thêm vào giỏ"
+                      title={text('Thêm vào giỏ', 'Add to cart')}
                     >
                       {addedDealId === deal.id ? (
                         <Check className="w-3.5 h-3.5 animate-in zoom-in-50 duration-200" />

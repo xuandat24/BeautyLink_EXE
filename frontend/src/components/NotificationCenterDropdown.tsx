@@ -8,6 +8,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import type { PushNotification } from '../types';
+import { useLanguage } from '../lib/language';
 
 interface NotificationCenterDropdownProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ interface NotificationCenterDropdownProps {
   onClearAll: () => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
+  placement?: 'header' | 'floating';
 }
 
 export const NotificationCenterDropdown: React.FC<NotificationCenterDropdownProps> = ({
@@ -33,7 +35,9 @@ export const NotificationCenterDropdown: React.FC<NotificationCenterDropdownProp
   onClearAll,
   soundEnabled,
   onToggleSound,
+  placement = 'header',
 }) => {
+  const { text } = useLanguage();
   if (!isOpen) return null;
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
@@ -54,7 +58,7 @@ export const NotificationCenterDropdown: React.FC<NotificationCenterDropdownProp
       <div
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
-        className="fixed md:absolute right-2 sm:right-0 top-16 md:top-full mt-2.5 z-50 w-[calc(100vw-16px)] sm:w-[420px] max-h-[85vh] bg-white rounded-3xl shadow-2xl shadow-pink-950/20 border border-pink-200 flex flex-col overflow-hidden"
+        className={`${placement === 'floating' ? 'fixed bottom-20 right-3 sm:right-5' : 'fixed right-2 top-16 mt-2.5 md:absolute md:right-0 md:top-full sm:right-0'} z-50 flex max-h-[78vh] w-[calc(100vw-24px)] flex-col overflow-hidden rounded-3xl border border-pink-200 bg-white shadow-2xl shadow-pink-950/20 sm:w-[420px]`}
       >
         {/* Header */}
         <div className="p-3.5 sm:p-4 bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white flex items-center justify-between shrink-0 shadow-xs">
@@ -64,15 +68,15 @@ export const NotificationCenterDropdown: React.FC<NotificationCenterDropdownProp
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <h3 className="text-sm font-black tracking-tight">Thông báo</h3>
+                <h3 className="text-sm font-black tracking-tight">{text('Thông báo', 'Notifications')}</h3>
                 {unreadCount > 0 && (
                   <span className="px-1.5 py-0.2 bg-white text-[#B42D58] text-[10px] font-black rounded-full shadow-xs">
-                    {unreadCount} mới
+                    {unreadCount} {text('mới', 'new')}
                   </span>
                 )}
               </div>
               <p className="text-[10px] text-pink-100 font-medium">
-                Cập nhật hoạt động tài khoản và lịch hẹn
+                {text('Cập nhật hoạt động tài khoản và lịch hẹn', 'Account and appointment updates')}
               </p>
             </div>
           </div>
@@ -111,7 +115,7 @@ export const NotificationCenterDropdown: React.FC<NotificationCenterDropdownProp
                 className="text-[11px] font-bold text-[#B42D58] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
-                <span>Đã đọc tất cả</span>
+                <span>{text('Đã đọc tất cả', 'Mark all read')}</span>
               </button>
             )}
 
@@ -135,9 +139,9 @@ export const NotificationCenterDropdown: React.FC<NotificationCenterDropdownProp
               <div className="w-12 h-12 rounded-full bg-pink-50 text-[#EB0F51] flex items-center justify-center mx-auto text-xl">
                 🔔
               </div>
-              <p className="text-xs font-bold text-slate-700">Bạn chưa có thông báo nào</p>
+              <p className="text-xs font-bold text-slate-700">{text('Bạn chưa có thông báo nào', 'You have no notifications')}</p>
               <p className="text-[11px] text-slate-400">
-                Thông báo quan trọng về tài khoản và lịch hẹn sẽ xuất hiện tại đây.
+                {text('Thông báo quan trọng về tài khoản và lịch hẹn sẽ xuất hiện tại đây.', 'Important account and appointment updates will appear here.')}
               </p>
             </div>
           ) : (
@@ -176,7 +180,7 @@ export const NotificationCenterDropdown: React.FC<NotificationCenterDropdownProp
                 <div className="flex-1 min-w-0 pr-4">
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[9px] font-black tracking-wider uppercase">
-                      Hệ thống
+                      {text('Hệ thống', 'System')}
                     </span>
                     <span className="text-[10px] text-slate-400 font-medium">
                       {notif.timestamp}

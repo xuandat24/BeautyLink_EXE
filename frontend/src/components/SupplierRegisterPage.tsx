@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, Building2, CheckCircle2, Eye, EyeOff, FileCheck2, ImagePlus, LoaderCircle, LocateFixed, LockKeyhole, MapPin, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { getApiErrorMessage } from '../lib/api';
 import { prepareImageUpload } from '../lib/imageUpload';
+import { getBrowserCoordinates, getLocationFailureMessage } from '../lib/geolocation';
 import { platformApi } from '../services/platformApi';
 import type { CurrentUser, LocationOption } from '../types';
 
@@ -20,6 +21,8 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({ onBa
   const [error, setError] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [locationSource, setLocationSource] = useState<'device' | 'network' | null>(null);
+  const [locationMessage, setLocationMessage] = useState('');
   const [form, setForm] = useState({
     ownerName: '', phone: '', email: '', password: '', confirmPassword: '',
     businessName: '', businessType: businessTypes[0], locationId: '', addressLine: '',
@@ -40,17 +43,20 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({ onBa
 
   const update = <K extends keyof typeof form>(field: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [field]: value }));
 
-  const detectLocation = () => {
-    if (!navigator.geolocation) { setError('Trình duyệt này không hỗ trợ định vị GPS.'); return; }
-    setLocating(true); setError('');
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setForm((current) => ({ ...current, latitude: Number(coords.latitude.toFixed(7)), longitude: Number(coords.longitude.toFixed(7)) }));
-        setLocating(false);
-      },
-      () => { setError('Không thể lấy GPS. Hãy cho phép quyền vị trí, hoặc nhập tọa độ thủ công bên dưới.'); setLocating(false); },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
-    );
+  const detectLocation = async () => {
+    setLocating(true); setError(''); setLocationMessage('');
+    try {
+      const coordinates = await getBrowserCoordinates();
+      setForm((current) => ({ ...current, latitude: coordinates.latitude, longitude: coordinates.longitude }));
+      setLocationSource(coordinates.source);
+      setLocationMessage(coordinates.source === 'device'
+        ? `Đã lấy GPS thiết bị${coordinates.accuracy != null ? `, sai số khoảng ${coordinates.accuracy} m` : ''}.`
+        : `GPS phản hồi chậm nên đã dùng vị trí gần đúng theo mạng${coordinates.label ? ` (${coordinates.label})` : ''}. Hãy kiểm tra lại tọa độ cửa hàng trước khi đăng ký.`);
+    } catch (locationError) {
+      setError(getLocationFailureMessage(locationError));
+    } finally {
+      setLocating(false);
+    }
   };
 
   const submit = async (event: React.FormEvent) => {
@@ -144,8 +150,10 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({ onBa
               <Field label="Địa chỉ cơ sở *"><div className="relative"><MapPin className="absolute left-3 top-3.5 h-4 w-4 text-[#D28474]" /><input required value={form.addressLine} onChange={(e) => update('addressLine', e.target.value)} placeholder="Số nhà, tên đường, phường/quận" className="field pl-10" /></div></Field>
               <div className="rounded-2xl border border-pink-100 bg-pink-50/50 p-4">
                 <div className="flex items-start gap-3"><LocateFixed className="mt-0.5 h-5 w-5 shrink-0 text-[#EB0F51]" /><div><p className="text-xs font-black text-slate-800">Tọa độ cửa hàng *</p><p className="mt-1 text-[11px] leading-4 text-slate-500">Giúp khách tìm thấy cơ sở trong “Gần bạn”. Hãy thao tác tại địa chỉ kinh doanh để khoảng cách chính xác.</p></div></div>
-                <button type="button" onClick={detectLocation} disabled={locating} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-xs font-black text-[#B42D58] shadow-sm ring-1 ring-pink-200 hover:bg-pink-100 disabled:opacity-50">{locating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : form.latitude != null ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <LocateFixed className="h-4 w-4" />}{locating ? 'Đang lấy vị trí...' : form.latitude != null ? 'Đã lấy vị trí GPS' : 'Dùng vị trí hiện tại'}</button>
-                <div className="mt-3 grid grid-cols-2 gap-3"><Field label="Vĩ độ"><input required type="number" step="any" min={-90} max={90} value={form.latitude ?? ''} onChange={(e) => update('latitude', e.target.value === '' ? null : Number(e.target.value))} placeholder="10.7769" className="field bg-white" /></Field><Field label="Kinh độ"><input required type="number" step="any" min={-180} max={180} value={form.longitude ?? ''} onChange={(e) => update('longitude', e.target.value === '' ? null : Number(e.target.value))} placeholder="106.7009" className="field bg-white" /></Field></div>
+                <button type="button" onClick={detectLocation} disabled={locating} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-xs font-black text-[#B42D58] shadow-sm ring-1 ring-pink-200 hover:bg-pink-100 disabled:opacity-50">{locating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : form.latitude != null ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <LocateFixed className="h-4 w-4" />}{locating ? 'Đang lấy vị trí...' : locationSource === 'device' ? 'Đã lấy GPS thiết bị' : locationSource === 'network' ? 'Đã lấy vị trí gần đúng' : form.latitude != null ? 'Đã nhập tọa độ' : 'Dùng vị trí hiện tại'}</button>
+                {locationMessage && <p className={`mt-2 rounded-xl px-3 py-2 text-[10px] font-semibold leading-4 ${locationSource === 'network' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>{locationMessage}</p>}
+                <div className="mt-3 grid grid-cols-2 gap-3"><Field label="Vĩ độ"><input required type="number" step="any" min={-90} max={90} value={form.latitude ?? ''} onChange={(e) => { update('latitude', e.target.value === '' ? null : Number(e.target.value)); setLocationSource(null); setLocationMessage(''); }} placeholder="10.7769" className="field bg-white" /></Field><Field label="Kinh độ"><input required type="number" step="any" min={-180} max={180} value={form.longitude ?? ''} onChange={(e) => { update('longitude', e.target.value === '' ? null : Number(e.target.value)); setLocationSource(null); setLocationMessage(''); }} placeholder="106.7009" className="field bg-white" /></Field></div>
+                <p className="mt-2 text-[10px] leading-4 text-slate-500">Nếu GPS vẫn bị chặn: mở Google Maps, nhấp chuột phải vào vị trí cửa hàng, sao chép cặp tọa độ rồi dán vào hai ô trên.</p>
               </div>
               <Field label="Chuyên môn chính"><input value={form.specialty} onChange={(e) => update('specialty', e.target.value)} placeholder="Ví dụ: Trang điểm cô dâu, chăm sóc da" className="field" /></Field>
               <Field label="Giới thiệu ngắn"><textarea rows={4} value={form.description} onChange={(e) => update('description', e.target.value)} placeholder="Điểm nổi bật, kinh nghiệm và phong cách phục vụ..." className="field resize-none" /></Field>

@@ -19,9 +19,9 @@ import type {
 const unwrap = <T,>(request: Promise<{ data: T }>) => request.then(({ data }) => data);
 
 export const platformApi = {
-  login: async (identifier: string, password: string) => {
+  login: async (identifier: string, password: string, rememberSession = true) => {
     const data = await unwrap<AuthResponse>(apiClient.post('/v1/auth/login', { identifier, password }));
-    saveAccessToken(data.accessToken);
+    saveAccessToken(data.accessToken, rememberSession);
     return data;
   },
   register: async (payload: { fullName: string; phone: string; email?: string; password: string }) => {

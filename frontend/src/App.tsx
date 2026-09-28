@@ -6,7 +6,6 @@ import { HotDealsSection } from './components/HotDealsSection';
 import { NearYouSection } from './components/NearYouSection';
 import { CampaignBanners } from './components/CampaignBanners';
 import { NewPartnersSection } from './components/NewPartnersSection';
-import { CustomerReviewsSection } from './components/CustomerReviewsSection';
 import { WhyChooseUs } from './components/WhyChooseUs';
 import { PartnerBlogCTA } from './components/PartnerBlogCTA';
 import { Footer } from './components/Footer';
@@ -38,6 +37,8 @@ import {
   BeautyService,
 } from './types';
 import { updateMetaTags } from './lib/seo';
+import { useLanguage } from './lib/language';
+import { getBrowserCoordinates, getLocationFailureMessage } from './lib/geolocation';
 
 import { platformApi } from './services/platformApi';
 import { CheckCircle2 } from 'lucide-react';
@@ -91,10 +92,10 @@ const toNewPartner = (service: BeautyService): NewPartner => ({
 });
 
 export default function App() {
+  const { language, text } = useLanguage();
   // Use persistent store (instant F5 hydration, zero lag, state preserved)
   const {
     selectedCity,
-    setSelectedCity,
     selectedLocationId,
     locationConfirmed,
     setSelectedLocation,
@@ -127,9 +128,12 @@ export default function App() {
   const [isBlogModalOpen, setIsBlogModalOpen] = useState(false);
   const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
   const [locationPermission, setLocationPermission] = useState<'idle' | 'loading' | 'ready' | 'denied'>('idle');
+  const [userLocationSource, setUserLocationSource] = useState<'device' | 'network' | null>(null);
 
   useEffect(() => {
-    if (!locationConfirmed) setIsLocationModalOpen(true);
+    const hasPreferredService = Boolean(localStorage.getItem('beautylink_preferred_category'));
+    const dismissedThisSession = sessionStorage.getItem('beautylink_discovery_prompt_dismissed') === 'true';
+    if ((!locationConfirmed || !hasPreferredService) && !dismissedThisSession) setIsLocationModalOpen(true);
   }, [locationConfirmed]);
   // Dedicated Page View Navigation ('home' | 'login' | 'register' | 'account')
   // Allows Login/Register and Account/Logout to be standalone pages with zero background overlap
@@ -216,15 +220,21 @@ export default function App() {
     }, 2800);
   }, []);
 
-  const requestUserLocation = useCallback(() => {
-    if (!navigator.geolocation) { setLocationPermission('denied'); showToast('Trình duyệt không hỗ trợ định vị GPS.'); return; }
+  const requestUserLocation = useCallback(async () => {
     setLocationPermission('loading');
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => { setUserLocation({ latitude: coords.latitude, longitude: coords.longitude }); setLocationPermission('ready'); showToast('Đã sắp xếp cơ sở theo khoảng cách thật từ bạn.'); },
-      () => { setLocationPermission('denied'); showToast('Không thể lấy vị trí. Bạn có thể cấp quyền GPS rồi thử lại.'); },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 120000 },
-    );
-  }, [showToast]);
+    try {
+      const coordinates = await getBrowserCoordinates();
+      setUserLocation({ latitude: coordinates.latitude, longitude: coordinates.longitude });
+      setUserLocationSource(coordinates.source);
+      setLocationPermission('ready');
+      showToast(coordinates.source === 'device'
+        ? text('Đã sắp xếp cơ sở theo khoảng cách GPS từ bạn.', 'Providers are now sorted by your GPS distance.')
+        : text('GPS phản hồi chậm nên đang dùng vị trí gần đúng theo mạng.', 'GPS was slow, so an approximate network location is being used.'));
+    } catch (locationError) {
+      setLocationPermission('denied');
+      showToast(getLocationFailureMessage(locationError, language));
+    }
+  }, [language, showToast, text]);
 
   useEffect(() => {
     let active = true;
@@ -244,8 +254,8 @@ export default function App() {
     return () => { active = false; };
   }, [selectedLocationId, showToast]);
 
-  const handleLoginSuccess = (user: CurrentUser) => {
-    setCurrentUser(user);
+  const handleLoginSuccess = (user: CurrentUser, rememberSession = true) => {
+    setCurrentUser(user, rememberSession);
     if (user.role === 'SUPPLIER') {
       setCurrentPage('supplier-dashboard');
       window.location.hash = 'supplier-dashboard';
@@ -263,7 +273,7 @@ export default function App() {
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setReturnAfterAuth('home');
-    showToast(`🌸 Chào mừng ${user.name} đã đăng nhập thành công!`);
+    showToast(text(`🌸 Chào mừng ${user.name} đã đăng nhập thành công!`, `🌸 Welcome back, ${user.name}!`));
   };
 
   const handleSupplierRegistrationSuccess = (user: CurrentUser) => {
@@ -288,11 +298,6 @@ export default function App() {
     setCurrentPage('bookings');
     window.location.hash = 'bookings';
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleLogout = () => {
-    logout();
-    showToast('Đã đăng xuất tài khoản.');
   };
 
   const handleImmediateLogout = () => {
@@ -402,6 +407,7 @@ export default function App() {
   }, [showToast]);
 
   const handleSelectCategory = useCallback((category: ServiceCategory) => {
+    localStorage.setItem('beautylink_preferred_category', category.slug);
     setSelectedCategory(category);
     setCurrentPage('service');
     window.location.hash = 'service';
@@ -472,9 +478,10 @@ export default function App() {
           initialMode={currentPage === 'register' ? 'register' : 'login'}
           onBackToHome={handleBackToHome}
           onSuccess={handleLoginSuccess}
+          onPartnerRegistration={handleOpenSupplierRegistration}
         />
         {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+          <div className="fixed bottom-20 right-5 z-[120] bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
             <span>{toastMessage}</span>
           </div>
         )}
@@ -488,7 +495,7 @@ export default function App() {
         <AccountPage
           currentUser={currentUser}
           onBackToHome={handleBackToHome}
-          onLogoutConfirm={handleLogout}
+          onLogoutConfirm={handleImmediateLogout}
           onNavigateLogin={() => {
             setCurrentPage('login');
             window.location.hash = 'login';
@@ -508,7 +515,7 @@ export default function App() {
           }}
         />
         {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+          <div className="fixed bottom-20 right-5 z-[120] bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
             <span>{toastMessage}</span>
           </div>
         )}
@@ -520,7 +527,7 @@ export default function App() {
     <div className="min-h-screen bg-[#FFF0F3] flex flex-col selection:bg-pink-200 selection:text-pink-900">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-pink-400/30 flex items-center gap-2.5">
+        <div role="status" aria-live="polite" className="fixed bottom-20 right-5 z-[120] max-w-sm bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-pink-400/30 flex items-center gap-2.5">
           <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
           <span className="text-xs font-semibold">{toastMessage}</span>
         </div>
@@ -581,18 +588,19 @@ export default function App() {
           salons={nearbySalons}
           isLoading={isLoadingServices}
           locationPermission={locationPermission}
+          locationSource={userLocationSource}
           onEnableLocation={requestUserLocation}
           onSelectSalon={handleSelectSalon}
           onViewAll={handleViewAllNearby}
         />
 
         {/* 5. Phun Xăm Thẩm Mỹ, Quảng Cáo & Bí Kíp Sắc Đẹp Carousel */}
-        <CampaignBanners
+        {language === 'vi' && <CampaignBanners
           onOpenCampaign={(title) => {
             handleOpenBooking(title, 'Hệ Thống Thẩm Mỹ & Spa Đối Tác', 450000, 900000);
           }}
           onBookDeal={handleOpenBooking}
-        />
+        />}
 
         {/* 6. Doanh nghiệp mới tham gia (Newly Joined Partners) */}
         <NewPartnersSection
@@ -610,10 +618,6 @@ export default function App() {
           onOpenBlogModal={() => setIsBlogModalOpen(true)}
         />
 
-        {/* 9. Đánh giá & Bình luận khách hàng đã trải nghiệm (Customer Reviews & Ratings) */}
-        <CustomerReviewsSection
-          onBookService={handleOpenBooking}
-        />
       </main>
 
       {/* Footer */}
@@ -669,9 +673,21 @@ export default function App() {
 
       <LocationSelectModal
         isOpen={isLocationModalOpen}
-        onClose={() => setIsLocationModalOpen(false)}
-        required={!locationConfirmed}
+        onClose={() => {
+          sessionStorage.setItem('beautylink_discovery_prompt_dismissed', 'true');
+          setIsLocationModalOpen(false);
+        }}
         selectedLocationId={selectedLocationId}
+        categories={serviceCategories}
+        onSelectCategory={handleSelectCategory}
+        onGpsLocated={(latitude, longitude, source) => {
+          setUserLocation({ latitude, longitude });
+          setUserLocationSource(source);
+          setLocationPermission('ready');
+          showToast(source === 'device'
+            ? text('Đã xác định thành phố bằng GPS.', 'City detected by GPS.')
+            : text('Đã xác định thành phố gần đúng theo mạng.', 'City detected approximately from your network.'));
+        }}
         onSelectLocation={(location, label) => {
           const city = label;
           setSelectedLocation(location.id, label);

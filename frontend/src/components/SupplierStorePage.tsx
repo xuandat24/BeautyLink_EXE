@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Eye, EyeOff, ImagePlus, LoaderCircle, LocateFixed, MapPin, Pencil, Plus, Save, Store, Trash2, X } from 'lucide-react';
 import { getApiErrorMessage } from '../lib/api';
 import { prepareImageUpload } from '../lib/imageUpload';
+import { getBrowserCoordinates, getLocationFailureMessage } from '../lib/geolocation';
 import { platformApi } from '../services/platformApi';
 import type { ServiceCategory, SupplierProfile, SupplierService, SupplierServicePayload } from '../types';
 
@@ -93,18 +94,19 @@ export const SupplierStorePage: React.FC<SupplierStorePageProps> = ({ profile, o
     }
   };
 
-  const detectLocation = () => {
-    if (!navigator.geolocation) { setError('Trình duyệt này không hỗ trợ định vị GPS.'); return; }
+  const detectLocation = async () => {
     setLocating(true); setError('');
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setProfileForm((current) => ({ ...current, latitude: Number(coords.latitude.toFixed(7)), longitude: Number(coords.longitude.toFixed(7)) }));
-        setProfileMessage('Đã cập nhật vị trí GPS của cơ sở.');
-        setLocating(false);
-      },
-      () => { setError('Không thể lấy vị trí. Hãy cho phép quyền định vị và thử lại ngay tại cơ sở.'); setLocating(false); },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
-    );
+    try {
+      const coordinates = await getBrowserCoordinates();
+      setProfileForm((current) => ({ ...current, latitude: coordinates.latitude, longitude: coordinates.longitude }));
+      setProfileMessage(coordinates.source === 'device'
+        ? `Đã cập nhật GPS của cơ sở${coordinates.accuracy != null ? ` (sai số khoảng ${coordinates.accuracy} m)` : ''}.`
+        : `GPS phản hồi chậm nên đã điền vị trí gần đúng theo mạng${coordinates.label ? ` (${coordinates.label})` : ''}. Hãy kiểm tra tọa độ chính xác của cửa hàng trước khi lưu.`);
+    } catch (locationError) {
+      setError(getLocationFailureMessage(locationError));
+    } finally {
+      setLocating(false);
+    }
   };
 
   const saveService = async (payload: SupplierServicePayload) => {

@@ -20,6 +20,7 @@ import type { PushNotification } from '../types';
 import { getCategoryShortcuts } from '../data/categoryCatalog';
 import type { ServiceCategory } from '../types';
 import { NotificationCenterDropdown } from './NotificationCenterDropdown';
+import { localizedCategoryName, localizedContent, useLanguage } from '../lib/language';
 
 export interface CurrentUser {
   name: string;
@@ -71,10 +72,10 @@ export const Header: React.FC<HeaderProps> = ({
   serviceCategories = [],
   onSelectServiceCategory,
 }) => {
+  const { language, setLanguage, text } = useLanguage();
   const [searchInput, setSearchInput] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [language, setLanguage] = useState<'vi' | 'en'>('vi');
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [activeCategorySlug, setActiveCategorySlug] = useState('');
 
@@ -124,14 +125,9 @@ export const Header: React.FC<HeaderProps> = ({
     }, 280);
   };
 
-  const quickKeywords = [
-    'Trị mụn lưng',
-    'Gội đầu dưỡng sinh',
-    'Massage tinh dầu',
-    'Nail Hàn Quốc',
-    'Laser trị thâm',
-    'Nối mi thiết kế',
-  ];
+  const quickKeywords = language === 'vi'
+    ? ['Trị mụn lưng', 'Gội đầu dưỡng sinh', 'Massage tinh dầu', 'Nail Hàn Quốc', 'Laser trị thâm', 'Nối mi thiết kế']
+    : ['Back acne treatment', 'Herbal head spa', 'Aromatherapy massage', 'Korean nails', 'Dark spot laser', 'Lash extensions'];
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,7 +178,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-3 text-xs shrink-0">
             {currentUser && (
               <span className="hidden font-medium text-slate-500 md:inline">
-                Chào mừng <strong className="text-[#B42D58]">{currentUser.name}</strong>
+                {text('Chào mừng', 'Welcome')} <strong className="text-[#B42D58]">{currentUser.name}</strong>
               </span>
             )}
             <a
@@ -200,7 +196,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="relative z-30 mx-auto max-w-[1536px] bg-white/95 px-4 py-2.5 sm:px-6 sm:py-3">
         <div className="flex items-center gap-2 lg:gap-3">
           {/* Logo */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="mr-1 flex shrink-0 items-center gap-3 lg:mr-2">
             <a href="#" className="flex items-center gap-2 group">
               <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-[#B42D58] via-[#D28474] to-[#EB0F51] flex items-center justify-center text-white shadow-md shadow-pink-500/30 group-hover:scale-105 transition-transform duration-300">
                 <Sparkles className="w-5 h-5 text-white animate-pulse" />
@@ -228,12 +224,12 @@ export const Header: React.FC<HeaderProps> = ({
               setIsCategoryOpen((open) => !open);
               setIsSearchFocused(false);
             }}
-            className={`hidden items-center gap-2 rounded-2xl border px-3.5 py-2.5 text-sm font-extrabold transition lg:inline-flex ${isCategoryOpen ? 'border-[#EB0F51] bg-[#EB0F51] text-white shadow-lg shadow-pink-500/20' : 'border-pink-200 bg-pink-50 text-[#B42D58] hover:border-pink-300 hover:bg-pink-100'}`}
+            className={`hidden items-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-extrabold transition lg:inline-flex ${isCategoryOpen ? 'border-[#EB0F51] bg-[#EB0F51] text-white shadow-lg shadow-pink-500/20' : 'border-pink-200 bg-pink-50 text-[#B42D58] hover:border-pink-300 hover:bg-pink-100'}`}
             aria-expanded={isCategoryOpen}
             aria-haspopup="dialog"
           >
             <LayoutGrid className="h-4 w-4" />
-            <span>Danh mục</span>
+            <span>{text('Danh mục', 'Categories')}</span>
             <ChevronDown className={`h-4 w-4 transition-transform ${isCategoryOpen ? 'rotate-180' : ''}`} />
           </button>
 
@@ -241,14 +237,14 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             onClick={onOpenLocationModal}
             className="hidden min-[1500px]:flex max-w-40 items-center gap-2 rounded-2xl border border-pink-100 bg-pink-50/70 px-3 py-2 text-left text-xs font-bold text-slate-700 transition hover:border-pink-300 hover:bg-pink-50"
-            title="Thay đổi khu vực"
+            title={text('Thay đổi khu vực', 'Change location')}
           >
             <span className="text-pink-600">●</span>
             <span className="truncate">{selectedCity || 'Chọn khu vực'}</span>
           </button>
 
           {/* Search Box with embedded prominent 'Tìm kiếm' button */}
-          <div className="relative hidden min-w-0 flex-1 md:block">
+          <div className="relative hidden min-w-0 flex-1 md:block xl:max-w-[620px]">
             <form onSubmit={handleSearchSubmit} className="relative flex items-center">
               <div className="relative w-full">
                 <input
@@ -256,7 +252,7 @@ export const Header: React.FC<HeaderProps> = ({
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onFocus={() => setIsSearchFocused(true)}
-                  placeholder="Tìm kiếm dịch vụ, spa, clinic, trị mụn, uốn tóc..."
+                  placeholder={text('Tìm dịch vụ, spa, clinic...', 'Search services, spas, clinics...')}
                   className="w-full h-11 pl-10 pr-28 rounded-full border border-pink-200/90 bg-pink-50/40 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#EB0F51] focus:bg-white focus:ring-2 focus:ring-pink-300/40 shadow-xs transition-all"
                 />
                 <Search className="w-4 h-4 text-[#EB0F51] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -266,7 +262,7 @@ export const Header: React.FC<HeaderProps> = ({
                   type="submit"
                   className="absolute right-1 top-1/2 -translate-y-1/2 h-9 px-4 sm:px-5 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] hover:from-[#B42D58] hover:to-[#B42D58] text-white text-xs sm:text-sm font-bold shadow-md shadow-pink-500/20 hover:shadow-pink-500/35 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
                 >
-                  <span>Tìm kiếm</span>
+                  <span>{text('Tìm kiếm', 'Search')}</span>
                 </button>
               </div>
             </form>
@@ -278,7 +274,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onMouseDown={(e) => e.preventDefault()}
               >
                 <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">
-                  Gợi ý tìm kiếm phổ biến
+                  {text('Gợi ý tìm kiếm phổ biến', 'Popular searches')}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {quickKeywords.map((kw) => (
@@ -299,13 +295,13 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Action buttons (Tightly grouped, balanced, with VI/EN button to the right of cart) */}
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             {/* Trở thành đối tác */}
-            <button
+            {!currentUser && <button
               onClick={onOpenPartnerModal}
-              className="hidden min-[1700px]:inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-pink-200 text-xs font-semibold text-[#B42D58] bg-pink-50/70 hover:bg-pink-100 hover:border-pink-300 transition-all whitespace-nowrap cursor-pointer"
+              className="hidden xl:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-pink-200 text-[11px] font-semibold text-[#B42D58] bg-pink-50/70 hover:bg-pink-100 hover:border-pink-300 transition-all whitespace-nowrap cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-[#EB0F51]" />
               <span>{language === 'vi' ? 'Trở thành đối tác' : 'Partner with us'}</span>
-            </button>
+            </button>}
 
             {/* User Profile / Login & Register */}
             {currentUser ? (
@@ -329,9 +325,9 @@ export const Header: React.FC<HeaderProps> = ({
                     type="button"
                     onClick={onLogout}
                     className="text-[11px] font-semibold text-slate-400 hover:text-[#EB0F51] transition-colors px-1 cursor-pointer"
-                    title="Đăng xuất"
+                    title={text('Đăng xuất', 'Log out')}
                   >
-                    Thoát
+                    {text('Thoát', 'Log out')}
                   </button>
                 )}
               </div>
@@ -352,55 +348,11 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
-            {/* Notification Bell with interactive hover ("dí vào hiển thị") & click trigger */}
-            {notifications && (
-              <div
-                className="relative"
-                onMouseEnter={handleMouseEnterNotif}
-                onMouseLeave={handleMouseLeaveNotif}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (notifTimeoutRef.current) {
-                      clearTimeout(notifTimeoutRef.current);
-                      notifTimeoutRef.current = null;
-                    }
-                    setIsNotifOpen((prev) => !prev);
-                  }}
-                  className="relative p-2 rounded-full bg-pink-50 hover:bg-pink-100 text-[#B42D58] border border-pink-200/70 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                  title="Thông báo tài khoản và lịch hẹn"
-                  aria-label="Thông báo"
-                >
-                  <Bell className="w-4 h-4 text-[#EB0F51]" />
-                  {unreadNotificationsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[#EB0F51] text-white text-[9px] font-black flex items-center justify-center border-2 border-white shadow-xs">
-                      {unreadNotificationsCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* Dropdown rendered directly relative to the bell button */}
-                <NotificationCenterDropdown
-                  isOpen={isNotifOpen}
-                  onClose={() => setIsNotifOpen(false)}
-                  onMouseEnter={handleMouseEnterNotif}
-                  onMouseLeave={handleMouseLeaveNotif}
-                  notifications={notifications}
-                  onMarkAllAsRead={onMarkAllAsRead || (() => {})}
-                  onMarkAsRead={onMarkAsRead || (() => {})}
-                  onClearAll={onClearAllNotifications || (() => {})}
-                  soundEnabled={soundEnabled}
-                  onToggleSound={onToggleSound || (() => {})}
-                />
-              </div>
-            )}
-
             {/* Cart icon */}
             <button
               onClick={onOpenCart}
               className="relative p-2 rounded-full bg-pink-50 hover:bg-pink-100 text-[#B42D58] border border-pink-200/70 transition-colors cursor-pointer"
-              title="Giỏ dịch vụ & Lịch hẹn"
+              title={text('Giỏ dịch vụ & Lịch hẹn', 'Service cart & appointments')}
             >
               <ShoppingCart className="w-4 h-4 text-[#EB0F51]" />
               {cartCount > 0 && (
@@ -422,8 +374,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
                 title="Việt Nam (VN)"
               >
-                <span className="text-xs leading-none">🇻🇳</span>
-                <span>VN</span>
+                <span className="text-base leading-none">🇻🇳</span>
               </button>
               <button
                 type="button"
@@ -435,8 +386,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
                 title="English (EN)"
               >
-                <span className="text-xs leading-none">🇬🇧</span>
-                <span>EN</span>
+                <span className="text-base leading-none">🇬🇧</span>
               </button>
             </div>
 
@@ -513,8 +463,8 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                       <img src={category.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
                       <span className="min-w-0 flex-1">
-                        <span className={`block truncate text-sm font-extrabold ${selected ? 'text-[#B42D58]' : 'text-slate-800'}`}>{category.name}</span>
-                        <span className="hidden truncate text-[11px] text-slate-500 sm:block">{category.description}</span>
+                        <span className={`block truncate text-sm font-extrabold ${selected ? 'text-[#B42D58]' : 'text-slate-800'}`}>{localizedCategoryName(category.slug, category.name, language)}</span>
+                        <span className="hidden truncate text-[11px] text-slate-500 sm:block">{language === 'vi' ? category.description : 'Services from verified professionals'}</span>
                       </span>
                       <ChevronRight className={`hidden h-4 w-4 shrink-0 md:block ${selected ? 'text-[#EB0F51]' : 'text-slate-300 group-hover:text-slate-500'}`} />
                     </button>
@@ -527,9 +477,9 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="p-4 sm:p-6">
                 <div className="mb-5 flex items-start justify-between gap-4">
                   <div>
-                    <span className="text-xs font-black uppercase tracking-[0.16em] text-[#EB0F51]">{activeCategory.name}</span>
-                    <h3 className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">Chọn dịch vụ phù hợp với bạn</h3>
-                    <p className="mt-1 text-sm text-slate-500">{activeCategory.description}</p>
+                    <span className="text-xs font-black uppercase tracking-[0.16em] text-[#EB0F51]">{localizedCategoryName(activeCategory.slug, activeCategory.name, language)}</span>
+                    <h3 className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">{text('Chọn dịch vụ phù hợp với bạn', 'Choose the right service for you')}</h3>
+                    <p className="mt-1 text-sm text-slate-500">{language === 'vi' ? activeCategory.description : 'Discover matching services from BeautyLink partners.'}</p>
                   </div>
                   <img src={activeCategory.imageUrl} alt="" className="hidden h-20 w-28 rounded-2xl object-cover sm:block" />
                 </div>
@@ -538,14 +488,14 @@ export const Header: React.FC<HeaderProps> = ({
                   {getCategoryShortcuts(activeCategory.slug).map((item) => (
                     <button key={item.label} type="button" onClick={() => openCategoryPage(activeCategory)} className="group rounded-2xl border border-slate-100 bg-slate-50 p-3 text-left transition hover:-translate-y-0.5 hover:border-pink-200 hover:bg-pink-50 hover:shadow-md">
                       <span className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-white text-xl shadow-sm">{item.icon}</span>
-                      <span className="block text-sm font-extrabold text-slate-800 group-hover:text-[#B42D58]">{item.label}</span>
-                      <span className="mt-1 hidden text-[11px] leading-4 text-slate-500 sm:block">{item.caption}</span>
+                      <span className="block text-sm font-extrabold text-slate-800 group-hover:text-[#B42D58]">{localizedContent(item.label, language)}</span>
+                      <span className="mt-1 hidden text-[11px] leading-4 text-slate-500 sm:block">{localizedContent(item.caption, language)}</span>
                     </button>
                   ))}
                 </div>
 
                 <button type="button" onClick={() => openCategoryPage(activeCategory)} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#EB0F51] to-[#B42D58] px-5 py-3 text-sm font-black text-white shadow-lg shadow-pink-500/20 transition hover:-translate-y-0.5 hover:shadow-pink-500/30 sm:w-auto">
-                  Xem tất cả dịch vụ {activeCategory.name}
+                  {text('Xem tất cả dịch vụ', 'View all')} {localizedCategoryName(activeCategory.slug, activeCategory.name, language)}
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
@@ -584,13 +534,20 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                   className="text-xs font-bold text-[#EB0F51] hover:underline"
                 >
-                  Đăng xuất
+                  {text('Đăng xuất', 'Log out')}
                 </button>
               )}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="col-span-2 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-2.5">
+              <span className="text-xs font-bold text-slate-600">{text('Ngôn ngữ', 'Language')}</span>
+              <div className="flex gap-1">
+                <button type="button" onClick={() => setLanguage('vi')} aria-label="Tiếng Việt" className={`grid h-8 w-10 place-items-center rounded-lg text-lg ${language === 'vi' ? 'bg-[#EB0F51] shadow-sm' : 'bg-white'}`}>🇻🇳</button>
+                <button type="button" onClick={() => setLanguage('en')} aria-label="English" className={`grid h-8 w-10 place-items-center rounded-lg text-lg ${language === 'en' ? 'bg-[#EB0F51] shadow-sm' : 'bg-white'}`}>🇬🇧</button>
+              </div>
+            </div>
             <button
               type="button"
               onClick={() => {
@@ -599,7 +556,7 @@ export const Header: React.FC<HeaderProps> = ({
               }}
               className="col-span-2 flex items-center justify-between rounded-xl border border-pink-200 bg-pink-50 p-2.5 text-left text-xs font-bold text-[#B42D58]"
             >
-              <span className="flex items-center gap-2"><LayoutGrid className="h-4 w-4 text-[#EB0F51]" /> Danh mục dịch vụ</span>
+              <span className="flex items-center gap-2"><LayoutGrid className="h-4 w-4 text-[#EB0F51]" /> {text('Danh mục dịch vụ', 'Service categories')}</span>
               <ChevronRight className="h-4 w-4" />
             </button>
             {notifications && (
@@ -612,11 +569,11 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <span className="flex items-center gap-1.5">
                   <Bell className="w-4 h-4 text-[#EB0F51]" />
-                  <span>Thông báo</span>
+                  <span>{text('Thông báo', 'Notifications')}</span>
                 </span>
                 {unreadNotificationsCount > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-[#EB0F51] text-white text-[10px] font-black">
-                    {unreadNotificationsCount} mới
+                    {unreadNotificationsCount} {text('mới', 'new')}
                   </span>
                 )}
               </button>
@@ -628,7 +585,7 @@ export const Header: React.FC<HeaderProps> = ({
               }}
               className="p-2.5 rounded-xl bg-pink-50 text-xs font-semibold text-[#B42D58] text-left"
             >
-              🌸 Trở thành đối tác
+              🌸 {text('Trở thành đối tác', 'Become a partner')}
             </button>
             <button
               onClick={() => {
@@ -637,7 +594,7 @@ export const Header: React.FC<HeaderProps> = ({
               }}
               className="p-2.5 rounded-xl bg-pink-50 text-xs font-semibold text-[#B42D58] text-left"
             >
-              🛍️ Giỏ hàng ({cartCount})
+              🛍️ {text('Giỏ hàng', 'Cart')} ({cartCount})
             </button>
           </div>
 
@@ -650,7 +607,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }}
                 className="flex-1 py-2 rounded-xl border border-pink-200 text-xs font-bold text-slate-700 text-center"
               >
-                Đăng ký
+                {text('Đăng ký', 'Sign up')}
               </button>
               <button
                 onClick={() => {
@@ -659,11 +616,41 @@ export const Header: React.FC<HeaderProps> = ({
                 }}
                 className="flex-1 py-2 rounded-xl bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white text-xs font-bold text-center"
               >
-                Đăng nhập
+                {text('Đăng nhập', 'Log in')}
               </button>
             </div>
           )}
         </div>
+      )}
+
+      {notifications && createPortal(
+        <div className="fixed bottom-5 right-4 z-[90] sm:right-6" onMouseEnter={handleMouseEnterNotif} onMouseLeave={handleMouseLeaveNotif}>
+          <NotificationCenterDropdown
+            placement="floating"
+            isOpen={isNotifOpen}
+            onClose={() => setIsNotifOpen(false)}
+            onMouseEnter={handleMouseEnterNotif}
+            onMouseLeave={handleMouseLeaveNotif}
+            notifications={notifications}
+            onMarkAllAsRead={onMarkAllAsRead || (() => {})}
+            onMarkAsRead={onMarkAsRead || (() => {})}
+            onClearAll={onClearAllNotifications || (() => {})}
+            soundEnabled={soundEnabled}
+            onToggleSound={onToggleSound || (() => {})}
+          />
+          <button
+            type="button"
+            onClick={() => setIsNotifOpen((open) => !open)}
+            className="relative grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-[#EB0F51] to-[#B42D58] text-white shadow-xl shadow-pink-700/30 transition hover:-translate-y-0.5 hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-pink-200"
+            title={text('Thông báo tài khoản và lịch hẹn', 'Account and appointment notifications')}
+            aria-label={text('Mở thông báo', 'Open notifications')}
+            aria-expanded={isNotifOpen}
+          >
+            <Bell className="h-5 w-5" />
+            {unreadNotificationsCount > 0 && <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-slate-900 px-1 text-[9px] font-black text-white">{unreadNotificationsCount}</span>}
+          </button>
+        </div>,
+        document.body,
       )}
     </header>
   );

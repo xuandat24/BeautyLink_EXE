@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Clock,
 } from 'lucide-react';
+import { useLanguage } from '../lib/language';
 
 interface HeroSectionProps {
   onOpenCommunity: () => void;
@@ -28,49 +29,50 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onOpenRewards,
   onBookDirect,
 }) => {
+  const { text } = useLanguage();
   const slides = [
     {
       id: 1,
-      badge: 'DEAL ĐỘC QUYỀN BEAUTYPINK',
-      title: 'MASSAGE BODY TINH DẦU',
-      subtitle: 'THƯ GIÃN TOÀN THÂN & ĐẢ THÔNG KINH LẠC',
+      badge: text('DEAL ĐỘC QUYỀN BEAUTYLINK', 'BEAUTYLINK EXCLUSIVE DEAL'),
+      title: text('MASSAGE BODY TINH DẦU', 'AROMATHERAPY BODY MASSAGE'),
+      subtitle: text('THƯ GIÃN TOÀN THÂN & ĐẢ THÔNG KINH LẠC', 'FULL-BODY RELAXATION & TENSION RELEASE'),
       price: '225K',
       priceNum: 225000,
       originalPrice: '449K',
       originalPriceNum: 449000,
       discount: '-50%',
       image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1200&q=80',
-      tagline: 'Tặng xông hơi đá muối thảo dược Himalaya',
+      tagline: text('Tặng xông hơi đá muối thảo dược Himalaya', 'Complimentary Himalayan salt herbal steam'),
       partnerName: 'PARADISE SKIN CLINIC & SPA',
       accentColor: 'from-[#B42D58] to-[#EB0F51]',
     },
     {
       id: 2,
-      badge: 'CÔNG NGHỆ CHÂU ÂU',
-      title: 'TRẺ HÓA CĂNG BÓNG DA HOA HỒNG',
-      subtitle: 'PEEL VI SINH & CẤY TINH CHẤT HOA HỒNG SEN',
+      badge: text('CÔNG NGHỆ CHÂU ÂU', 'EUROPEAN TECHNOLOGY'),
+      title: text('TRẺ HÓA CĂNG BÓNG DA HOA HỒNG', 'ROSE GLOW SKIN REJUVENATION'),
+      subtitle: text('PEEL VI SINH & CẤY TINH CHẤT HOA HỒNG SEN', 'MICROBIOME PEEL & ROSE ESSENCE INFUSION'),
       price: '380K',
       priceNum: 380000,
       originalPrice: '850K',
       originalPriceNum: 850000,
       discount: '-55%',
       image: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=1200&q=80',
-      tagline: 'Da sáng mịn căng bóng, mờ thâm sạm sau 1 buổi',
+      tagline: text('Da sáng mịn căng bóng, mờ thâm sạm sau 1 buổi', 'Smoother, brighter skin after one session'),
       partnerName: 'VENUS BEAUTY INSTITUTE',
       accentColor: 'from-[#EB0F51] to-[#ec4899]',
     },
     {
       id: 3,
-      badge: 'DƯỠNG SINH CỔ TRUYỀN',
-      title: 'GỘI ĐẦU DƯỠNG SINH AN MIÊN',
-      subtitle: 'BỒ KẾT THẢO DƯỢC & MASSAGE CỔ VAI GÁY',
+      badge: text('DƯỠNG SINH CỔ TRUYỀN', 'TRADITIONAL WELLNESS'),
+      title: text('GỘI ĐẦU DƯỠNG SINH AN MIÊN', 'AN MIEN HERBAL HEAD SPA'),
+      subtitle: text('BỒ KẾT THẢO DƯỢC & MASSAGE CỔ VAI GÁY', 'HERBAL HAIR WASH & NECK-SHOULDER MASSAGE'),
       price: '199K',
       priceNum: 199000,
       originalPrice: '350K',
       originalPriceNum: 350000,
       discount: '-43%',
       image: 'https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&w=1200&q=80',
-      tagline: 'Xua tan mệt mỏi, ngủ sâu giấc và thư thái tinh thần',
+      tagline: text('Xua tan mệt mỏi, ngủ sâu giấc và thư thái tinh thần', 'Release fatigue and enjoy deeper relaxation'),
       partnerName: 'HỆ THỐNG AN MIÊN SPA',
       accentColor: 'from-[#B42D58] to-[#B42D58]',
     },
@@ -136,7 +138,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 {slide.price}
               </span>
               <span className="text-xs sm:text-sm text-pink-200 line-through">
-                [Giá gốc: {slide.originalPrice}]
+                [{text('Giá gốc', 'Original')}: {slide.originalPrice}]
               </span>
               <span className="px-2 py-0.5 rounded-md bg-[#EB0F51] text-white text-xs font-black shadow-sm">
                 {slide.discount}
@@ -161,7 +163,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               }
               className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-[#EB0F51] via-[#D28474] to-[#ec4899] text-white text-sm font-bold shadow-lg shadow-pink-600/40 hover:opacity-95 hover:scale-[1.02] active:scale-95 transition-all"
             >
-              <span>Đặt lịch ngay</span>
+              <span>{text('Đặt lịch ngay', 'Book now')}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
@@ -213,10 +215,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <Users className="w-7 h-7" />
             </div>
             <span className="text-base font-bold text-slate-800 group-hover:text-[#B42D58] transition-colors">
-              Cộng đồng
+              {text('Cộng đồng', 'Community')}
             </span>
             <span className="text-[11px] text-slate-500 mt-0.5">
-              Review & Bí quyết làm đẹp
+              {text('Review & Bí quyết làm đẹp', 'Reviews & beauty tips')}
             </span>
             <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-pink-400 group-hover:animate-ping" />
           </button>
@@ -230,10 +232,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <CalendarCheck className="w-7 h-7" />
             </div>
             <span className="text-base font-bold text-slate-800 group-hover:text-[#B42D58] transition-colors">
-              Lịch hẹn
+              {text('Lịch hẹn', 'Appointments')}
             </span>
             <span className="text-[11px] text-slate-500 mt-0.5">
-              Quản lý lịch & Nhắc hẹn
+              {text('Quản lý lịch & Nhắc hẹn', 'Manage and track bookings')}
             </span>
           </button>
 
@@ -246,10 +248,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <TicketPercent className="w-7 h-7" />
             </div>
             <span className="text-base font-bold text-slate-800 group-hover:text-[#B42D58] transition-colors">
-              Mã giảm giá
+              {text('Mã giảm giá', 'Vouchers')}
             </span>
             <span className="text-[11px] text-slate-500 mt-0.5">
-              Săn voucher tới 50%
+              {text('Săn voucher tới 50%', 'Save up to 50%')}
             </span>
           </button>
 
@@ -265,7 +267,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               Rewards
             </span>
             <span className="text-[11px] text-slate-500 mt-0.5">
-              Đổi điểm nhận quà VIP
+              {text('Đổi điểm nhận quà VIP', 'Redeem points for VIP gifts')}
             </span>
           </button>
         </div>

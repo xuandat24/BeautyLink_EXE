@@ -1,41 +1,43 @@
 import React from 'react';
-import { Search, ThumbsUp, CalendarClock, CreditCard, ShieldCheck } from 'lucide-react';
+import { Search, ThumbsUp, CalendarClock, QrCode, ShieldCheck } from 'lucide-react';
+import { useLanguage } from '../lib/language';
 
 export const WhyChooseUs: React.FC = React.memo(() => {
+  const { text } = useLanguage();
   const features = [
     {
       id: 1,
-      title: 'Tìm kiếm nơi làm đẹp',
+      title: text('Tìm kiếm nơi làm đẹp', 'Find beauty providers'),
       description:
-        'Khám phá và tìm kiếm Spa, Salon, Thẩm mỹ, Phòng khám uy tín gần bạn chỉ trong vài giây.',
+        text('Khám phá và tìm kiếm Spa, Salon, Thẩm mỹ, Phòng khám uy tín gần bạn chỉ trong vài giây.', 'Discover trusted spas, salons, beauty institutes, and clinics near you in seconds.'),
       icon: Search,
       bg: 'from-pink-100 to-rose-50',
       iconColor: 'text-[#EB0F51]',
     },
     {
       id: 2,
-      title: 'Các địa điểm uy tín',
+      title: text('Các địa điểm uy tín', 'Trusted providers'),
       description:
-        'Mua đa dạng dịch vụ làm đẹp uy tín, an toàn với các đánh giá xác thực từ người dùng thật.',
+        text('Mua đa dạng dịch vụ làm đẹp uy tín, an toàn với các đánh giá xác thực từ người dùng thật.', 'Book reliable beauty services with verified information and transparent reviews.'),
       icon: ThumbsUp,
       bg: 'from-rose-100 to-pink-50',
       iconColor: 'text-[#B42D58]',
     },
     {
       id: 3,
-      title: 'Đặt lịch trực tuyến',
+      title: text('Đặt lịch trực tuyến', 'Online booking'),
       description:
-        'Đặt lịch làm đẹp trực tuyến nhanh chóng 30s. Chọn trước chuyên viên, không cần chờ đợi.',
+        text('Đặt lịch làm đẹp trực tuyến nhanh chóng 30s. Chọn trước chuyên viên, không cần chờ đợi.', 'Book in seconds, choose your professional in advance, and avoid waiting.'),
       icon: CalendarClock,
       bg: 'from-fuchsia-100 to-pink-50',
       iconColor: 'text-[#a21caf]',
     },
     {
       id: 4,
-      title: 'Thanh toán đa kênh',
+      title: text('Thanh toán VNPAY‑QR', 'VNPAY-QR payment'),
       description:
-        'Thanh toán online tiện lợi, bảo mật cao qua MoMo, VNPay, thẻ tín dụng hoặc thanh toán tại quầy.',
-      icon: CreditCard,
+        text('Quét VNPAY‑QR trên trang thanh toán chuyên biệt. Giao dịch đang được mô phỏng trong giai đoạn demo.', 'Scan VNPAY-QR on a dedicated checkout page. Transactions remain simulated during the demo stage.'),
+      icon: QrCode,
       bg: 'from-pink-100 to-purple-50',
       iconColor: 'text-[#EB0F51]',
     },
@@ -45,10 +47,10 @@ export const WhyChooseUs: React.FC = React.memo(() => {
     <section className="py-10 max-w-7xl mx-auto px-4 sm:px-6">
       <div className="text-center max-w-xl mx-auto mb-8">
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-          Vì sao nên chọn <span className="bg-gradient-to-r from-[#B42D58] to-[#EB0F51] bg-clip-text text-transparent">BeautyPink</span> ?
+          {text('Vì sao nên chọn', 'Why choose')} <span className="bg-gradient-to-r from-[#B42D58] to-[#EB0F51] bg-clip-text text-transparent">BeautyLink</span>?
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          Hệ sinh thái công nghệ giúp phái đẹp an tâm trải nghiệm dịch vụ chất lượng cao nhất
+          {text('Hệ sinh thái công nghệ giúp bạn an tâm trải nghiệm dịch vụ chất lượng.', 'A trusted technology platform for confident, high-quality beauty experiences.')}
         </p>
       </div>
 

@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { ChevronRight, ChevronLeft, Sparkles, MapPin } from 'lucide-react';
 import { NewPartner } from '../data/mockData';
+import { useLanguage } from '../lib/language';
 
 interface NewPartnersSectionProps {
   partners: NewPartner[];
@@ -13,6 +14,7 @@ export const NewPartnersSection: React.FC<NewPartnersSectionProps> = React.memo(
   onSelectPartner,
   onViewAll,
 }) => {
+  const { text } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -47,13 +49,13 @@ export const NewPartnersSection: React.FC<NewPartnersSectionProps> = React.memo(
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
-            <span>Doanh nghiệp mới tham gia</span>
+            <span>{text('Doanh nghiệp mới tham gia', 'New partners')}</span>
             <span className="px-2 py-0.5 rounded-full bg-pink-100 text-[#B42D58] text-[11px] font-black uppercase">
               NEW
             </span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Các cơ sở thẩm mỹ, spa & clinic uy tín vừa gia nhập hệ sinh thái BeautyPink
+            {text('Các cơ sở thẩm mỹ, spa & clinic uy tín vừa gia nhập hệ sinh thái BeautyLink', 'Trusted beauty institutes, spas, and clinics newly joined BeautyLink')}
           </p>
         </div>
 
@@ -61,7 +63,7 @@ export const NewPartnersSection: React.FC<NewPartnersSectionProps> = React.memo(
           onClick={onViewAll}
           className="inline-flex items-center gap-1 text-sm font-bold text-[#B42D58] hover:text-[#B42D58] hover:underline transition-colors"
         >
-          <span>Xem thêm</span>
+          <span>{text('Xem thêm', 'View more')}</span>
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>

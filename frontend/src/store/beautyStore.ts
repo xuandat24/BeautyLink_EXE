@@ -14,6 +14,17 @@ const STORAGE_KEYS = {
   FAVORITES: 'user_favorites',
 };
 
+const SESSION_USER_KEY = 'beautylink_session_user';
+
+const getSessionUser = () => {
+  try {
+    const value = sessionStorage.getItem(SESSION_USER_KEY);
+    return value ? JSON.parse(value) as CurrentUser : null;
+  } catch {
+    return null;
+  }
+};
+
 interface MemoryState {
   selectedCity: string;
   selectedLocationId: number | null;
@@ -32,7 +43,7 @@ let memoryState: MemoryState = {
   locationConfirmed: cache.get<boolean>(STORAGE_KEYS.LOCATION_CONFIRMED) ?? false,
   cartItems: cache.get<CartItem[]>(STORAGE_KEYS.CART) || [],
   appointments: cache.get<BookingDetails[]>(STORAGE_KEYS.APPOINTMENTS) || [],
-  currentUser: cache.get<CurrentUser | null>(STORAGE_KEYS.USER) ?? null,
+  currentUser: cache.get<CurrentUser | null>(STORAGE_KEYS.USER) ?? getSessionUser(),
   favorites: cache.get<string[]>(STORAGE_KEYS.FAVORITES) || [],
   notifications: notificationService.getStoredNotifications(),
   soundEnabled: notificationService.isSoundEnabled(),
@@ -107,15 +118,23 @@ export function useBeautyStore() {
     notify();
   }, []);
 
-  const setCurrentUser = useCallback((user: CurrentUser | null) => {
+  const setCurrentUser = useCallback((user: CurrentUser | null, rememberSession = true) => {
     memoryState.currentUser = user;
-    cache.set(STORAGE_KEYS.USER, user);
+    if (rememberSession) {
+      cache.set(STORAGE_KEYS.USER, user);
+      sessionStorage.removeItem(SESSION_USER_KEY);
+    } else {
+      cache.delete(STORAGE_KEYS.USER);
+      if (user) sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+      else sessionStorage.removeItem(SESSION_USER_KEY);
+    }
     notify();
   }, []);
 
   const logout = useCallback(() => {
     memoryState.currentUser = null;
-    cache.set(STORAGE_KEYS.USER, null);
+    cache.delete(STORAGE_KEYS.USER);
+    sessionStorage.removeItem(SESSION_USER_KEY);
     clearAccessToken();
     notify();
   }, []);

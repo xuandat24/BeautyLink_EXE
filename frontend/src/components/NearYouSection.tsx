@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Salon } from '../types';
 import { SalonCardSkeleton } from './Skeleton';
+import { useLanguage } from '../lib/language';
 
 interface NearYouSectionProps {
   salons: Salon[];
@@ -18,6 +19,7 @@ interface NearYouSectionProps {
   onSelectSalon: (salon: Salon) => void;
   onViewAll: () => void;
   locationPermission?: 'idle' | 'loading' | 'ready' | 'denied';
+  locationSource?: 'device' | 'network' | null;
   onEnableLocation?: () => void;
 }
 
@@ -27,8 +29,10 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
   onSelectSalon,
   onViewAll,
   locationPermission = 'idle',
+  locationSource = null,
   onEnableLocation,
 }) => {
+  const { text } = useLanguage();
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
 
@@ -37,13 +41,13 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
   const [canScrollRight, setCanScrollRight] = useState(true);
 
   const filterTabs = [
-    { id: 'all', label: 'Tất cả' },
+    { id: 'all', label: text('Tất cả', 'All') },
     { id: 'spa', label: 'Spa' },
-    { id: 'tham-my-vien', label: 'Thẩm mỹ viện' },
+    { id: 'tham-my-vien', label: text('Thẩm mỹ viện', 'Beauty institute') },
     { id: 'clinic', label: 'Clinic' },
     { id: 'massage', label: 'Massage center' },
     { id: 'nail', label: 'Nails' },
-    { id: 'salon-toc', label: 'Salon tóc' },
+    { id: 'salon-toc', label: text('Salon tóc', 'Hair salon') },
   ];
 
   // Fast category filter for quick preview on homepage
@@ -91,27 +95,27 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
           <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
-            <span>Gần bạn</span>
+            <span>{text('Gần bạn', 'Near you')}</span>
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
           </h2>
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-pink-50 px-2.5 py-0.5 rounded-full border border-pink-100">
             <MapPin className="w-3 h-3 text-[#EB0F51]" />
-            {salons.length} cơ sở làm đẹp
+            {salons.length} {text('cơ sở làm đẹp', 'beauty providers')}
           </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-        {locationPermission !== 'ready' && <button type="button" onClick={onEnableLocation} disabled={locationPermission === 'loading'} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"><Navigation className={`h-3.5 w-3.5 ${locationPermission === 'loading' ? 'animate-pulse' : ''}`} />{locationPermission === 'loading' ? 'Đang định vị...' : locationPermission === 'denied' ? 'Thử lại GPS' : 'Dùng vị trí của tôi'}</button>}
-        {locationPermission === 'ready' && <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-700"><CheckCircle className="h-3.5 w-3.5" />Khoảng cách GPS thật</span>}
+        {locationPermission !== 'ready' && <button type="button" onClick={onEnableLocation} disabled={locationPermission === 'loading'} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"><Navigation className={`h-3.5 w-3.5 ${locationPermission === 'loading' ? 'animate-pulse' : ''}`} />{locationPermission === 'loading' ? text('Đang định vị...', 'Locating...') : locationPermission === 'denied' ? text('Thử lại GPS', 'Retry GPS') : text('Dùng vị trí của tôi', 'Use my location')}</button>}
+        {locationPermission === 'ready' && <span className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold ${locationSource === 'network' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}><CheckCircle className="h-3.5 w-3.5" />{locationSource === 'network' ? text('Vị trí gần đúng theo mạng', 'Approximate network location') : text('Khoảng cách GPS thật', 'Live GPS distance')}</span>}
         <button
           type="button"
           onClick={onViewAll}
           disabled={isLoading}
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-pink-50 hover:bg-pink-100/90 border border-pink-200 text-xs font-bold text-[#B42D58] hover:text-[#B42D58] transition-all cursor-pointer group shadow-xs self-start sm:self-auto disabled:opacity-50"
-          title="Mở bộ lọc nâng cao & xem tất cả địa điểm gần bạn"
+          title={text('Mở bộ lọc nâng cao & xem tất cả địa điểm gần bạn', 'Open filters and view all nearby providers')}
         >
           <SlidersHorizontal className="w-3.5 h-3.5 text-[#EB0F51]" />
-          <span>Bộ lọc & Xem tất cả ({isLoading ? '...' : salons.length})</span>
+          <span>{text('Bộ lọc & Xem tất cả', 'Filters & View all')} ({isLoading ? '...' : salons.length})</span>
           <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
         </button>
         </div>
@@ -153,17 +157,17 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
             <Navigation className="w-6 h-6" />
           </div>
           <h3 className="text-sm font-bold text-slate-800">
-            Chưa có cơ sở trong danh mục này
+            {text('Chưa có cơ sở trong danh mục này', 'No providers in this category yet')}
           </h3>
           <p className="text-xs text-slate-500 mt-1 mb-4">
-            Hãy chọn danh mục khác hoặc mở bộ lọc nâng cao để tìm kiếm thêm.
+            {text('Hãy chọn danh mục khác hoặc mở bộ lọc nâng cao để tìm kiếm thêm.', 'Choose another category or use advanced filters to discover more.')}
           </p>
           <button
             type="button"
             onClick={() => setActiveCategory('all')}
             className="px-4 py-2 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white text-xs font-bold shadow-sm hover:opacity-95 transition-opacity cursor-pointer"
           >
-            Hiển thị tất cả cơ sở
+            {text('Hiển thị tất cả cơ sở', 'Show all providers')}
           </button>
         </div>
       ) : (
@@ -233,7 +237,7 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
                   <button
                     type="button"
                     onClick={(e) => toggleFavorite(e, salon.id)}
-                    aria-label="Yêu thích cơ sở"
+                    aria-label={text('Yêu thích cơ sở', 'Favorite provider')}
                     className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors shadow-sm cursor-pointer z-10"
                   >
                     <Heart
@@ -246,7 +250,7 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
                   {/* Distance Overlay */}
                   <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded text-[11px] font-semibold flex items-center gap-1">
                     <MapPin className="w-3 h-3 text-[#EB0F51]" />
-                    <span>{salon.hasExactDistance ? `${salon.distanceKm} km` : 'Bật GPS để đo'}</span>
+                    <span>{salon.hasExactDistance ? `${salon.distanceKm} km` : text('Bật GPS để đo', 'Enable GPS for distance')}</span>
                   </div>
                 </div>
 
@@ -282,7 +286,7 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
                   <div className="mt-3 pt-2.5 border-t border-pink-50 flex items-center justify-between">
                     <div>
                       <div className="text-[10px] font-semibold text-slate-400">
-                        Dịch vụ từ:
+                        {text('Dịch vụ từ:', 'Services from:')}
                       </div>
                       <div className="text-xs sm:text-sm font-black text-[#EB0F51]">
                         {formatVND(salon.minPrice ?? 150000)}
@@ -290,7 +294,7 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
                     </div>
 
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-pink-50 text-[#B42D58] font-bold text-xs group-hover:bg-[#EB0F51] group-hover:text-white transition-all shadow-xs">
-                      <span>Đặt chỗ</span>
+                      <span>{text('Đặt chỗ', 'Book')}</span>
                       <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                     </span>
                   </div>
