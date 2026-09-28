@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "app.jwt.secret=beautylink-production-reference-test-secret-for-hmac-sha256",
+        "app.kyc.encryption-key=beautylink-production-reference-test-kyc-secret-value",
         "app.cors.allowed-origins=https://beautylink.example",
         "app.demo-data.enabled=false",
         "app.supplier.auto-verify=false"

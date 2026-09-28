@@ -2,6 +2,7 @@ package com.example.backend;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.backend.repository.SupplierVerificationRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -13,6 +14,8 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -23,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PlatformApiIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
+    @Autowired SupplierVerificationRepository supplierVerifications;
 
     @Test
     void publicCatalogExposesSeededLocationsCategoriesAndServices() throws Exception {
@@ -171,7 +175,9 @@ class PlatformApiIntegrationTest {
                 {"ownerName":"Le Minh","phone":"0934567890","email":"partner.new@example.com",
                  "password":"StrongPass123!","businessName":"Minh Beauty House","businessType":"Makeup Studio",
                  "locationId":%d,"addressLine":"25 Nguyen Trai","description":"Studio trang diem",
-                 "specialty":"Trang diem co dau"}
+                 "specialty":"Trang diem co dau","cccdNumber":"079203001234",
+                 "cccdFrontImage":"data:image/jpeg;base64,aGVsbG8=","cccdBackImage":"data:image/jpeg;base64,aGVsbG8=",
+                 "imageUrl":"data:image/jpeg;base64,aGVsbG8=","latitude":10.7769,"longitude":106.7009}
                 """.formatted(cityId);
 
         String response = mvc.perform(post("/api/v1/auth/register-supplier")
@@ -180,10 +186,15 @@ class PlatformApiIntegrationTest {
                 .andExpect(jsonPath("$.auth.accessToken", not(emptyString())))
                 .andExpect(jsonPath("$.auth.user.role", is("SUPPLIER")))
                 .andExpect(jsonPath("$.supplier.verificationStatus", is("VERIFIED")))
+                .andExpect(jsonPath("$.supplier.latitude", is(10.7769)))
+                .andExpect(jsonPath("$.supplier.cccdNumber").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
         JsonNode registration = objectMapper.readTree(response);
         String token = registration.path("auth").path("accessToken").asText();
         long supplierId = registration.path("supplier").path("id").asLong();
+        var verification = supplierVerifications.findBySupplierId(supplierId).orElseThrow();
+        assertTrue(verification.getEncryptedCccdNumber().startsWith("v1:"));
+        assertFalse(verification.getEncryptedCccdNumber().contains("079203001234"));
 
         mvc.perform(get("/api/v1/supplier/profile").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.name", is("Minh Beauty House")));
@@ -213,7 +224,7 @@ class PlatformApiIntegrationTest {
                         .content("""
                                 {"name":"Minh Beauty House","businessType":"Makeup Studio",
                                  "description":"Studio trang diem chuyen nghiep","addressLine":"25 Nguyen Trai",
-                                 "imageUrl":"data:image/png;base64,aGVsbG8="}
+                                 "imageUrl":"data:image/png;base64,aGVsbG8=","latitude":10.777,"longitude":106.701}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.imageUrl", startsWith("data:image/png;base64,")));

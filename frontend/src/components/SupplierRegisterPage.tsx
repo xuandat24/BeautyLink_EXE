@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Building2, CheckCircle2, Eye, EyeOff, LoaderCircle, MapPin, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Building2, CheckCircle2, Eye, EyeOff, FileCheck2, ImagePlus, LoaderCircle, LocateFixed, LockKeyhole, MapPin, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { getApiErrorMessage } from '../lib/api';
+import { prepareImageUpload } from '../lib/imageUpload';
 import { platformApi } from '../services/platformApi';
 import type { CurrentUser, LocationOption } from '../types';
 
@@ -18,10 +19,12 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({ onBa
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [accepted, setAccepted] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [form, setForm] = useState({
     ownerName: '', phone: '', email: '', password: '', confirmPassword: '',
     businessName: '', businessType: businessTypes[0], locationId: '', addressLine: '',
-    description: '', specialty: '',
+    description: '', specialty: '', cccdNumber: '', cccdFrontImage: '', cccdBackImage: '',
+    imageUrl: '', latitude: null as number | null, longitude: null as number | null,
   });
 
   useEffect(() => {
@@ -31,10 +34,24 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({ onBa
   const canSubmit = useMemo(() => Boolean(
     form.ownerName.trim() && form.phone.trim() && form.email.trim() && form.password.length >= 8 &&
     form.password === form.confirmPassword && form.businessName.trim() && form.locationId &&
-    form.addressLine.trim() && accepted
+    form.addressLine.trim() && /^\d{12}$/.test(form.cccdNumber) && form.cccdFrontImage &&
+    form.cccdBackImage && form.imageUrl && form.latitude != null && form.longitude != null && accepted
   ), [form, accepted]);
 
-  const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }));
+  const update = <K extends keyof typeof form>(field: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [field]: value }));
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) { setError('Trình duyệt này không hỗ trợ định vị GPS.'); return; }
+    setLocating(true); setError('');
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setForm((current) => ({ ...current, latitude: Number(coords.latitude.toFixed(7)), longitude: Number(coords.longitude.toFixed(7)) }));
+        setLocating(false);
+      },
+      () => { setError('Không thể lấy GPS. Hãy cho phép quyền vị trí, hoặc nhập tọa độ thủ công bên dưới.'); setLocating(false); },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
+    );
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -50,6 +67,8 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({ onBa
         businessName: form.businessName.trim(), businessType: form.businessType,
         locationId: Number(form.locationId), addressLine: form.addressLine.trim(),
         description: form.description.trim() || undefined, specialty: form.specialty.trim() || undefined,
+        cccdNumber: form.cccdNumber, cccdFrontImage: form.cccdFrontImage, cccdBackImage: form.cccdBackImage,
+        imageUrl: form.imageUrl, latitude: form.latitude!, longitude: form.longitude!,
       });
       onSuccess({
         id: result.auth.user.id, name: result.auth.user.fullName, phone: result.auth.user.phone,
@@ -104,13 +123,30 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({ onBa
               </div>
             </FormSection>
 
-            <FormSection number="02" title="Thông tin cơ sở">
+            <FormSection number="02" title="Xác minh danh tính">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-emerald-700 shadow-sm"><LockKeyhole className="h-5 w-5" /></span><div><p className="text-sm font-black text-emerald-900">Cam kết bảo mật hồ sơ định danh</p><p className="mt-1 text-xs leading-5 text-emerald-800">Số và ảnh CCCD được mã hóa AES-256-GCM trước khi lưu, tách khỏi hồ sơ công khai và chỉ dùng cho quy trình xác minh đối tác. BeautyLink không hiển thị giấy tờ này cho khách hàng hay nhà cung cấp khác.</p></div></div>
+              </div>
+              <Field label="Số CCCD *"><div className="relative"><FileCheck2 className="absolute left-3 top-3.5 h-4 w-4 text-[#D28474]" /><input required inputMode="numeric" pattern="[0-9]{12}" maxLength={12} value={form.cccdNumber} onChange={(e) => update('cccdNumber', e.target.value.replace(/\D/g, ''))} placeholder="12 chữ số trên CCCD" className="field pl-10" /></div></Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <IdentityImagePicker label="Mặt trước CCCD *" value={form.cccdFrontImage} onChange={(value) => update('cccdFrontImage', value)} />
+                <IdentityImagePicker label="Mặt sau CCCD *" value={form.cccdBackImage} onChange={(value) => update('cccdBackImage', value)} />
+              </div>
+            </FormSection>
+
+            <FormSection number="03" title="Thông tin cơ sở">
               <Field label="Tên cơ sở / thương hiệu *"><input required value={form.businessName} onChange={(e) => update('businessName', e.target.value)} placeholder="Ví dụ: Mây Beauty Studio" className="field" /></Field>
+              <IdentityImagePicker label="Ảnh đại diện / ảnh bìa cơ sở *" value={form.imageUrl} onChange={(value) => update('imageUrl', value)} storeImage />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Mô hình kinh doanh *"><select value={form.businessType} onChange={(e) => update('businessType', e.target.value)} className="field bg-white">{businessTypes.map((type) => <option key={type}>{type}</option>)}</select></Field>
                 <Field label="Thành phố *"><select required value={form.locationId} onChange={(e) => update('locationId', e.target.value)} className="field bg-white"><option value="">Chọn thành phố</option>{cities.map((city) => <option key={city.id} value={city.id}>{city.name}</option>)}</select></Field>
               </div>
               <Field label="Địa chỉ cơ sở *"><div className="relative"><MapPin className="absolute left-3 top-3.5 h-4 w-4 text-[#D28474]" /><input required value={form.addressLine} onChange={(e) => update('addressLine', e.target.value)} placeholder="Số nhà, tên đường, phường/quận" className="field pl-10" /></div></Field>
+              <div className="rounded-2xl border border-pink-100 bg-pink-50/50 p-4">
+                <div className="flex items-start gap-3"><LocateFixed className="mt-0.5 h-5 w-5 shrink-0 text-[#EB0F51]" /><div><p className="text-xs font-black text-slate-800">Tọa độ cửa hàng *</p><p className="mt-1 text-[11px] leading-4 text-slate-500">Giúp khách tìm thấy cơ sở trong “Gần bạn”. Hãy thao tác tại địa chỉ kinh doanh để khoảng cách chính xác.</p></div></div>
+                <button type="button" onClick={detectLocation} disabled={locating} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-xs font-black text-[#B42D58] shadow-sm ring-1 ring-pink-200 hover:bg-pink-100 disabled:opacity-50">{locating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : form.latitude != null ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <LocateFixed className="h-4 w-4" />}{locating ? 'Đang lấy vị trí...' : form.latitude != null ? 'Đã lấy vị trí GPS' : 'Dùng vị trí hiện tại'}</button>
+                <div className="mt-3 grid grid-cols-2 gap-3"><Field label="Vĩ độ"><input required type="number" step="any" min={-90} max={90} value={form.latitude ?? ''} onChange={(e) => update('latitude', e.target.value === '' ? null : Number(e.target.value))} placeholder="10.7769" className="field bg-white" /></Field><Field label="Kinh độ"><input required type="number" step="any" min={-180} max={180} value={form.longitude ?? ''} onChange={(e) => update('longitude', e.target.value === '' ? null : Number(e.target.value))} placeholder="106.7009" className="field bg-white" /></Field></div>
+              </div>
               <Field label="Chuyên môn chính"><input value={form.specialty} onChange={(e) => update('specialty', e.target.value)} placeholder="Ví dụ: Trang điểm cô dâu, chăm sóc da" className="field" /></Field>
               <Field label="Giới thiệu ngắn"><textarea rows={4} value={form.description} onChange={(e) => update('description', e.target.value)} placeholder="Điểm nổi bật, kinh nghiệm và phong cách phục vụ..." className="field resize-none" /></Field>
             </FormSection>
@@ -131,4 +167,21 @@ function FormSection({ number, title, children }: { number: string; title: strin
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block"><span className="mb-1.5 block text-xs font-extrabold text-slate-700">{label}</span>{children}</label>;
+}
+
+function IdentityImagePicker({ label, value, onChange, storeImage = false }: { label: string; value: string; onChange: (value: string) => void; storeImage?: boolean }) {
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState('');
+  const upload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setProcessing(true); setError('');
+    try {
+      onChange(await prepareImageUpload(file, storeImage ? {} : { maxEdge: 1200, quality: 0.76, maxStoredCharacters: 1_150_000 }));
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Không thể xử lý ảnh.');
+    } finally { setProcessing(false); }
+  };
+  return <div><span className="mb-1.5 block text-xs font-extrabold text-slate-700">{label}</span><div className="relative overflow-hidden rounded-2xl border border-dashed border-pink-200 bg-pink-50/40"><div className={`${storeImage ? 'aspect-[16/7]' : 'aspect-[1.58/1]'} grid place-items-center overflow-hidden`}>{value ? <img src={value} alt={`Xem trước ${label}`} className="h-full w-full object-cover" /> : <div className="text-center text-pink-300"><ImagePlus className="mx-auto h-7 w-7" /><p className="mt-2 text-[10px] font-bold text-slate-400">JPG, PNG, WEBP · tối đa 10 MB</p></div>}</div><label className="absolute inset-x-3 bottom-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white/95 px-3 py-2 text-xs font-black text-[#B42D58] shadow-md backdrop-blur hover:bg-pink-100">{processing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}{processing ? 'Đang bảo vệ ảnh...' : value ? 'Thay ảnh' : 'Chọn ảnh'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={upload} disabled={processing} className="sr-only" /></label>{value && <button type="button" onClick={() => onChange('')} aria-label={`Xóa ${label}`} className="absolute right-2 top-2 rounded-full bg-slate-900/75 p-1.5 text-white"><X className="h-3.5 w-3.5" /></button>}</div>{error && <p className="mt-2 text-xs font-bold text-rose-600">{error}</p>}</div>;
 }

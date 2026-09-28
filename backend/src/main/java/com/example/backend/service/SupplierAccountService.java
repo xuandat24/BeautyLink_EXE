@@ -31,12 +31,15 @@ public class SupplierAccountService {
     private final AuthService auth;
     private final ServiceCategoryRepository categories;
     private final ServiceOfferingRepository services;
+    private final SupplierVerificationRepository verifications;
+    private final SensitiveDataCipher sensitiveData;
     private final boolean autoVerify;
 
     public SupplierAccountService(UserAccountRepository users, SupplierRepository suppliers, LocationRepository locations,
                                   PractitionerRepository practitioners, AvailabilityRuleRepository rules,
                                   PasswordEncoder encoder, AuthService auth, ServiceCategoryRepository categories,
-                                  ServiceOfferingRepository services,
+                                  ServiceOfferingRepository services, SupplierVerificationRepository verifications,
+                                  SensitiveDataCipher sensitiveData,
                                   @Value("${app.supplier.auto-verify:false}") boolean autoVerify) {
         this.users = users;
         this.suppliers = suppliers;
@@ -47,6 +50,8 @@ public class SupplierAccountService {
         this.auth = auth;
         this.categories = categories;
         this.services = services;
+        this.verifications = verifications;
+        this.sensitiveData = sensitiveData;
         this.autoVerify = autoVerify;
     }
 
@@ -56,6 +61,9 @@ public class SupplierAccountService {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         if (users.existsByPhone(phone)) throw new ApiException(HttpStatus.CONFLICT, "PHONE_EXISTS", "Số điện thoại đã được đăng ký");
         if (users.existsByEmailIgnoreCase(email)) throw new ApiException(HttpStatus.CONFLICT, "EMAIL_EXISTS", "Email đã được đăng ký");
+        String normalizedCccd = request.cccdNumber().replaceAll("\\s", "");
+        String cccdHash = sensitiveData.hash(normalizedCccd);
+        if (verifications.existsByCccdHash(cccdHash)) throw new ApiException(HttpStatus.CONFLICT, "CCCD_EXISTS", "CCCD này đã được dùng cho một hồ sơ đối tác");
 
         Location city = locations.findById(request.locationId())
                 .filter(location -> location.isActive() && location.getType() == LocationType.PROVINCE_CITY && SUPPORTED_CITIES.contains(location.getSlug()))
@@ -78,9 +86,20 @@ public class SupplierAccountService {
         supplier.setDescription(blankToNull(request.description()));
         supplier.setLocation(city);
         supplier.setAddressLine(request.addressLine().trim());
+        supplier.setLatitude(request.latitude());
+        supplier.setLongitude(request.longitude());
+        supplier.setImageUrl(normalizeImageSource(request.imageUrl()));
         supplier.setVerificationStatus(autoVerify ? VerificationStatus.VERIFIED : VerificationStatus.PENDING);
         supplier.setNewPartner(true);
         suppliers.save(supplier);
+
+        SupplierVerification verification = new SupplierVerification();
+        verification.setSupplier(supplier);
+        verification.setCccdHash(cccdHash);
+        verification.setEncryptedCccdNumber(sensitiveData.encrypt(normalizedCccd));
+        verification.setEncryptedFrontImage(sensitiveData.encrypt(requireIdentityImage(request.cccdFrontImage())));
+        verification.setEncryptedBackImage(sensitiveData.encrypt(requireIdentityImage(request.cccdBackImage())));
+        verifications.save(verification);
 
         Practitioner practitioner = new Practitioner();
         practitioner.setSupplier(supplier);
@@ -106,6 +125,8 @@ public class SupplierAccountService {
         supplier.setDescription(blankToNull(request.description()));
         supplier.setAddressLine(request.addressLine().trim());
         supplier.setImageUrl(normalizeImageSource(request.imageUrl()));
+        supplier.setLatitude(request.latitude());
+        supplier.setLongitude(request.longitude());
         promoteManualSupplier(supplier);
         return response(suppliers.save(supplier));
     }
@@ -201,6 +222,7 @@ public class SupplierAccountService {
 
     private void promoteManualSupplier(Supplier supplier) {
         supplier.setNewPartner(true);
+        if (supplier.getLatitude() != null && supplier.getLongitude() != null) supplier.setNearbyFeatured(true);
         if (autoVerify && supplier.getVerificationStatus() == VerificationStatus.PENDING) {
             supplier.setVerificationStatus(VerificationStatus.VERIFIED);
         }
@@ -232,7 +254,8 @@ public class SupplierAccountService {
         Location location = supplier.getLocation();
         return new SupplierResponse(supplier.getId(), supplier.getName(), supplier.getSlug(), supplier.getBusinessType(),
                 supplier.getDescription(), location == null ? null : location.getId(), location == null ? null : location.getName(),
-                supplier.getAddressLine(), supplier.getImageUrl(), supplier.getVerificationStatus(), supplier.getRating(), supplier.getReviewCount());
+                supplier.getAddressLine(), supplier.getImageUrl(), supplier.getLatitude(), supplier.getLongitude(),
+                supplier.getVerificationStatus(), supplier.getRating(), supplier.getReviewCount());
     }
 
     private String uniqueSlug(String value) {
@@ -262,5 +285,13 @@ public class SupplierAccountService {
             // Converted into a stable API validation response below.
         }
         throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IMAGE", "Ảnh phải là tệp JPG, PNG, WEBP hoặc đường dẫn HTTP hợp lệ");
+    }
+
+    private String requireIdentityImage(String value) {
+        String source = blankToNull(value);
+        if (source != null && (source.startsWith("data:image/jpeg;base64,") || source.startsWith("data:image/png;base64,") || source.startsWith("data:image/webp;base64,"))) {
+            return source;
+        }
+        throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IDENTITY_IMAGE", "Ảnh CCCD phải là tệp JPG, PNG hoặc WEBP hợp lệ");
     }
 }

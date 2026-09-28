@@ -15,16 +15,18 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 - Search services, view prices, ratings, availability, and practitioners.
 - Register or sign in with JWT authentication.
 - Book an available appointment and view it in **Tổng quan & Lịch hẹn**.
+- Allow GPS access to sort the **Gần bạn** section by real distance.
 - Cancel eligible appointments and submit support reports.
 
 ### Supplier
 
-- Register a supplier business. Local development auto-verifies it for demonstrations; production keeps it `PENDING` until approval.
+- Register a supplier business with store image, GPS coordinates, CCCD number, and front/back CCCD images. Local development auto-verifies it for demonstrations; production keeps it `PENDING` until approval.
 - Access a supplier dashboard.
 - Upload a store thumbnail and practitioner avatar images.
 - Create, edit, publish, hide, and categorize store services.
 - Manage practitioners and their weekly working hours, breaks, and slot duration.
 - View appointments made with that supplier.
+- See booking totals, upcoming work, completion rate, simulated order value, and status distribution on the dashboard.
 
 ### Staff and admin
 
@@ -157,6 +159,7 @@ MYSQL_JDBC_URL=jdbc:mysql://localhost:3306/beautylink?useSSL=false&allowPublicKe
 MYSQL_USERNAME=your_mysql_username
 MYSQL_PASSWORD=your_mysql_password
 JWT_SECRET=replace-with-a-long-random-secret-of-at-least-32-characters
+KYC_ENCRYPTION_KEY=replace-with-a-different-random-secret-of-at-least-32-characters
 JWT_EXPIRATION_MS=86400000
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 SUPPLIER_AUTO_VERIFY=true
@@ -165,6 +168,7 @@ DEMO_ACCOUNT_PASSWORD=Demo123!
 ```
 
 `backend/.env.properties` is ignored by Git. Never commit this file or paste production secrets into source code.
+`KYC_ENCRYPTION_KEY` protects supplier identity documents and must be different from `JWT_SECRET` in every deployment. Keep it stable when redeploying; changing or losing it makes existing encrypted CCCD records unreadable.
 
 ### 5. Install the frontend dependencies
 
@@ -239,7 +243,7 @@ Guests do not have database accounts. They can browse the catalog but must regis
 
 1. Register or sign in with a supplier account.
 2. Open **Gian hàng & dịch vụ** in the supplier dashboard.
-3. Upload the store thumbnail and save the business profile.
+3. Upload the store thumbnail, capture the business GPS location, and save the business profile.
 4. Select **Tạo dịch vụ**, choose a category, enter the price and duration, and upload a service image.
 5. Save the active service. In local demo mode, manually created suppliers are shown before seeded suppliers on the homepage.
 
@@ -261,6 +265,7 @@ The main tables are:
 | `user_accounts` | Login identity, password hash, role, account status |
 | `locations` | Cities and optional district/ward hierarchy |
 | `suppliers` | Provider business profile and verification state |
+| `supplier_verifications` | Encrypted CCCD number and encrypted front/back identity images, separated from the public profile |
 | `service_categories` | Stable category definitions |
 | `service_offerings` | Supplier services, price, duration, category, and image |
 | `practitioners` | People who perform services for a supplier |
@@ -441,6 +446,9 @@ The frontend displays a local BeautyLink placeholder when an external supplier i
 - Passwords are BCrypt hashes; plaintext passwords are never stored.
 - JWT-protected endpoints enforce customer, supplier, staff, or admin roles.
 - Secrets remain in ignored environment files.
+- Supplier CCCD fields are encrypted at application level with AES-256-GCM and a unique random nonce for each value. Duplicate detection uses keyed HMAC; public catalog/profile responses never contain CCCD data.
+- Supplier identity uploads are restricted to decoded JPG, PNG, or WEBP images, resized/re-encoded in the browser, and size-limited before submission.
+- GPS permission is requested by the browser only when a user or supplier selects the location action. Production GPS requires HTTPS, which Vercel provides.
 - Supplier data is public only after verification. `SUPPLIER_AUTO_VERIFY=true` is intended only for local demonstrations.
 - Real payment processing is not implemented yet.
 

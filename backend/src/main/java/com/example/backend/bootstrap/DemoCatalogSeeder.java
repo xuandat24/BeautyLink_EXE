@@ -96,6 +96,9 @@ public class DemoCatalogSeeder implements CommandLineRunner {
         supplier.setBusinessType(entry.businessType());
         supplier.setDescription(entry.highlightText());
         supplier.setImageUrl(entry.imageUrl());
+        double[] coordinates = demoCoordinates(city.getSlug(), entry.supplierSlug());
+        supplier.setLatitude(coordinates[0]);
+        supplier.setLongitude(coordinates[1]);
         supplier.setRating(entry.rating());
         supplier.setReviewCount(entry.reviewCount());
         supplier.setDemoData(true);
@@ -226,6 +229,15 @@ public class DemoCatalogSeeder implements CommandLineRunner {
 
     private String img(String id) {
         return "https://images.unsplash.com/photo-" + id + "?auto=format&fit=crop&w=900&q=85";
+    }
+
+    private double[] demoCoordinates(String citySlug, String supplierSlug) {
+        double baseLatitude = "ha-noi".equals(citySlug) ? 21.0285 : 10.7769;
+        double baseLongitude = "ha-noi".equals(citySlug) ? 105.8542 : 106.7009;
+        int hash = supplierSlug.hashCode();
+        double latitudeOffset = (Math.floorMod(hash, 1601) - 800) / 100_000.0;
+        double longitudeOffset = (Math.floorMod(hash / 1601, 1601) - 800) / 100_000.0;
+        return new double[]{baseLatitude + latitudeOffset, baseLongitude + longitudeOffset};
     }
 
     private record DemoEntry(String supplierSlug, String supplierName, String businessType, String address,

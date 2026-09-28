@@ -41,6 +41,7 @@ export interface Salon {
   isFeatured?: boolean;
   minPrice?: number;
   maxPrice?: number;
+  hasExactDistance?: boolean;
 }
 
 export interface NewPartner {

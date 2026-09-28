@@ -48,6 +48,6 @@ public class CatalogService {
         return new ServiceResponse(s.getId(), s.getName(), s.getDescription(), s.getPrice(), s.getDurationMinutes(), s.getImageUrl(), s.getCategory().getSlug(), supplier.getId(), supplier.getName(), supplier.getAddressLine(), supplier.getRating(), people,
                 s.getOriginalPrice() == null ? s.getPrice() : s.getOriginalPrice(), s.getHighlightText(), s.isFeatured(),
                 supplier.getImageUrl(), supplier.getBusinessType(), supplier.getReviewCount(), supplier.isDemoData(),
-                supplier.isNearbyFeatured(), supplier.isNewPartner());
+                supplier.isNearbyFeatured(), supplier.isNewPartner(), supplier.getLatitude(), supplier.getLongitude());
     }
 }

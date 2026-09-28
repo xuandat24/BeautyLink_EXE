@@ -48,15 +48,16 @@ DEMO_DATA_ENABLED=true
 DEMO_ACCOUNT_PASSWORD=<a-new-private-demo-password>
 SUPPLIER_AUTO_VERIFY=true
 JWT_SECRET=<a-new-random-secret>
+KYC_ENCRYPTION_KEY=<a-different-random-secret>
 ```
 
-Generate the two secret values locally; do not reuse the local MySQL password or `Demo123!`:
+Generate the secret values locally; do not reuse the local MySQL password or `Demo123!`:
 
 ```powershell
 node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 ```
 
-Run the command twice: use one result for `JWT_SECRET` and choose/store a separate strong value for `DEMO_ACCOUNT_PASSWORD`.
+Run the command three times: use independent results for `JWT_SECRET`, `KYC_ENCRYPTION_KEY`, and `DEMO_ACCOUNT_PASSWORD`. Keep `KYC_ENCRYPTION_KEY` stable across redeployments because it protects saved supplier CCCD documents.
 
 ### Demo versus real production
 
@@ -152,6 +153,7 @@ Verify all of these from the Vercel website:
 ### Security reminders
 
 - Never commit `.env.properties`, `.env.local`, database credentials, or JWT secrets.
+- Never commit or rotate `KYC_ENCRYPTION_KEY` without a planned data migration; store it only in Railway's secret variables.
 - Do not expose the Railway MySQL service publicly unless external database access is specifically required.
 - Replace the demonstration password before any public deployment.
 - Payments are simulated; do not present the current payment flow as real payment processing.
