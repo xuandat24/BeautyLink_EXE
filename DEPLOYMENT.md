@@ -30,7 +30,7 @@ npm run build
 5. Set the Railway config file path to `/backend/railway.json` if Railway does not detect it automatically.
 6. Generate a public domain for the backend service under **Settings -> Networking**.
 
-The backend Dockerfile builds with Java 21, activates the `prod` Spring profile, listens on Railway's `PORT`, and uses `/api/v1/categories` as its health check.
+The backend Dockerfile builds with Java 25, activates the `prod` Spring profile, listens on Railway's `PORT`, and uses `/api/v1/categories` as its health check.
 
 ## 3. Configure Railway variables
 

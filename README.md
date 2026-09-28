@@ -45,7 +45,7 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 |---|---|
 | Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 4 |
 | Client state/API | React hooks, Axios, localStorage persistence |
-| Backend | Java 21, Spring Boot 3.5, Spring Web |
+| Backend | Java 25, Spring Boot 3.5, Spring Web |
 | Authentication | Spring Security, JWT, BCrypt |
 | Persistence | Spring Data JPA, Hibernate |
 | Database | MySQL 8 |
