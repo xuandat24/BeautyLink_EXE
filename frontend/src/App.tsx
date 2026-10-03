@@ -25,6 +25,7 @@ import { BookingDialog, ServicePage } from './components/ServicePage';
 import { SupplierSchedulePage } from './components/SupplierSchedulePage';
 import { MyBookingsPage } from './components/MyBookingsPage';
 import { StaffReportsPage } from './components/StaffReportsPage';
+import { ShopPage } from './components/ShopPage';
 
 // Central Store & Types (Enterprise Modular Architecture)
 import { useBeautyStore } from './store/beautyStore';
@@ -59,10 +60,10 @@ const distanceInKm = (from: GeoPoint, to: GeoPoint) => {
 };
 
 const toDeal = (service: BeautyService, index: number): HotDeal => ({
-  id: `service-${service.id}`, serviceId: service.id, title: service.name, brandName: service.supplierName,
+  id: `service-${service.id}`, serviceId: service.id, supplierId: service.supplierId, title: service.name, brandName: service.supplierName,
   brandLogo: logoFor(service.supplierName), image: service.imageUrl, originalPrice: service.originalPrice || service.price,
   salePrice: service.price, discountPercent: service.originalPrice > service.price ? Math.round((1 - service.price / service.originalPrice) * 100) : 0,
-  isNew: index < 4, rating: service.rating, reviewsCount: service.supplierReviewCount,
+  isNew: index < 4, rating: service.rating, reviewsCount: service.serviceReviewCount,
   duration: `${service.durationMinutes} phút`, category: categoryForCard(service.categorySlug),
   highlightText: service.highlightText || service.description, distanceKm: 0.8 + (index % 7) * 0.6,
   district: districtFrom(service.supplierAddress),
@@ -74,10 +75,10 @@ const toSalon = (service: BeautyService, index: number, userLocation: GeoPoint |
     ? distanceInKm(userLocation, { latitude: service.supplierLatitude!, longitude: service.supplierLongitude! })
     : null;
   return ({
-  id: `supplier-${service.supplierId}`, serviceId: service.id, name: service.supplierName,
+  id: `supplier-${service.supplierId}`, supplierId: service.supplierId, serviceId: service.id, name: service.supplierName,
   category: categoryForCard(service.categorySlug), categoryLabel: service.supplierBusinessType,
   address: service.supplierAddress, district: districtFrom(service.supplierAddress), distanceKm: exactDistance == null ? 0.8 + (index % 8) * 0.7 : Number(exactDistance.toFixed(1)),
-  rating: service.rating, reviewsCount: service.supplierReviewCount, image: service.supplierImageUrl || service.imageUrl,
+  rating: service.supplierRating, reviewsCount: service.supplierReviewCount, image: service.supplierImageUrl || service.imageUrl,
   logo: logoFor(service.supplierName), badge: 'Đã xác minh',
   isFeatured: true, minPrice: service.price, maxPrice: service.originalPrice || service.price,
   hasExactDistance: exactDistance != null,
@@ -85,7 +86,7 @@ const toSalon = (service: BeautyService, index: number, userLocation: GeoPoint |
 };
 
 const toNewPartner = (service: BeautyService): NewPartner => ({
-  id: `new-supplier-${service.supplierId}`, serviceId: service.id, name: service.supplierName,
+  id: `new-supplier-${service.supplierId}`, supplierId: service.supplierId, serviceId: service.id, name: service.supplierName,
   subTitle: service.supplierBusinessType.toUpperCase(), address: service.supplierAddress,
   image: service.supplierImageUrl || service.imageUrl, logo: logoFor(service.supplierName),
   specialty: service.name, promoNotice: service.highlightText || 'Ưu đãi trải nghiệm dành cho khách hàng mới',
@@ -137,10 +138,11 @@ export default function App() {
   }, [locationConfirmed]);
   // Dedicated Page View Navigation ('home' | 'login' | 'register' | 'account')
   // Allows Login/Register and Account/Logout to be standalone pages with zero background overlap
-  const [currentPage, setCurrentPage] = useState<'home' | 'login' | 'register' | 'supplier-register' | 'account' | 'service' | 'supplier-dashboard' | 'bookings' | 'reports'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'login' | 'register' | 'supplier-register' | 'account' | 'service' | 'shop' | 'supplier-dashboard' | 'bookings' | 'reports'>('home');
+  const [selectedShopId, setSelectedShopId] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | null>(null);
   const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
-  const [returnAfterAuth, setReturnAfterAuth] = useState<'home' | 'service' | 'bookings'>('home');
+  const [returnAfterAuth, setReturnAfterAuth] = useState<'home' | 'service' | 'shop' | 'bookings'>('home');
 
   useEffect(() => {
     platformApi.categories().then(setServiceCategories).catch(() => setServiceCategories([]));
@@ -164,6 +166,9 @@ export default function App() {
         setCurrentPage('bookings');
       } else if (hash === '#reports') {
         setCurrentPage('reports');
+      } else if (/^#shop\/\d+$/.test(hash)) {
+        setSelectedShopId(Number(hash.split('/')[1]));
+        setCurrentPage('shop');
       } else if (!hash || hash === '#home') {
         setCurrentPage('home');
       }
@@ -173,7 +178,7 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const handleOpenAuth = (mode: 'login' | 'register', returnTo: 'home' | 'service' | 'bookings' = 'home') => {
+  const handleOpenAuth = (mode: 'login' | 'register', returnTo: 'home' | 'service' | 'shop' | 'bookings' = 'home') => {
     setReturnAfterAuth(returnTo);
     setCurrentPage(mode);
     window.location.hash = mode;
@@ -200,7 +205,7 @@ export default function App() {
 
   const handleBackToHome = () => {
     setCurrentPage('home');
-    if (['#login', '#register', '#supplier-register', '#account', '#logout', '#schedule', '#supplier-dashboard', '#service', '#bookings', '#reports'].includes(window.location.hash)) {
+    if (['#login', '#register', '#supplier-register', '#account', '#logout', '#schedule', '#supplier-dashboard', '#service', '#bookings', '#reports'].includes(window.location.hash) || window.location.hash.startsWith('#shop/')) {
       window.history.replaceState(null, '', window.location.pathname);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -268,6 +273,9 @@ export default function App() {
     } else if (returnAfterAuth === 'service' && selectedCategory) {
       setCurrentPage('service');
       window.location.hash = 'service';
+    } else if (returnAfterAuth === 'shop' && selectedShopId) {
+      setCurrentPage('shop');
+      window.location.hash = `shop/${selectedShopId}`;
     } else {
       handleBackToHome();
     }
@@ -299,6 +307,13 @@ export default function App() {
     window.location.hash = 'bookings';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const handleOpenShop = useCallback((supplierId: number) => {
+    setSelectedShopId(supplierId);
+    setCurrentPage('shop');
+    window.location.hash = `shop/${supplierId}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const handleImmediateLogout = () => {
     logout();
@@ -388,12 +403,14 @@ export default function App() {
   }, [openServiceById]);
 
   const handleSelectSalon = useCallback((salon: Salon) => {
-    openServiceById(salon.serviceId);
-  }, [openServiceById]);
+    if (salon.supplierId) handleOpenShop(salon.supplierId);
+    else openServiceById(salon.serviceId);
+  }, [handleOpenShop, openServiceById]);
 
   const handleSelectPartner = useCallback((partner: NewPartner) => {
-    openServiceById(partner.serviceId);
-  }, [openServiceById]);
+    if (partner.supplierId) handleOpenShop(partner.supplierId);
+    else openServiceById(partner.serviceId);
+  }, [handleOpenShop, openServiceById]);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -451,6 +468,7 @@ export default function App() {
         onBack={handleBackToHome}
         onNeedLogin={() => handleOpenAuth('login', 'service')}
         onBookingCreated={showToast}
+        onOpenShop={handleOpenShop}
       />
     );
   }
@@ -459,12 +477,16 @@ export default function App() {
     return <SupplierSchedulePage onBack={handleBackToHome} onLogout={handleImmediateLogout} />;
   }
 
+  if (currentPage === 'shop' && selectedShopId) {
+    return <ShopPage supplierId={selectedShopId} currentUser={currentUser} onBack={handleBackToHome} onNeedLogin={() => handleOpenAuth('login', 'shop')} onBookingCreated={showToast} />;
+  }
+
   if (currentPage === 'supplier-register') {
     return <SupplierRegisterPage onBack={handleBackToHome} onSuccess={handleSupplierRegistrationSuccess} onLogin={() => handleOpenAuth('login')} />;
   }
 
   if (currentPage === 'bookings') {
-    return <MyBookingsPage onBack={handleBackToHome} onBookNew={handleBackToHome} />;
+    return <MyBookingsPage onBack={handleBackToHome} onBookNew={handleBackToHome} onOpenShop={handleOpenShop} />;
   }
 
   if (currentPage === 'reports') {
@@ -505,6 +527,7 @@ export default function App() {
             window.location.hash = 'bookings';
           }}
           onOpenVouchers={() => setIsVoucherModalOpen(true)}
+          onOpenShop={(supplierId) => handleOpenShop(supplierId)}
         />
         <VoucherModal
           isOpen={isVoucherModalOpen}
@@ -579,6 +602,7 @@ export default function App() {
           deals={filteredDeals}
           isLoading={isLoadingServices}
           onBookDeal={handleBookDeal}
+          onOpenShop={handleOpenShop}
           onAddToCart={handleAddToCart}
           onViewAll={handleViewAllDeals}
         />
@@ -630,6 +654,7 @@ export default function App() {
           currentUser={currentUser}
           onClose={() => setBookingService(null)}
           onNeedLogin={() => handleOpenAuth('login')}
+          onOpenShop={handleOpenShop}
           onCreated={(code) => {
             setBookingService(null);
             showToast(`Đặt lịch thành công · Mã ${code}. Lịch đã được lưu vào tài khoản.`);
@@ -707,6 +732,7 @@ export default function App() {
         context={viewAllModal.context}
         initialCategory={viewAllModal.initialCategory}
         onBookDeal={handleOpenBooking}
+        onOpenShop={handleOpenShop}
         onAddToCart={handleAddToCart}
         deals={homepageDeals}
         salons={nearbySalons}

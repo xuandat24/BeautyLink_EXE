@@ -70,7 +70,8 @@ public final class ApiDtos {
                                           int durationMinutes, String imageUrl, boolean active) {}
     public record ServiceResponse(Long id, String name, String description, BigDecimal price, int durationMinutes,
                                   String imageUrl, String categorySlug, Long supplierId, String supplierName,
-                                  String supplierAddress, double rating, List<PractitionerResponse> practitioners,
+                                  String supplierAddress, double rating, int serviceReviewCount,
+                                  double supplierRating, List<PractitionerResponse> practitioners,
                                   BigDecimal originalPrice, String highlightText, boolean featured,
                                   String supplierImageUrl, String supplierBusinessType, int supplierReviewCount,
                                   boolean supplierDemo, boolean supplierNearbyFeatured, boolean supplierNewPartner,
@@ -83,10 +84,25 @@ public final class ApiDtos {
             @NotNull @FutureOrPresent LocalDate appointmentDate,
             @NotNull LocalTime startTime,
             @Size(max = 500) String note) {}
-    public record BookingResponse(Long id, String bookingCode, String serviceName, String supplierName,
+    public record BookingResponse(Long id, String bookingCode, Long serviceId, String serviceName,
+                                  String serviceImageUrl, Long supplierId, String supplierName,
+                                  String supplierImageUrl, String supplierAddress,
                                   String practitionerName, LocalDate appointmentDate, LocalTime startTime,
                                   LocalTime endTime, BigDecimal totalAmount, BookingStatus status,
-                                  PaymentStatus paymentStatus) {}
+                                  PaymentStatus paymentStatus, boolean reviewEligible,
+                                  BookingReviewResponse serviceReview, BookingReviewResponse supplierReview) {}
+    public record UpsertBookingReviewRequest(@NotNull @Min(0) @Max(5) Integer rating, @Size(max = 1500) String comment) {}
+    public record BookingReviewResponse(Long id, Long bookingId, ReviewTargetType targetType, int rating,
+                                        String comment, Instant createdAt, Instant updatedAt) {}
+    public record PublicReviewResponse(Long id, ReviewTargetType targetType, int rating, String comment,
+                                       String reviewerDisplayName, Long serviceId, String serviceName,
+                                       Instant createdAt) {}
+    public record PublicSupplierShopResponse(Long id, String name, String slug, String businessType,
+                                             String description, String addressLine, String locationName,
+                                             String imageUrl, Double latitude, Double longitude,
+                                             VerificationStatus verificationStatus, double rating,
+                                             int reviewCount, Instant joinedAt, List<ServiceResponse> services,
+                                             List<PublicReviewResponse> reviews) {}
 
     public record ScheduleRuleRequest(
             @NotNull DayOfWeek dayOfWeek,

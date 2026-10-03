@@ -7,6 +7,7 @@ import { z } from 'zod';
 export interface HotDeal {
   id: string;
   serviceId?: number;
+  supplierId?: number;
   title: string;
   brandName: string;
   brandLogo: string;
@@ -26,6 +27,7 @@ export interface HotDeal {
 
 export interface Salon {
   id: string;
+  supplierId?: number;
   serviceId?: number;
   name: string;
   category: 'spa' | 'tham-my-vien' | 'clinic' | 'massage' | 'nail' | 'salon-toc';
@@ -46,6 +48,7 @@ export interface Salon {
 
 export interface NewPartner {
   id: string;
+  supplierId?: number;
   serviceId?: number;
   name: string;
   subTitle: string;

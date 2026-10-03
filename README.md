@@ -6,8 +6,12 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 
 > Project status: the main discovery, authentication, scheduling, booking, supplier, and support flows are functional. The VNPAY-QR checkout is intentionally simulated and does not charge real money.
 
-## Latest frontend update (2026-09-29)
+## Latest application update (2026-10-03)
 
+- Added a complete public supplier shop page inspired by marketplace storefronts. It includes the supplier banner and profile, verification and rating summaries, searchable/filterable services, customer reviews, store details, location map, sharing, and direct booking.
+- Supplier names and discovery cards now open the corresponding shop, and each shop has a shareable `#shop/{supplierId}` route.
+- Added database-backed service and supplier reviews from customer bookings. A paid, non-cancelled booking can hold one editable 0–5 star review for the service and one for the supplier.
+- Expanded profile booking cards with service imagery, supplier identity and address, practitioner/time/price details, and a direct review action without opening the full appointment page.
 - Added a dismissible discovery popup that lets guests and signed-in users choose Hà Nội or Thành phố Hồ Chí Minh and a service category before browsing.
 - Added Vietnamese/English switching across the primary homepage, authentication, discovery, service, and booking flows.
 - Added remember-login behavior, a compact partner-registration entry point, and a small logout confirmation toast.
@@ -25,12 +29,14 @@ The current VNPAY-QR screen is a UI simulation. It is not connected to VNPAY San
 - Choose between Hà Nội and Thành phố Hồ Chí Minh.
 - Browse database-backed service categories and providers.
 - Search services, view prices, ratings, availability, and practitioners.
+- Open a supplier shop to browse all of its services, reviews, address, and mapped location, then book without leaving the shop.
 - Register or sign in with JWT authentication.
 - Optionally remember the signed-in session on the current browser.
 - Book an available appointment and view it in **Tổng quan & Lịch hẹn**.
 - Allow location access to sort the **Gần bạn** section by device coordinates, with an explicitly labelled approximate network fallback on devices without GPS.
 - Continue from booking details to the simulated VNPAY-QR checkout.
 - Cancel eligible appointments and submit support reports.
+- Review the purchased service and its supplier directly from **Tổng quan & Lịch hẹn** after payment.
 
 ### Supplier
 
@@ -245,6 +251,16 @@ Guests do not have database accounts. They can browse the catalog but must regis
 5. Continue to the VNPAY-QR demo page, inspect the transaction details, and confirm the simulated payment.
 6. Open the customer account page or `#bookings` to see the appointment.
 
+### Review a purchase
+
+1. Sign in as the customer who placed the booking.
+2. Open **Tổng quan & Lịch hẹn**.
+3. Select **Đánh giá** on a paid, non-cancelled booking.
+4. Submit separate 0–5 star scores and optional comments for the service and the supplier.
+5. Reopen **Xem / sửa đánh giá** if either review needs to be updated.
+
+The backend enforces booking ownership and payment eligibility; hiding or changing the frontend button cannot bypass these rules.
+
 ### Configure a supplier schedule
 
 1. Sign in with the supplier demo account.
@@ -286,6 +302,7 @@ The main tables are:
 | `availability_rules` | Recurring weekly working hours and breaks |
 | `schedule_exceptions` | Date-specific schedule overrides |
 | `bookings` | Customer, supplier, service, practitioner, time, and status |
+| `booking_reviews` | One service review and one supplier review per eligible booking |
 | `support_reports` | Customer reports and staff resolutions |
 
 Categories are intentionally connected through `service_offerings.category_id`. A supplier can therefore offer services in multiple categories without storing a duplicate category list on the supplier row.
@@ -300,9 +317,10 @@ All application endpoints use the `/api/v1` prefix.
 |---|---|
 | Authentication | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
 | Supplier registration | `POST /auth/register-supplier` |
-| Catalog | `GET /locations`, `GET /categories`, `GET /categories/{slug}/services` |
+| Catalog | `GET /locations`, `GET /categories`, `GET /categories/{slug}/services`, `GET /suppliers/{id}` |
 | Availability | `GET /services/{serviceId}/availability` |
 | Customer bookings | `POST /bookings`, `GET /bookings/mine`, `PATCH /bookings/{id}/cancel` |
+| Booking reviews | `PUT /bookings/{bookingId}/reviews/{SERVICE|SUPPLIER}` |
 | Supplier workspace | `GET/PUT /supplier/profile`, practitioner and schedule endpoints |
 | Supplier services | `GET/POST /supplier/services`, `PUT/DELETE /supplier/services/{id}` |
 | Supplier bookings | `GET /bookings/supplier` |

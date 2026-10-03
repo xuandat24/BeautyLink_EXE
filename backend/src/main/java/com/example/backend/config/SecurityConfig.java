@@ -22,7 +22,7 @@ public class SecurityConfig {
                         .authenticationEntryPoint((request, response, exception) -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED))
                         .accessDeniedHandler((request, response, exception) -> response.sendError(HttpServletResponse.SC_FORBIDDEN)))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/locations/**", "/api/v1/categories/**", "/api/v1/services/**", "/api/v1/homepage/**", "/api/products/**", "/error").permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/locations/**", "/api/v1/categories/**", "/api/v1/services/**", "/api/v1/suppliers/**", "/api/v1/homepage/**", "/api/products/**", "/error").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class).build();
     }

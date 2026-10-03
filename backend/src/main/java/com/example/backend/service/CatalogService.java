@@ -19,8 +19,9 @@ public class CatalogService {
             .thenComparing(ServiceOffering::getId, Comparator.reverseOrder());
     private final LocationRepository locations; private final ServiceCategoryRepository categories;
     private final ServiceOfferingRepository services; private final PractitionerRepository practitioners;
-    public CatalogService(LocationRepository locations, ServiceCategoryRepository categories, ServiceOfferingRepository services, PractitionerRepository practitioners) {
-        this.locations = locations; this.categories = categories; this.services = services; this.practitioners = practitioners;
+    private final BookingReviewRepository reviews; private final SupplierRepository supplierRepository;
+    public CatalogService(LocationRepository locations, ServiceCategoryRepository categories, ServiceOfferingRepository services, PractitionerRepository practitioners, BookingReviewRepository reviews, SupplierRepository supplierRepository) {
+        this.locations = locations; this.categories = categories; this.services = services; this.practitioners = practitioners; this.reviews = reviews; this.supplierRepository = supplierRepository;
     }
     public List<LocationResponse> locations(Long parentId) {
         List<Location> result = parentId == null ? locations.findByActiveTrueOrderByNameAsc() : locations.findByParentIdAndActiveTrueOrderByNameAsc(parentId);
@@ -35,6 +36,26 @@ public class CatalogService {
         return result.stream().sorted(MANUAL_SUPPLIERS_FIRST).map(this::service).toList();
     }
     public ServiceResponse service(Long id) { return service(services.findById(id).filter(ServiceOffering::isActive).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SERVICE_NOT_FOUND", "Không tìm thấy dịch vụ"))); }
+    public PublicSupplierShopResponse supplierShop(Long id) {
+        Supplier supplier = supplierRepository.findByIdAndVerificationStatus(id, DomainEnums.VerificationStatus.VERIFIED)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND", "Không tìm thấy cửa hàng"));
+        List<ServiceResponse> shopServices = services.findBySupplierIdAndActiveTrue(id).stream()
+                .sorted(Comparator.comparing(ServiceOffering::isFeatured).reversed().thenComparing(ServiceOffering::getId, Comparator.reverseOrder()))
+                .map(this::service).toList();
+        List<PublicReviewResponse> publicReviews = reviews.findBySupplierIdOrderByCreatedAtDesc(id).stream()
+                .limit(100)
+                .map(review -> new PublicReviewResponse(review.getId(), review.getTargetType(), review.getRating(), review.getComment(),
+                        maskedName(review.getCustomer().getFullName()), review.getService().getId(), review.getService().getName(), review.getCreatedAt()))
+                .toList();
+        long liveCount = reviews.countBySupplierIdAndTargetType(id, DomainEnums.ReviewTargetType.SUPPLIER);
+        long liveSum = Optional.ofNullable(reviews.ratingSumBySupplier(id, DomainEnums.ReviewTargetType.SUPPLIER)).orElse(0L);
+        long totalCount = supplier.getReviewCount() + liveCount;
+        double rating = totalCount == 0 ? 0 : roundRating((supplier.getRating() * supplier.getReviewCount() + liveSum) / totalCount);
+        return new PublicSupplierShopResponse(supplier.getId(), supplier.getName(), supplier.getSlug(), supplier.getBusinessType(),
+                supplier.getDescription(), supplier.getAddressLine(), supplier.getLocation() == null ? null : supplier.getLocation().getName(),
+                supplier.getImageUrl(), supplier.getLatitude(), supplier.getLongitude(), supplier.getVerificationStatus(), rating,
+                Math.toIntExact(totalCount), supplier.getCreatedAt(), shopServices, publicReviews);
+    }
     public List<ServiceResponse> homepage(Long locationId) {
         return services.findHomepageServices(locationId).stream()
                 .sorted(MANUAL_SUPPLIERS_FIRST)
@@ -45,9 +66,23 @@ public class CatalogService {
     private ServiceResponse service(ServiceOffering s) {
         Supplier supplier = s.getSupplier();
         List<PractitionerResponse> people = practitioners.findBySupplierIdAndActiveTrue(supplier.getId()).stream().map(p -> new PractitionerResponse(p.getId(), p.getDisplayName(), p.getSpecialty(), p.getAvatarUrl(), p.getBio())).toList();
-        return new ServiceResponse(s.getId(), s.getName(), s.getDescription(), s.getPrice(), s.getDurationMinutes(), s.getImageUrl(), s.getCategory().getSlug(), supplier.getId(), supplier.getName(), supplier.getAddressLine(), supplier.getRating(), people,
+        long serviceReviewCount = reviews.countByServiceIdAndTargetType(s.getId(), DomainEnums.ReviewTargetType.SERVICE);
+        Double serviceAverage = reviews.averageByService(s.getId(), DomainEnums.ReviewTargetType.SERVICE);
+        double serviceRating = serviceAverage == null ? supplier.getRating() : roundRating(serviceAverage);
+        long liveSupplierCount = reviews.countBySupplierIdAndTargetType(supplier.getId(), DomainEnums.ReviewTargetType.SUPPLIER);
+        long liveSupplierSum = Optional.ofNullable(reviews.ratingSumBySupplier(supplier.getId(), DomainEnums.ReviewTargetType.SUPPLIER)).orElse(0L);
+        long supplierReviewCount = supplier.getReviewCount() + liveSupplierCount;
+        double supplierRating = supplierReviewCount == 0 ? 0 : roundRating((supplier.getRating() * supplier.getReviewCount() + liveSupplierSum) / supplierReviewCount);
+        return new ServiceResponse(s.getId(), s.getName(), s.getDescription(), s.getPrice(), s.getDurationMinutes(), s.getImageUrl(), s.getCategory().getSlug(), supplier.getId(), supplier.getName(), supplier.getAddressLine(), serviceRating, Math.toIntExact(serviceReviewCount), supplierRating, people,
                 s.getOriginalPrice() == null ? s.getPrice() : s.getOriginalPrice(), s.getHighlightText(), s.isFeatured(),
-                supplier.getImageUrl(), supplier.getBusinessType(), supplier.getReviewCount(), supplier.isDemoData(),
+                supplier.getImageUrl(), supplier.getBusinessType(), Math.toIntExact(supplierReviewCount), supplier.isDemoData(),
                 supplier.isNearbyFeatured(), supplier.isNewPartner(), supplier.getLatitude(), supplier.getLongitude());
+    }
+    private double roundRating(double rating) { return Math.round(rating * 10.0) / 10.0; }
+    private String maskedName(String fullName) {
+        if (fullName == null || fullName.isBlank()) return "Khách hàng BeautyLink";
+        String[] parts = fullName.trim().split("\\s+");
+        if (parts.length == 1) return parts[0].substring(0, 1) + "***";
+        return parts[0] + " " + parts[parts.length - 1].substring(0, 1) + ".";
     }
 }

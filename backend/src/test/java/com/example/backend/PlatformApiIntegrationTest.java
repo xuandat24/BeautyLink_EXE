@@ -64,11 +64,21 @@ class PlatformApiIntegrationTest {
                     .andExpect(jsonPath("$[*].supplierDemo", everyItem(is(true))));
         }
 
-        mvc.perform(get("/api/v1/homepage/services").param("locationId", Long.toString(hcmId)))
+        String homepage = mvc.perform(get("/api/v1/homepage/services").param("locationId", Long.toString(hcmId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(12))))
                 .andExpect(jsonPath("$[*].supplierDemo", hasItem(true)))
-                .andExpect(jsonPath("$[*].featured", hasItem(true)));
+                .andExpect(jsonPath("$[*].featured", hasItem(true)))
+                .andReturn().getResponse().getContentAsString();
+
+        long supplierId = objectMapper.readTree(homepage).get(0).path("supplierId").asLong();
+        mvc.perform(get("/api/v1/suppliers/" + supplierId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is((int) supplierId)))
+                .andExpect(jsonPath("$.verificationStatus", is("VERIFIED")))
+                .andExpect(jsonPath("$.services", not(empty())))
+                .andExpect(jsonPath("$.reviews").isArray())
+                .andExpect(jsonPath("$.owner").doesNotExist());
     }
 
     @Test
@@ -120,6 +130,83 @@ class PlatformApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))))
                 .andExpect(jsonPath("$[*].status", hasItem("CONFIRMED")));
+    }
+
+    @Test
+    void paidCustomerBookingCanReviewServiceAndSupplier() throws Exception {
+        String customerToken = login("0900000001", "Demo123!");
+        JsonNode services = objectMapper.readTree(mvc.perform(get("/api/v1/homepage/services"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode service = services.get(0);
+        long serviceId = service.path("id").asLong();
+        long practitionerId = service.path("practitioners").get(0).path("id").asLong();
+
+        LocalDate date = null;
+        String slot = null;
+        for (int day = 1; day <= 30 && slot == null; day++) {
+            LocalDate candidateDate = LocalDate.now().plusDays(day);
+            JsonNode availability = objectMapper.readTree(mvc.perform(get("/api/v1/services/" + serviceId + "/availability")
+                            .param("practitionerId", Long.toString(practitionerId))
+                            .param("date", candidateDate.toString()))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+            if (!availability.path("availableSlots").isEmpty()) {
+                date = candidateDate;
+                slot = availability.path("availableSlots").get(0).asText();
+            }
+        }
+        assertNotNull(slot, "A seeded practitioner should have an available review-test slot");
+
+        String created = mvc.perform(post("/api/v1/bookings")
+                        .header("Authorization", "Bearer " + customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"serviceId\":" + serviceId + ",\"practitionerId\":" + practitionerId + ",\"appointmentDate\":\"" + date + "\",\"startTime\":\"" + slot + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.reviewEligible", is(true)))
+                .andExpect(jsonPath("$.serviceReview").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        long bookingId = objectMapper.readTree(created).path("id").asLong();
+
+        String serviceReview = mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SERVICE")
+                        .header("Authorization", "Bearer " + customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rating\":5,\"comment\":\"Dich vu rat tot\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targetType", is("SERVICE")))
+                .andExpect(jsonPath("$.rating", is(5)))
+                .andReturn().getResponse().getContentAsString();
+        long serviceReviewId = objectMapper.readTree(serviceReview).path("id").asLong();
+
+        mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SUPPLIER")
+                        .header("Authorization", "Bearer " + customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rating\":4,\"comment\":\"Cua hang sach se\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targetType", is("SUPPLIER")))
+                .andExpect(jsonPath("$.rating", is(4)));
+
+        mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SERVICE")
+                        .header("Authorization", "Bearer " + customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rating\":3,\"comment\":\"Da cap nhat\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is((int) serviceReviewId)))
+                .andExpect(jsonPath("$.rating", is(3)));
+
+        JsonNode mine = objectMapper.readTree(mvc.perform(get("/api/v1/bookings/mine")
+                        .header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode reviewedBooking = null;
+        for (JsonNode candidate : mine) if (candidate.path("id").asLong() == bookingId) reviewedBooking = candidate;
+        assertNotNull(reviewedBooking);
+        assertTrue(reviewedBooking.path("reviewEligible").asBoolean());
+        assertTrue(reviewedBooking.path("serviceReview").path("rating").asInt() == 3);
+        assertTrue(reviewedBooking.path("supplierReview").path("rating").asInt() == 4);
+
+        mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SERVICE")
+                        .header("Authorization", "Bearer " + customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rating\":6}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

@@ -29,6 +29,7 @@ interface ViewAllServicesModalProps {
   context: ViewAllContext;
   initialCategory?: string;
   onBookDeal: (serviceTitle: string, salonName: string, price: number, originalPrice: number) => void;
+  onOpenShop: (supplierId: number) => void;
   onAddToCart: (deal: HotDeal) => void;
   deals: HotDeal[];
   salons: Salon[];
@@ -39,6 +40,7 @@ interface ViewAllServicesModalProps {
 export interface UnifiedServiceItem {
   id: string;
   serviceId?: number;
+  supplierId?: number;
   type: 'deal' | 'salon' | 'partner';
   title: string;
   brandName: string;
@@ -64,6 +66,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
   context,
   initialCategory,
   onBookDeal,
+  onOpenShop,
   onAddToCart,
   deals,
   salons,
@@ -90,6 +93,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
     const dealsList: UnifiedServiceItem[] = deals.map((d) => ({
       id: d.id,
       serviceId: d.serviceId,
+      supplierId: d.supplierId,
       type: 'deal',
       title: d.title,
       brandName: d.brandName,
@@ -111,6 +115,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
     const salonsList: UnifiedServiceItem[] = salons.map((s) => ({
       id: s.id,
       serviceId: s.serviceId,
+      supplierId: s.supplierId,
       type: 'salon',
       title: `Gói Trải Nghiệm Tiêu Chuẩn tại ${s.name}`,
       brandName: s.name,
@@ -133,6 +138,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
     const partnersList: UnifiedServiceItem[] = partners.map((p, idx) => ({
       id: p.id,
       serviceId: p.serviceId,
+      supplierId: p.supplierId,
       type: 'partner',
       title: p.specialty,
       brandName: p.name,
@@ -250,6 +256,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
     const dealMock: HotDeal = {
       id: item.id,
       serviceId: item.serviceId,
+      supplierId: item.supplierId,
       title: item.title,
       brandName: item.brandName,
       brandLogo: item.brandLogo,
@@ -558,9 +565,10 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
               {filteredAndSortedItems.map((item) => (
                 <div
                   key={`${item.type}-${item.id}`}
-                  onClick={() =>
-                    onBookDeal(item.title, item.brandName, item.salePrice, item.originalPrice)
-                  }
+                  onClick={() => {
+                    onClose();
+                    onBookDeal(item.title, item.brandName, item.salePrice, item.originalPrice);
+                  }}
                   className="group flex flex-col justify-between bg-white rounded-2xl border border-pink-100 hover:border-pink-300 shadow-xs hover:shadow-lg hover:shadow-pink-500/10 transition-all duration-300 overflow-hidden cursor-pointer"
                 >
                   {/* Image & Badges */}
@@ -620,7 +628,21 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
                     <div>
                       {/* Salon / Brand & District */}
                       <div className="flex items-center justify-between text-[11px] text-pink-700/80 font-semibold mb-1">
-                        <span className="truncate max-w-[130px]">{item.brandName}</span>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (item.supplierId) {
+                              onClose();
+                              onOpenShop(item.supplierId);
+                            }
+                          }}
+                          disabled={!item.supplierId}
+                          className="max-w-[130px] truncate text-left hover:underline focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:no-underline"
+                          aria-label={`Xem cửa hàng ${item.brandName}`}
+                        >
+                          {item.brandName}
+                        </button>
                         <span className="text-slate-400 font-medium">📍 {item.district}</span>
                       </div>
 

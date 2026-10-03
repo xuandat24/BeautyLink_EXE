@@ -93,6 +93,8 @@ export interface BeautyService {
   supplierName: string;
   supplierAddress: string;
   rating: number;
+  serviceReviewCount: number;
+  supplierRating: number;
   practitioners: Practitioner[];
   originalPrice: number;
   highlightText?: string | null;
@@ -105,6 +107,48 @@ export interface BeautyService {
   supplierNewPartner: boolean;
   supplierLatitude?: number | null;
   supplierLongitude?: number | null;
+}
+
+export type ReviewTarget = 'SERVICE' | 'SUPPLIER';
+
+export interface BookingReview {
+  id: number;
+  bookingId: number;
+  targetType: ReviewTarget;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicShopReview {
+  id: number;
+  targetType: ReviewTarget;
+  rating: number;
+  comment?: string | null;
+  reviewerDisplayName: string;
+  serviceId: number;
+  serviceName: string;
+  createdAt: string;
+}
+
+export interface PublicSupplierShop {
+  id: number;
+  name: string;
+  slug: string;
+  businessType: string;
+  description?: string | null;
+  addressLine: string;
+  locationName?: string | null;
+  imageUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
+  rating: number;
+  reviewCount: number;
+  joinedAt: string;
+  services: BeautyService[];
+  reviews: PublicShopReview[];
 }
 
 export interface SupplierService {
@@ -135,8 +179,13 @@ export interface SupplierServicePayload {
 export interface BookingRecord {
   id: number;
   bookingCode: string;
+  serviceId: number;
   serviceName: string;
+  serviceImageUrl?: string | null;
+  supplierId: number;
   supplierName: string;
+  supplierImageUrl?: string | null;
+  supplierAddress: string;
   practitionerName: string;
   appointmentDate: string;
   startTime: string;
@@ -144,6 +193,9 @@ export interface BookingRecord {
   totalAmount: number;
   status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
   paymentStatus: 'UNPAID' | 'SIMULATED' | 'PAID' | 'REFUNDED';
+  reviewEligible: boolean;
+  serviceReview?: BookingReview | null;
+  supplierReview?: BookingReview | null;
 }
 
 export interface ScheduleRule {

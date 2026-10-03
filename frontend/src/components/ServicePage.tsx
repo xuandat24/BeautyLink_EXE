@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BadgeCheck, CalendarDays, CheckCircle2, Clock3, LoaderCircle, MapPin, ShieldCheck, Sparkles, Star, UserRound, WalletCards, X } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, CalendarDays, CheckCircle2, Clock3, LoaderCircle, MapPin, ShieldCheck, ShoppingBag, Sparkles, Star, UserRound, WalletCards, X } from 'lucide-react';
 import { getApiErrorMessage } from '../lib/api';
 import { localizedCategoryName, useLanguage } from '../lib/language';
 import { platformApi } from '../services/platformApi';
@@ -14,6 +14,7 @@ interface ServicePageProps {
   onBack: () => void;
   onNeedLogin: () => void;
   onBookingCreated: (message: string) => void;
+  onOpenShop: (supplierId: number) => void;
 }
 
 const formatMoney = (amount: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
@@ -32,7 +33,7 @@ const bookingWindowEnd = () => {
   return formatLocalDate(value);
 };
 
-export const ServicePage: React.FC<ServicePageProps> = ({ category, locationId, locationLabel, currentUser, onBack, onNeedLogin, onBookingCreated }) => {
+export const ServicePage: React.FC<ServicePageProps> = ({ category, locationId, locationLabel, currentUser, onBack, onNeedLogin, onBookingCreated, onOpenShop }) => {
   const { language, text } = useLanguage();
   const [services, setServices] = useState<BeautyService[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +86,7 @@ export const ServicePage: React.FC<ServicePageProps> = ({ category, locationId, 
             <article key={service.id} className="overflow-hidden rounded-[1.75rem] border border-pink-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:shadow-pink-900/10">
               <div className="relative h-52 overflow-hidden"><img src={service.imageUrl} alt={service.name} className="h-full w-full object-cover" /><span className="absolute left-4 top-4 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-xs font-extrabold text-slate-800 shadow"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /> {service.rating.toFixed(1)}</span></div>
               <div className="p-5">
-                <p className="text-xs font-bold text-pink-600">{service.supplierName}</p>
+                <button type="button" onClick={() => onOpenShop(service.supplierId)} className="text-left text-xs font-bold text-pink-600 hover:underline">{service.supplierName}</button>
                 <h3 className="mt-1.5 text-xl font-black leading-tight">{service.name}</h3>
                 <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{service.description}</p>
                 <div className="mt-4 flex items-center gap-4 text-xs font-semibold text-slate-500"><span className="inline-flex items-center gap-1"><Clock3 className="h-4 w-4" /> {service.durationMinutes} {text('phút', 'minutes')}</span><span className="inline-flex min-w-0 items-center gap-1"><MapPin className="h-4 w-4 shrink-0" /><span className="truncate">{service.supplierAddress}</span></span></div>
@@ -96,12 +97,12 @@ export const ServicePage: React.FC<ServicePageProps> = ({ category, locationId, 
         </div>
       </main>
 
-      {bookingService && <BookingDialog service={bookingService} currentUser={currentUser} onClose={() => setBookingService(null)} onNeedLogin={onNeedLogin} onCreated={(code) => { setBookingService(null); onBookingCreated(text(`Đặt lịch thành công · Mã ${code}`, `Booking confirmed · Code ${code}`)); }} />}
+      {bookingService && <BookingDialog service={bookingService} currentUser={currentUser} onClose={() => setBookingService(null)} onNeedLogin={onNeedLogin} onOpenShop={onOpenShop} onCreated={(code) => { setBookingService(null); onBookingCreated(text(`Đặt lịch thành công · Mã ${code}`, `Booking confirmed · Code ${code}`)); }} />}
     </div>
   );
 };
 
-export function BookingDialog({ service, currentUser, onClose, onNeedLogin, onCreated }: { service: BeautyService; currentUser: CurrentUser | null; onClose: () => void; onNeedLogin: () => void; onCreated: (code: string) => void }) {
+export function BookingDialog({ service, currentUser, onClose, onNeedLogin, onOpenShop, onCreated }: { service: BeautyService; currentUser: CurrentUser | null; onClose: () => void; onNeedLogin: () => void; onOpenShop?: (supplierId: number) => void; onCreated: (code: string) => void }) {
   const { text } = useLanguage();
   const latestBookingDate = useMemo(bookingWindowEnd, []);
   const [practitioner, setPractitioner] = useState<Practitioner | null>(service.practitioners[0] || null);
@@ -164,7 +165,7 @@ export function BookingDialog({ service, currentUser, onClose, onNeedLogin, onCr
   return (
     <div className="fixed inset-0 z-[110] grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
       <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-[2rem] bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-slate-100 p-6"><div><p className="text-xs font-extrabold uppercase tracking-wider text-pink-600">{text('Xác nhận lịch hẹn', 'Confirm appointment')}</p><h2 className="mt-1 text-xl font-black">{service.name}</h2><p className="mt-1 text-sm text-slate-500">{service.supplierName}</p></div><button onClick={onClose} aria-label={text('Đóng', 'Close')} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500 hover:bg-pink-50 hover:text-pink-700"><X className="h-4 w-4" /></button></div>
+        <div className="flex items-start justify-between border-b border-slate-100 p-6"><div><p className="text-xs font-extrabold uppercase tracking-wider text-pink-600">{text('Xác nhận lịch hẹn', 'Confirm appointment')}</p><h2 className="mt-1 text-xl font-black">{service.name}</h2>{onOpenShop ? <button type="button" onClick={() => { onClose(); onOpenShop(service.supplierId); }} className="mt-1 inline-flex items-center gap-1.5 rounded-md text-left text-sm font-bold text-pink-700 hover:underline focus:outline-none focus:ring-2 focus:ring-pink-300" aria-label={text(`Xem cửa hàng ${service.supplierName}`, `View ${service.supplierName} shop`)}><ShoppingBag className="h-3.5 w-3.5" />{service.supplierName}</button> : <p className="mt-1 text-sm text-slate-500">{service.supplierName}</p>}</div><button onClick={onClose} aria-label={text('Đóng', 'Close')} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500 hover:bg-pink-50 hover:text-pink-700"><X className="h-4 w-4" /></button></div>
         <div className="space-y-5 p-6">
           <div><label className="mb-2 block text-xs font-black text-slate-700">{text('Chuyên viên', 'Professional')}</label><div className="grid gap-2 sm:grid-cols-2">{service.practitioners.map((person) => <button key={person.id} onClick={() => setPractitioner(person)} className={`flex items-center gap-3 rounded-2xl border p-3 text-left ${practitioner?.id === person.id ? 'border-pink-500 bg-pink-50' : 'border-slate-200'}`}><span className="grid h-9 w-9 place-items-center rounded-full bg-white"><UserRound className="h-4 w-4 text-pink-600" /></span><span><span className="block text-sm font-extrabold">{person.displayName}</span><span className="block text-[11px] text-slate-500">{person.specialty}</span></span></button>)}</div></div>
           <label className="block"><span className="mb-2 block text-xs font-black text-slate-700">{text('Ngày hẹn', 'Appointment date')}</span><input type="date" min={localDate()} max={latestBookingDate} value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-pink-400" /><span className="mt-1.5 block text-[11px] font-semibold text-slate-400">{text('Có thể đặt lịch trước đến', 'Available to book through')} {new Date(`${latestBookingDate}T00:00:00`).toLocaleDateString('vi-VN')}.</span></label>

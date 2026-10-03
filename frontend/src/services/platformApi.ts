@@ -3,9 +3,11 @@ import type {
   ApiUser,
   AuthResponse,
   BeautyService,
+  BookingReview,
   BookingRecord,
   LocationOption,
   Practitioner,
+  PublicSupplierShop,
   ScheduleRule,
   ServiceCategory,
   SupportReport,
@@ -14,6 +16,7 @@ import type {
   SupplierRegistrationResponse,
   SupplierService,
   SupplierServicePayload,
+  ReviewTarget,
 } from '../types';
 
 const unwrap = <T,>(request: Promise<{ data: T }>) => request.then(({ data }) => data);
@@ -39,10 +42,12 @@ export const platformApi = {
   categories: () => unwrap<ServiceCategory[]>(apiClient.get('/v1/categories')),
   services: (slug: string, locationId?: number | null) => unwrap<BeautyService[]>(apiClient.get(`/v1/categories/${slug}/services`, { params: locationId ? { locationId } : {} })),
   homepageServices: (locationId?: number | null) => unwrap<BeautyService[]>(apiClient.get('/v1/homepage/services', { params: locationId ? { locationId } : {} })),
+  supplierShop: (supplierId: number) => unwrap<PublicSupplierShop>(apiClient.get(`/v1/suppliers/${supplierId}`)),
   availability: (serviceId: number, practitionerId: number, date: string) => unwrap<{ practitionerId: number; date: string; availableSlots: string[] }>(apiClient.get(`/v1/services/${serviceId}/availability`, { params: { practitionerId, date } })),
   createBooking: (payload: { serviceId: number; practitionerId: number; appointmentDate: string; startTime: string; note?: string }) => unwrap<BookingRecord>(apiClient.post('/v1/bookings', payload)),
   myBookings: () => unwrap<BookingRecord[]>(apiClient.get('/v1/bookings/mine')),
   cancelBooking: (id: number) => unwrap<BookingRecord>(apiClient.patch(`/v1/bookings/${id}/cancel`)),
+  upsertBookingReview: (bookingId: number, targetType: ReviewTarget, payload: { rating: number; comment?: string }) => unwrap<BookingReview>(apiClient.put(`/v1/bookings/${bookingId}/reviews/${targetType}`, payload)),
   supplierPractitioners: () => unwrap<Practitioner[]>(apiClient.get('/v1/supplier/practitioners')),
   supplierProfile: () => unwrap<SupplierProfile>(apiClient.get('/v1/supplier/profile')),
   updateSupplierProfile: (payload: Pick<SupplierProfile, 'name' | 'businessType' | 'description' | 'addressLine' | 'imageUrl' | 'latitude' | 'longitude'>) => unwrap<SupplierProfile>(apiClient.put('/v1/supplier/profile', payload)),

@@ -23,7 +23,8 @@ import {
 } from 'lucide-react';
 import { getApiErrorMessage } from '../lib/api';
 import { platformApi } from '../services/platformApi';
-import type { BookingRecord, CurrentUser } from '../types';
+import type { BookingRecord, BookingReview, CurrentUser, ReviewTarget } from '../types';
+import { BookingReviewModal } from './BookingReviewModal';
 
 const bookingStatusLabel: Record<BookingRecord['status'], string> = {
   PENDING: 'Chờ xác nhận', CONFIRMED: 'Đã xác nhận', COMPLETED: 'Đã hoàn thành', CANCELLED: 'Đã hủy',
@@ -33,6 +34,7 @@ const appointmentLabel = (booking: BookingRecord) => {
   const date = new Date(`${booking.appointmentDate}T00:00:00`).toLocaleDateString('vi-VN');
   return `${booking.startTime.slice(0, 5)}, ${date}`;
 };
+const formatMoney = (amount: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 
 interface AccountPageProps {
   currentUser: CurrentUser | null;
@@ -41,6 +43,7 @@ interface AccountPageProps {
   onNavigateLogin: () => void;
   onOpenAppointments: () => void;
   onOpenVouchers: () => void;
+  onOpenShop: (supplierId: number, supplierName: string) => void;
 }
 
 export const AccountPage: React.FC<AccountPageProps> = ({
@@ -50,6 +53,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   onNavigateLogin,
   onOpenAppointments,
   onOpenVouchers,
+  onOpenShop,
 }) => {
   // If user is already logged out, display the Logout Success screen
   const [isLoggedOutSuccess, setIsLoggedOutSuccess] = useState(!currentUser);
@@ -58,6 +62,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [bookingsLoading, setBookingsLoading] = useState(Boolean(currentUser));
   const [bookingsError, setBookingsError] = useState('');
+  const [reviewBooking, setReviewBooking] = useState<BookingRecord | null>(null);
 
   // Active tab inside Account Page
   const [activeTab, setActiveTab] = useState<'overview' | 'profile' | 'security' | 'logout'>('overview');
@@ -85,6 +90,17 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       setIsLoggedOutSuccess(true);
       onLogoutConfirm();
     }, 600);
+  };
+
+  const handleReviewSaved = (targetType: ReviewTarget, review: BookingReview) => {
+    setBookings((items) => items.map((booking) => booking.id !== review.bookingId ? booking : {
+      ...booking,
+      ...(targetType === 'SERVICE' ? { serviceReview: review } : { supplierReview: review }),
+    }));
+    setReviewBooking((booking) => booking?.id === review.bookingId ? {
+      ...booking,
+      ...(targetType === 'SERVICE' ? { serviceReview: review } : { supplierReview: review }),
+    } : booking);
   };
 
   // If user is logged out, render the Dedicated Logout Success Page
@@ -377,17 +393,29 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   {bookingsError && <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-xs font-semibold text-rose-700">{bookingsError}</div>}
                   {!bookingsLoading && !bookingsError && recentBookings.length === 0 && <div className="rounded-2xl border border-dashed border-pink-200 bg-pink-50/40 p-8 text-center"><Calendar className="mx-auto h-7 w-7 text-pink-400" /><p className="mt-2 text-sm font-bold text-slate-700">Bạn chưa có lịch hẹn</p><button type="button" onClick={onBackToHome} className="mt-3 text-xs font-black text-[#B42D58] hover:underline">Khám phá dịch vụ</button></div>}
                   {!bookingsLoading && recentBookings.map((booking) => (
-                    <div key={booking.id} className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-pink-100 bg-pink-50/60 p-4 sm:flex-row sm:items-center">
-                      <div className="min-w-0">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase ${booking.status === 'CANCELLED' ? 'bg-slate-200 text-slate-600' : booking.status === 'COMPLETED' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>{bookingStatusLabel[booking.status]}</span>
-                          <span className="text-xs font-medium text-slate-500">Mã: {booking.bookingCode}</span>
-                        </div>
-                        <h4 className="truncate text-sm font-bold text-slate-800">{booking.serviceName}</h4>
-                        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600"><span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-[#EB0F51]" />{appointmentLabel(booking)}</span><span>·</span><span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-[#EB0F51]" />{booking.supplierName}</span></p>
+                    <article key={booking.id} className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-2xl border border-pink-100 bg-pink-50/60 p-3 sm:grid-cols-[88px_minmax(0,1fr)_auto] sm:items-center sm:gap-4 sm:p-4">
+                      <div className="relative h-[72px] w-[72px] overflow-hidden rounded-2xl bg-gradient-to-br from-pink-100 to-rose-50 sm:h-[88px] sm:w-[88px]">
+                        <div className="absolute inset-0 grid place-items-center"><Sparkles className="h-7 w-7 text-pink-400" /></div>
+                        {(booking.serviceImageUrl || booking.supplierImageUrl) && <img src={booking.serviceImageUrl || booking.supplierImageUrl || ''} alt={booking.serviceName} className="relative h-full w-full object-cover" loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none'; }} />}
                       </div>
-                      <button type="button" onClick={onOpenAppointments} className="shrink-0 rounded-full border border-pink-200 bg-white px-3.5 py-1.5 text-xs font-bold text-[#B42D58] hover:bg-pink-100">Chi tiết</button>
-                    </div>
+                      <div className="min-w-0">
+                        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase ${booking.status === 'CANCELLED' ? 'bg-slate-200 text-slate-600' : booking.status === 'COMPLETED' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>{bookingStatusLabel[booking.status]}</span>
+                          <span className="text-[11px] font-semibold text-slate-400">{booking.bookingCode}</span>
+                        </div>
+                        <h4 className="truncate text-sm font-black text-slate-900 sm:text-base">{booking.serviceName}</h4>
+                        <button type="button" onClick={() => onOpenShop(booking.supplierId, booking.supplierName)} className="mt-1 inline-flex max-w-full items-center gap-1 text-left text-xs font-extrabold text-[#B42D58] hover:underline"><ShoppingBag className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{booking.supplierName}</span><ChevronRight className="h-3 w-3 shrink-0" /></button>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-slate-500"><span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-[#EB0F51]" />{appointmentLabel(booking)}</span><span>· {booking.practitionerName}</span></div>
+                        <p className="mt-1 truncate text-[11px] text-slate-400"><MapPin className="mr-1 inline h-3 w-3" />{booking.supplierAddress}</p>
+                      </div>
+                      <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 border-t border-pink-100 pt-3 sm:col-span-1 sm:block sm:border-0 sm:pt-0 sm:text-right">
+                        <p className="text-sm font-black text-[#B42D58]">{formatMoney(booking.totalAmount)}</p>
+                        <div className="flex flex-wrap items-center gap-2 sm:mt-3 sm:justify-end">
+                          {booking.reviewEligible && <button type="button" onClick={() => setReviewBooking(booking)} className="inline-flex items-center gap-1 rounded-full bg-[#EB0F51] px-3.5 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[#B42D58]"><Star className="h-3.5 w-3.5" />{booking.serviceReview || booking.supplierReview ? 'Sửa đánh giá' : 'Đánh giá'}</button>}
+                          <button type="button" onClick={onOpenAppointments} className="rounded-full border border-pink-200 bg-white px-3.5 py-2 text-xs font-bold text-[#B42D58] hover:bg-pink-100">Chi tiết</button>
+                        </div>
+                      </div>
+                    </article>
                   ))}
                 </div>
               </div>
@@ -561,6 +589,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       </main>
 
       {/* Logout Confirmation Dialog (When triggered from topbar or quick widget) */}
+      {reviewBooking && <BookingReviewModal booking={reviewBooking} onClose={() => setReviewBooking(null)} onSaved={handleReviewSaved} />}
+
       {showConfirmLogoutModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-pink-100 text-center animate-in zoom-in-95 duration-150">

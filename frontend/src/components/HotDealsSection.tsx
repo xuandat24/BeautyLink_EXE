@@ -17,6 +17,7 @@ interface HotDealsSectionProps {
   deals: HotDeal[];
   isLoading?: boolean;
   onBookDeal: (deal: HotDeal) => void;
+  onOpenShop: (supplierId: number) => void;
   onAddToCart: (deal: HotDeal) => void;
   onViewAll: () => void;
 }
@@ -65,6 +66,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
   deals,
   isLoading = false,
   onBookDeal,
+  onOpenShop,
   onAddToCart,
   onViewAll,
 }) => {
@@ -194,11 +196,16 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
             className="flex items-stretch gap-3.5 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1 px-1"
           >
             {deals.map((deal) => (
-              <div
+              <article
                 key={deal.id}
-                onClick={() => onBookDeal(deal)}
-                className="group flex flex-col justify-between bg-white rounded-2xl border border-pink-100/90 hover:border-pink-300 shadow-sm hover:shadow-xl hover:shadow-pink-500/10 transition-all duration-300 overflow-hidden cursor-pointer w-[215px] sm:w-[235px] shrink-0"
+                className="group relative flex flex-col justify-between bg-white rounded-2xl border border-pink-100/90 hover:border-pink-300 shadow-sm hover:shadow-xl hover:shadow-pink-500/10 transition-all duration-300 overflow-hidden cursor-pointer w-[215px] sm:w-[235px] shrink-0"
               >
+                <button
+                  type="button"
+                  onClick={() => onBookDeal(deal)}
+                  className="absolute inset-0 z-10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-inset focus:ring-pink-500"
+                  aria-label={text(`Xem chi tiết đặt lịch ${deal.title}`, `View booking details for ${deal.title}`)}
+                />
                 {/* Thumbnail with badges */}
                 <div className="relative aspect-square w-full overflow-hidden bg-pink-50">
                   <img
@@ -225,9 +232,18 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
                   </div>
 
                   {/* Brand Tag overlay on image */}
-                  <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-bold text-white max-w-[130px] truncate">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (deal.supplierId) onOpenShop(deal.supplierId);
+                    }}
+                    disabled={!deal.supplierId}
+                    className="absolute bottom-2 left-2 z-20 max-w-[170px] truncate rounded bg-black/65 px-2 py-1 text-left text-[10px] font-bold text-white backdrop-blur-md transition hover:bg-[#EB0F51] focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-default"
+                    aria-label={text(`Xem cửa hàng ${deal.brandName}`, `View ${deal.brandName} shop`)}
+                  >
                     {deal.brandName}
-                  </div>
+                  </button>
                 </div>
 
                 {/* Content Details */}
@@ -248,6 +264,17 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
                     <h3 className="text-xs sm:text-[13px] font-bold text-slate-800 line-clamp-2 group-hover:text-[#EB0F51] transition-colors leading-snug">
                       {deal.title}
                     </h3>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (deal.supplierId) onOpenShop(deal.supplierId);
+                      }}
+                      disabled={!deal.supplierId}
+                      className="relative z-20 mt-1 max-w-full truncate text-left text-[11px] font-bold text-pink-700 hover:underline focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:text-slate-400 disabled:no-underline"
+                    >
+                      {deal.brandName}
+                    </button>
                   </div>
 
                   {/* Price & Add to Cart Action */}
@@ -264,7 +291,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
                     <button
                       type="button"
                       onClick={(e) => handleAddClick(e, deal)}
-                      className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-xs ${
+                      className={`relative z-20 w-7 h-7 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-xs ${
                         addedDealId === deal.id
                           ? 'bg-emerald-500 text-white'
                           : 'bg-pink-50 hover:bg-[#EB0F51] text-[#EB0F51] hover:text-white border border-pink-200 hover:border-transparent'
@@ -279,7 +306,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
                     </button>
                   </div>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         </div>

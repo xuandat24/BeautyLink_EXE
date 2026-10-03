@@ -13,9 +13,9 @@ import static com.example.backend.model.DomainEnums.*;
 
 @Service
 public class BookingService {
-    private final BookingRepository bookings; private final ServiceOfferingRepository services; private final PractitionerRepository practitioners; private final SupplierRepository suppliers; private final AvailabilityService availability;
-    public BookingService(BookingRepository bookings, ServiceOfferingRepository services, PractitionerRepository practitioners, SupplierRepository suppliers, AvailabilityService availability) {
-        this.bookings = bookings; this.services = services; this.practitioners = practitioners; this.suppliers = suppliers; this.availability = availability;
+    private final BookingRepository bookings; private final ServiceOfferingRepository services; private final PractitionerRepository practitioners; private final SupplierRepository suppliers; private final AvailabilityService availability; private final BookingReviewRepository reviews;
+    public BookingService(BookingRepository bookings, ServiceOfferingRepository services, PractitionerRepository practitioners, SupplierRepository suppliers, AvailabilityService availability, BookingReviewRepository reviews) {
+        this.bookings = bookings; this.services = services; this.practitioners = practitioners; this.suppliers = suppliers; this.availability = availability; this.reviews = reviews;
     }
     @Transactional public BookingResponse create(UserAccount customer, CreateBookingRequest request) {
         ServiceOffering service = services.findById(request.serviceId()).filter(ServiceOffering::isActive).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SERVICE_NOT_FOUND", "Không tìm thấy dịch vụ"));
@@ -40,5 +40,16 @@ public class BookingService {
         if (booking.getStatus() == BookingStatus.COMPLETED) throw new ApiException(HttpStatus.CONFLICT, "BOOKING_COMPLETED", "Lịch hẹn đã hoàn thành");
         booking.setStatus(BookingStatus.CANCELLED); return response(booking);
     }
-    private BookingResponse response(Booking b) { return new BookingResponse(b.getId(), b.getBookingCode(), b.getService().getName(), b.getSupplier().getName(), b.getPractitioner().getDisplayName(), b.getAppointmentDate(), b.getStartTime(), b.getEndTime(), b.getTotalAmount(), b.getStatus(), b.getPaymentStatus()); }
+    private BookingResponse response(Booking b) {
+        BookingReviewResponse serviceReview = reviews.findByBookingIdAndTargetType(b.getId(), ReviewTargetType.SERVICE).map(this::reviewResponse).orElse(null);
+        BookingReviewResponse supplierReview = reviews.findByBookingIdAndTargetType(b.getId(), ReviewTargetType.SUPPLIER).map(this::reviewResponse).orElse(null);
+        return new BookingResponse(b.getId(), b.getBookingCode(), b.getService().getId(), b.getService().getName(),
+                b.getService().getImageUrl(), b.getSupplier().getId(), b.getSupplier().getName(),
+                b.getSupplier().getImageUrl(), b.getSupplier().getAddressLine(), b.getPractitioner().getDisplayName(),
+                b.getAppointmentDate(), b.getStartTime(), b.getEndTime(), b.getTotalAmount(), b.getStatus(),
+                b.getPaymentStatus(), ReviewService.isEligible(b), serviceReview, supplierReview);
+    }
+    private BookingReviewResponse reviewResponse(BookingReview review) {
+        return new BookingReviewResponse(review.getId(), review.getBooking().getId(), review.getTargetType(), review.getRating(), review.getComment(), review.getCreatedAt(), review.getUpdatedAt());
+    }
 }
