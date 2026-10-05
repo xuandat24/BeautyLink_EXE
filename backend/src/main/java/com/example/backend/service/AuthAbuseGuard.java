@@ -8,36 +8,37 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Clock;
-import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Locale;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class AuthAbuseGuard {
-    private final ConcurrentHashMap<String, Window> windows = new ConcurrentHashMap<>();
-    private final AtomicLong operations = new AtomicLong();
-    private final Clock clock = Clock.systemUTC();
+    private final RateLimitBackend backend;
     private final int loginMaxPerIdentifier;
     private final int loginMaxPerIp;
     private final long loginWindowSeconds;
     private final int registrationMaxPerIp;
     private final long registrationWindowSeconds;
+    private final int verificationMaxPerTarget;
+    private final long verificationWindowSeconds;
 
     public AuthAbuseGuard(
+            RateLimitBackend backend,
             @Value("${app.security.login.max-per-identifier:8}") int loginMaxPerIdentifier,
             @Value("${app.security.login.max-per-ip:20}") int loginMaxPerIp,
             @Value("${app.security.login.window-seconds:900}") long loginWindowSeconds,
             @Value("${app.security.registration.max-per-ip:5}") int registrationMaxPerIp,
-            @Value("${app.security.registration.window-seconds:3600}") long registrationWindowSeconds) {
+            @Value("${app.security.registration.window-seconds:3600}") long registrationWindowSeconds,
+            @Value("${app.security.verification.max-per-target:5}") int verificationMaxPerTarget,
+            @Value("${app.security.verification.window-seconds:3600}") long verificationWindowSeconds) {
+        this.backend = backend;
         this.loginMaxPerIdentifier = loginMaxPerIdentifier;
         this.loginMaxPerIp = loginMaxPerIp;
         this.loginWindowSeconds = loginWindowSeconds;
         this.registrationMaxPerIp = registrationMaxPerIp;
         this.registrationWindowSeconds = registrationWindowSeconds;
+        this.verificationMaxPerTarget = verificationMaxPerTarget;
+        this.verificationWindowSeconds = verificationWindowSeconds;
     }
 
     public void checkLogin(String remoteAddress, String identifier) {
@@ -46,11 +47,23 @@ public class AuthAbuseGuard {
     }
 
     public void loginSucceeded(String identifier) {
-        windows.remove(loginIdentifierKey(identifier));
+        backend.clear(loginIdentifierKey(identifier));
     }
 
     public void checkRegistration(String remoteAddress) {
         consume("registration-ip:" + digest(safe(remoteAddress)), registrationMaxPerIp, registrationWindowSeconds);
+    }
+
+    public void checkVerificationTarget(String phone, String email) {
+        consume("verification-phone:" + digest(AuthService.normalizePhone(phone)), verificationMaxPerTarget, verificationWindowSeconds);
+        if (email != null && !email.isBlank()) {
+            consume("verification-email:" + digest(email.trim().toLowerCase(Locale.ROOT)), verificationMaxPerTarget, verificationWindowSeconds);
+        }
+    }
+
+    public void checkVerificationAttempt(String remoteAddress, String challengeId) {
+        consume("verification-ip:" + digest(safe(remoteAddress)), loginMaxPerIp, loginWindowSeconds);
+        consume("verification-challenge:" + digest(safe(challengeId)), loginMaxPerIdentifier, loginWindowSeconds);
     }
 
     private String loginIdentifierKey(String identifier) {
@@ -60,22 +73,7 @@ public class AuthAbuseGuard {
     }
 
     private void consume(String key, int maxAttempts, long windowSeconds) {
-        Instant now = clock.instant();
-        AtomicBoolean blocked = new AtomicBoolean(false);
-        windows.compute(key, (ignored, current) -> {
-            Window active = current == null || !current.resetAt().isAfter(now)
-                    ? new Window(0, now.plusSeconds(windowSeconds))
-                    : current;
-            if (active.attempts() >= maxAttempts) {
-                blocked.set(true);
-                return active;
-            }
-            return new Window(active.attempts() + 1, active.resetAt());
-        });
-        if ((operations.incrementAndGet() & 255) == 0) {
-            windows.entrySet().removeIf(entry -> !entry.getValue().resetAt().isAfter(now));
-        }
-        if (blocked.get()) {
+        if (!backend.consume(key, maxAttempts, windowSeconds)) {
             throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "Bạn đã thử quá nhiều lần. Vui lòng đợi rồi thử lại");
         }
     }
@@ -92,6 +90,4 @@ public class AuthAbuseGuard {
     private String safe(String value) {
         return value == null ? "unknown" : value;
     }
-
-    private record Window(int attempts, Instant resetAt) {}
 }

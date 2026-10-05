@@ -6,6 +6,7 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.List;
+import java.util.Set;
 
 public final class ApiDtos {
     private ApiDtos() {}
@@ -15,7 +16,8 @@ public final class ApiDtos {
             @NotBlank(message = "Số điện thoại không được để trống") @Pattern(regexp = "^(0|\\+84)(3|5|7|8|9)[0-9]{8}$", message = "Số điện thoại Việt Nam không hợp lệ") String phone,
             @Email(message = "Email không đúng định dạng") @Size(max = 254, message = "Email tối đa 254 ký tự") String email,
             @NotBlank(message = "Mật khẩu không được để trống") @Size(min = 8, max = 72, message = "Mật khẩu phải có từ 8 đến 72 ký tự")
-            @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*[0-9]).+$", message = "Mật khẩu phải có ít nhất một chữ cái và một chữ số") String password) {}
+            @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*[0-9]).+$", message = "Mật khẩu phải có ít nhất một chữ cái và một chữ số") String password,
+            @NotBlank(message = "Bạn cần xác minh số điện thoại và email trước khi đăng ký") @Size(max = 120) String verificationToken) {}
     public record LoginRequest(
             @NotBlank(message = "Số điện thoại hoặc email không được để trống") @Size(max = 254, message = "Thông tin đăng nhập quá dài") String identifier,
             @NotBlank(message = "Mật khẩu không được để trống") @Size(max = 72, message = "Mật khẩu tối đa 72 ký tự") String password) {}
@@ -26,6 +28,7 @@ public final class ApiDtos {
             @NotBlank @Pattern(regexp = "^(0|\\+84)[0-9]{9,10}$") String phone,
             @NotBlank @Email String email,
             @NotBlank @Size(min = 8, max = 72) String password,
+            @NotBlank @Size(max = 120) String verificationToken,
             @NotBlank @Size(min = 2, max = 160) String businessName,
             @NotBlank @Size(max = 120) String businessType,
             @NotNull Long locationId,
@@ -38,6 +41,15 @@ public final class ApiDtos {
             @NotBlank @Size(max = 1_500_000) String imageUrl,
             @NotNull @DecimalMin("-90.0") @DecimalMax("90.0") Double latitude,
             @NotNull @DecimalMin("-180.0") @DecimalMax("180.0") Double longitude) {}
+    public record StartRegistrationVerificationRequest(
+            @NotBlank @Pattern(regexp = "^(0|\\+84)(3|5|7|8|9)[0-9]{8}$", message = "Số điện thoại Việt Nam không hợp lệ") String phone,
+            @Email(message = "Email không đúng định dạng") @Size(max = 254) String email) {}
+    public record StartRegistrationVerificationResponse(String challengeId, long expiresInSeconds, Set<String> requiredChannels) {}
+    public record ConfirmRegistrationVerificationRequest(
+            @NotBlank @Size(max = 36) String challengeId,
+            @NotBlank @Pattern(regexp = "^[0-9]{6}$", message = "Mã SMS phải gồm 6 chữ số") String phoneCode,
+            @Pattern(regexp = "^$|^[0-9]{6}$", message = "Mã email phải gồm 6 chữ số") String emailCode) {}
+    public record ConfirmRegistrationVerificationResponse(String registrationToken, long expiresInSeconds) {}
     public record SupplierResponse(Long id, String name, String slug, String businessType, String description,
                                    Long locationId, String locationName, String addressLine, String imageUrl,
                                    Double latitude, Double longitude, VerificationStatus verificationStatus,

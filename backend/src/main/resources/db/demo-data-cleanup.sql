@@ -7,6 +7,16 @@ SELECT id, owner_user_id
 FROM suppliers
 WHERE demo_data = TRUE;
 
+DELETE br
+FROM booking_reviews br
+JOIN bookings b ON b.id = br.booking_id
+JOIN demo_supplier_ids d ON d.id = b.supplier_id;
+
+DELETE pt
+FROM payment_transactions pt
+JOIN bookings b ON b.id = pt.booking_id
+JOIN demo_supplier_ids d ON d.id = b.supplier_id;
+
 DELETE b
 FROM bookings b
 JOIN demo_supplier_ids d ON d.id = b.supplier_id;

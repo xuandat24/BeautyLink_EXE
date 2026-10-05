@@ -91,6 +91,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [verificationChallengeId, setVerificationChallengeId] = useState('');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [emailCode, setEmailCode] = useState('');
 
   // Dynamic live booking ticker
   const [activeBookingIndex, setActiveBookingIndex] = useState(0);
@@ -140,11 +143,26 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         };
         onSuccess(mappedUser);
       } else {
+        if (!verificationChallengeId) {
+          const challenge = await beautyApi.startRegistrationVerification({
+            phone: cleanPhone,
+            email: email.trim() || undefined,
+          });
+          setVerificationChallengeId(challenge.challengeId);
+          setError('Mã OTP đã được gửi. Vui lòng nhập mã để xác minh quyền sở hữu liên hệ.');
+          return;
+        }
+        const verification = await beautyApi.confirmRegistrationVerification({
+          challengeId: verificationChallengeId,
+          phoneCode,
+          emailCode: email.trim() ? emailCode : undefined,
+        });
         const res = await beautyApi.register({
           fullName: fullName.trim(),
           phone: cleanPhone,
           email: email.trim() || undefined,
           password,
+          verificationToken: verification.registrationToken,
         });
         const mappedUser: CurrentUser = {
           id: res.user.id,
@@ -328,6 +346,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
                 )}
 
+                {mode === 'register' && verificationChallengeId && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">OTP số điện thoại</label>
+                      <input inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6}
+                        value={phoneCode} onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, ''))}
+                        className="w-full rounded-xl border border-emerald-200 px-3 py-2.5 text-xs font-bold tracking-[0.3em] outline-hidden focus:ring-2 focus:ring-emerald-200"
+                        placeholder="000000" />
+                    </div>
+                    {email.trim() && <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">OTP email</label>
+                      <input inputMode="numeric" required pattern="[0-9]{6}" maxLength={6}
+                        value={emailCode} onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ''))}
+                        className="w-full rounded-xl border border-emerald-200 px-3 py-2.5 text-xs font-bold tracking-[0.3em] outline-hidden focus:ring-2 focus:ring-emerald-200"
+                        placeholder="000000" />
+                    </div>}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     {mode === 'login' ? 'Số điện thoại hoặc Email' : 'Số điện thoại đăng ký'}
@@ -338,7 +375,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       type="text"
                       required
                       value={identifier}
-                      onChange={(e) => { setIdentifier(e.target.value); setFieldErrors((prev) => ({ ...prev, identifier: '' })); }}
+                      onChange={(e) => { setIdentifier(e.target.value); setVerificationChallengeId(''); setPhoneCode(''); setEmailCode(''); setFieldErrors((prev) => ({ ...prev, identifier: '' })); }}
                       maxLength={254}
                       aria-invalid={Boolean(fieldErrors.identifier)}
                       aria-describedby="identifier-error"
@@ -359,7 +396,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       <input
                         type="email"
                         value={email}
-                        onChange={(e) => { setEmail(e.target.value); setFieldErrors((prev) => ({ ...prev, email: '' })); }}
+                        onChange={(e) => { setEmail(e.target.value); setVerificationChallengeId(''); setPhoneCode(''); setEmailCode(''); setFieldErrors((prev) => ({ ...prev, email: '' })); }}
                         maxLength={254}
                         aria-invalid={Boolean(fieldErrors.email)}
                         aria-describedby="email-error"
@@ -467,7 +504,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </>
                   ) : (
                     <>
-                      <span>{mode === 'login' ? 'Đăng nhập ngay' : 'Hoàn tất đăng ký'}</span>
+                      <span>{mode === 'login' ? 'Đăng nhập ngay' : verificationChallengeId ? 'Xác minh OTP & đăng ký' : 'Gửi mã xác minh OTP'}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}

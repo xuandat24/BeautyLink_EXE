@@ -15,12 +15,13 @@ import static com.example.backend.model.DomainEnums.*;
 
 @Service
 public class AuthService {
-    private final UserAccountRepository users; private final PasswordEncoder encoder; private final JwtService jwt; private final AuthenticationManager authenticationManager;
-    public AuthService(UserAccountRepository users, PasswordEncoder encoder, JwtService jwt, AuthenticationManager authenticationManager) {
-        this.users = users; this.encoder = encoder; this.jwt = jwt; this.authenticationManager = authenticationManager;
+    private final UserAccountRepository users; private final PasswordEncoder encoder; private final JwtService jwt; private final AuthenticationManager authenticationManager; private final RegistrationVerificationService verification;
+    public AuthService(UserAccountRepository users, PasswordEncoder encoder, JwtService jwt, AuthenticationManager authenticationManager, RegistrationVerificationService verification) {
+        this.users = users; this.encoder = encoder; this.jwt = jwt; this.authenticationManager = authenticationManager; this.verification = verification;
     }
     @Transactional public AuthResponse register(RegisterRequest request) {
         String phone = normalizePhone(request.phone());
+        verification.consume(request.verificationToken(), phone, request.email());
         if (users.existsByPhone(phone)) throw registrationConflict();
         if (request.email() != null && !request.email().isBlank() && users.existsByEmailIgnoreCase(request.email().trim())) throw registrationConflict();
         UserAccount user = new UserAccount(); user.setFullName(request.fullName().trim()); user.setPhone(phone);

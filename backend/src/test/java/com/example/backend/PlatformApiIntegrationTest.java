@@ -6,6 +6,7 @@ import com.example.backend.repository.SupplierVerificationRepository;
 import com.example.backend.repository.BookingRepository;
 import com.example.backend.repository.PaymentTransactionRepository;
 import com.example.backend.service.PayOSGateway;
+import com.example.backend.service.RegistrationVerificationService;
 import com.example.backend.model.DomainEnums.BookingStatus;
 import com.example.backend.model.DomainEnums.PaymentStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -44,6 +45,7 @@ class PlatformApiIntegrationTest {
     @Autowired BookingRepository bookings;
     @Autowired PaymentTransactionRepository paymentTransactions;
     @MockitoBean PayOSGateway payOSGateway;
+    @MockitoBean RegistrationVerificationService registrationVerificationService;
 
     @Test
     void validationReturnsFieldMessagesForCustomerAndAdminInput() throws Exception {
@@ -131,7 +133,7 @@ class PlatformApiIntegrationTest {
     @Test
     void customerCanRegisterAndUseProtectedProfileEndpoint() throws Exception {
         String registerBody = """
-                {"fullName":"Nguyen An","phone":"0912345678","email":"an@example.com","password":"StrongPass123!"}
+                {"fullName":"Nguyen An","phone":"0912345678","email":"an@example.com","password":"StrongPass123!","verificationToken":"verified-test-token"}
                 """;
 
         String response = mvc.perform(post("/api/v1/auth/register")
@@ -219,7 +221,7 @@ class PlatformApiIntegrationTest {
         mvc.perform(post("/api/v1/auth/register")
                         .with(request -> { request.setRemoteAddr("198.51.100.78"); return request; })
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"fullName\":\"Duplicate User\",\"phone\":\"0900000001\",\"email\":\"unused@example.com\",\"password\":\"StrongPass123!\"}"))
+                        .content("{\"fullName\":\"Duplicate User\",\"phone\":\"0900000001\",\"email\":\"unused@example.com\",\"password\":\"StrongPass123!\",\"verificationToken\":\"verified-test-token\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code", is("REGISTRATION_CONFLICT")))
                 .andExpect(content().string(not(containsString("PHONE_EXISTS"))));
@@ -228,7 +230,7 @@ class PlatformApiIntegrationTest {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         long cityId = locations.get(0).path("id").asLong();
         String invalidImageBody = """
-                {"ownerName":"Fake Image","phone":"0934567891","email":"fake.image@example.com",
+                {"ownerName":"Fake Image","phone":"0934567891","email":"fake.image@example.com","verificationToken":"verified-test-token",
                  "password":"StrongPass123!","businessName":"Fake Image Studio","businessType":"Studio",
                  "locationId":%d,"addressLine":"25 Nguyen Trai","description":"Studio trang diem",
                  "specialty":"Trang diem","cccdNumber":"079203001235",
@@ -474,7 +476,7 @@ class PlatformApiIntegrationTest {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         long cityId = locations.get(0).path("id").asLong();
         String body = """
-                {"ownerName":"Le Minh","phone":"0934567890","email":"partner.new@example.com",
+                {"ownerName":"Le Minh","phone":"0934567890","email":"partner.new@example.com","verificationToken":"verified-test-token",
                  "password":"StrongPass123!","businessName":"Minh Beauty House","businessType":"Makeup Studio",
                  "locationId":%d,"addressLine":"25 Nguyen Trai","description":"Studio trang diem",
                  "specialty":"Trang diem co dau","cccdNumber":"079203001234",

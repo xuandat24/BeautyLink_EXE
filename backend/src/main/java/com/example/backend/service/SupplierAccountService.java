@@ -34,6 +34,7 @@ public class SupplierAccountService {
     private final SupplierVerificationRepository verifications;
     private final SensitiveDataCipher sensitiveData;
     private final ImageDataValidator imageDataValidator;
+    private final RegistrationVerificationService registrationVerification;
     private final boolean autoVerify;
 
     public SupplierAccountService(UserAccountRepository users, SupplierRepository suppliers, LocationRepository locations,
@@ -41,6 +42,7 @@ public class SupplierAccountService {
                                   PasswordEncoder encoder, AuthService auth, ServiceCategoryRepository categories,
                                   ServiceOfferingRepository services, SupplierVerificationRepository verifications,
                                   SensitiveDataCipher sensitiveData, ImageDataValidator imageDataValidator,
+                                  RegistrationVerificationService registrationVerification,
                                   @Value("${app.supplier.auto-verify:false}") boolean autoVerify) {
         this.users = users;
         this.suppliers = suppliers;
@@ -54,6 +56,7 @@ public class SupplierAccountService {
         this.verifications = verifications;
         this.sensitiveData = sensitiveData;
         this.imageDataValidator = imageDataValidator;
+        this.registrationVerification = registrationVerification;
         this.autoVerify = autoVerify;
     }
 
@@ -61,6 +64,7 @@ public class SupplierAccountService {
     public SupplierRegistrationResponse register(SupplierRegistrationRequest request) {
         String phone = AuthService.normalizePhone(request.phone());
         String email = request.email().trim().toLowerCase(Locale.ROOT);
+        registrationVerification.consume(request.verificationToken(), phone, email);
         if (users.existsByPhone(phone)) throw AuthService.registrationConflict();
         if (users.existsByEmailIgnoreCase(email)) throw AuthService.registrationConflict();
         String normalizedCccd = request.cccdNumber().replaceAll("\\s", "");

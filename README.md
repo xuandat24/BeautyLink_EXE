@@ -19,6 +19,9 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 - Added browser location handling with a clearly labelled approximate network fallback when device GPS is unavailable. Suppliers can still enter exact store coordinates manually.
 - Uses a server-created PayOS hosted checkout. A booking is marked paid only after the backend verifies the signed PayOS webhook or reconciles it directly with PayOS.
 - PayOS links expire after 15 minutes; expired pending links are marked `EXPIRED` and can be safely regenerated with a new order code.
+- Registration verifies phone/email ownership with one-use OTP challenges delivered by Twilio and SMTP; production refuses registration if delivery is unavailable.
+- Production authentication and OTP throttling is shared across replicas through Redis; local/test profiles use the in-memory backend.
+- Payment attempts are append-only. A retry keeps the old attempt for audit and reacquires the released slot under a database lock before creating a new PayOS order.
 - Added client- and server-side Vietnamese validation messages for customer and admin forms, including authentication, profiles, bookings, reviews, reports, and admin report resolution.
 - Improved cart dismissal, supplier registration/store forms, dashboard messaging, and responsive presentation throughout the updated flows.
 
@@ -185,6 +188,7 @@ MYSQL_USERNAME=your_mysql_username
 MYSQL_PASSWORD=your_mysql_password
 JWT_SECRET=replace-with-a-long-random-secret-of-at-least-32-characters
 KYC_ENCRYPTION_KEY=replace-with-a-different-random-secret-of-at-least-32-characters
+OTP_PEPPER=replace-with-a-third-random-secret-of-at-least-32-characters
 JWT_EXPIRATION_MS=3600000
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 SUPPLIER_AUTO_VERIFY=true
@@ -195,6 +199,16 @@ LOGIN_MAX_PER_IP=20
 LOGIN_RATE_WINDOW_SECONDS=900
 REGISTRATION_MAX_PER_IP=5
 REGISTRATION_RATE_WINDOW_SECONDS=3600
+RATE_LIMIT_BACKEND=memory
+REDIS_URL=redis://localhost:6379
+SPRING_MAIL_HOST=smtp.example.com
+SPRING_MAIL_PORT=587
+SPRING_MAIL_USERNAME=your_smtp_username
+SPRING_MAIL_PASSWORD=your_smtp_password
+OTP_MAIL_FROM=no-reply@example.com
+TWILIO_ACCOUNT_SID=your_twilio_account_sid
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_FROM_NUMBER=your_twilio_sender_number
 PAYOS_CLIENT_ID=your_payos_client_id
 PAYOS_API_KEY=your_payos_api_key
 PAYOS_CHECKSUM_KEY=your_payos_checksum_key
@@ -210,7 +224,9 @@ PAYOS_RECONCILIATION_INITIAL_DELAY_MS=60000
 
 For production PayOS, create and verify a Payment Channel at `my.payos.vn`, connect the receiving bank account, then place that channel's `Client ID`, `API Key`, and `Checksum Key` in the deployment secret store. Set `PAYOS_WEBHOOK_URL` to the public HTTPS backend endpoint shown above. On startup, the backend confirms that webhook URL with PayOS; it never logs credentials, signatures, or the bank account number. Pending transactions are also reconciled directly with PayOS every 60 seconds so webhook delivery is not the only source of truth.
 
-The built-in login and registration limits protect a single backend instance. A public multi-instance deployment must also enforce shared IP/account throttling at the edge or through Redis. Before activating real customer accounts, connect an OTP/email provider and require contact ownership verification; syntax validation alone does not prove that the registrant owns a phone number or email address.
+For production, set `RATE_LIMIT_BACKEND=redis` and point `REDIS_URL` at a private Redis service shared by every backend replica. Configure Twilio (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`) and SMTP (`SPRING_MAIL_*`, `OTP_MAIL_FROM`) with real providers. `OTP_PEPPER` must be an independent random secret of at least 32 characters. OTP values and raw contact identifiers are never stored or logged.
+
+On the first MySQL startup after this upgrade, an idempotent compatibility migration removes only the legacy unique indexes on `payment_transactions.booking_id` and the practitioner/date/time booking slot, then adds non-unique lookup indexes. Back up the database before deployment and treat the change as roll-forward once a booking has multiple attempts. Existing transaction rows are retained unchanged.
 
 ### 5. Install the frontend dependencies
 

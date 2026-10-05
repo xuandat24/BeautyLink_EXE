@@ -7,12 +7,12 @@ import static com.example.backend.model.DomainEnums.*;
 
 @Entity
 @Table(name = "payment_transactions", indexes = {
-        @Index(name = "idx_payment_booking", columnList = "booking_id"),
+        @Index(name = "idx_payment_booking_attempts_v2", columnList = "booking_id,created_at"),
         @Index(name = "idx_payment_status", columnList = "status")
 })
 public class PaymentTransaction {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
-    @OneToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "booking_id", nullable = false, unique = true) private Booking booking;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "booking_id", nullable = false) private Booking booking;
     @Column(nullable = false, unique = true) private Long orderCode;
     @Column(unique = true, length = 80) private String paymentLinkId;
     @Column(length = 1000) private String checkoutUrl;

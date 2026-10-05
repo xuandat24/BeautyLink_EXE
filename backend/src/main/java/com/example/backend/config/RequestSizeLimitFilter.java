@@ -26,7 +26,8 @@ public class RequestSizeLimitFilter extends OncePerRequestFilter {
     private static final long SUPPLIER_REGISTRATION_LIMIT = 4 * 1024 * 1024L;
     private static final Set<String> METHODS_WITH_BODY = Set.of("POST", "PUT", "PATCH");
     private static final Set<String> REGISTRATION_PATHS = Set.of(
-            "/api/v1/auth/register", "/api/v1/auth/register-supplier");
+            "/api/v1/auth/register", "/api/v1/auth/register-supplier",
+            "/api/v1/auth/registration-verification/start");
     private final AuthAbuseGuard abuseGuard;
 
     public RequestSizeLimitFilter(AuthAbuseGuard abuseGuard) {

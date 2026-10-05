@@ -506,7 +506,15 @@ export const beautyApi = {
     return res;
   },
 
-  async register(data: { fullName: string; phone: string; email?: string; password: string }): Promise<{ user: any; accessToken: string }> {
+  async startRegistrationVerification(data: { phone: string; email?: string }): Promise<{ challengeId: string; expiresInSeconds: number; requiredChannels: string[] }> {
+    return unwrap(apiClient.post('/v1/auth/registration-verification/start', data));
+  },
+
+  async confirmRegistrationVerification(data: { challengeId: string; phoneCode: string; emailCode?: string }): Promise<{ registrationToken: string; expiresInSeconds: number }> {
+    return unwrap(apiClient.post('/v1/auth/registration-verification/confirm', data));
+  },
+
+  async register(data: { fullName: string; phone: string; email?: string; password: string; verificationToken: string }): Promise<{ user: any; accessToken: string }> {
     const res = await unwrap<{ user: any; accessToken: string }>(
       apiClient.post('/v1/auth/register', data)
     );

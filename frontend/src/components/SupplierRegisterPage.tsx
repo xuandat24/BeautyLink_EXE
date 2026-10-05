@@ -131,6 +131,9 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
   const [error, setError] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [activeStep, setActiveStep] = useState<number>(1);
+  const [verificationChallengeId, setVerificationChallengeId] = useState('');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [emailCode, setEmailCode] = useState('');
 
   const [formData, setFormData] = useState({
     ownerName: '',
@@ -167,6 +170,11 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
 
   const updateField = (key: string, value: any) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
+    if (key === 'phone' || key === 'email') {
+      setVerificationChallengeId('');
+      setPhoneCode('');
+      setEmailCode('');
+    }
   };
 
   const handleGetCurrentLocation = () => {
@@ -239,7 +247,18 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
         description: formData.description.trim() || undefined,
       };
 
-      const res = await beautyApi.registerSupplier(payload);
+      if (!verificationChallengeId) {
+        const challenge = await beautyApi.startRegistrationVerification({ phone: cleanPhone, email: formData.email.trim() });
+        setVerificationChallengeId(challenge.challengeId);
+        setError('Mã OTP đã được gửi đến số điện thoại và email. Vui lòng nhập đủ hai mã để tiếp tục.');
+        return;
+      }
+      const verification = await beautyApi.confirmRegistrationVerification({
+        challengeId: verificationChallengeId,
+        phoneCode,
+        emailCode,
+      });
+      const res = await beautyApi.registerSupplier({ ...payload, verificationToken: verification.registrationToken });
       const mappedUser: CurrentUser = {
         id: res.user?.id || res.supplier?.userId,
         name: res.supplier?.name || formData.businessName,
@@ -680,6 +699,23 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
               </div>
             )}
 
+            {verificationChallengeId && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+                <div>
+                  <label className="mb-1 block text-xs font-black text-slate-700">OTP số điện thoại</label>
+                  <input inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6}
+                    value={phoneCode} onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, ''))}
+                    placeholder="000000" className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-3 text-sm font-black tracking-[0.35em] outline-hidden focus:ring-2 focus:ring-emerald-200" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-black text-slate-700">OTP email</label>
+                  <input inputMode="numeric" required pattern="[0-9]{6}" maxLength={6}
+                    value={emailCode} onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ''))}
+                    placeholder="000000" className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-3 text-sm font-black tracking-[0.35em] outline-hidden focus:ring-2 focus:ring-emerald-200" />
+                </div>
+              </div>
+            )}
+
             {/* Terms and Agreements */}
             <div className="p-4 rounded-2xl bg-pink-50/70 border border-pink-100 flex items-start gap-3">
               <input
@@ -711,7 +747,7 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
                 ) : (
                   <>
                     <Store className="h-5 w-5" />
-                    <span>Hoàn tất & Đăng ký Gian Hàng Đối Tác Ngay</span>
+                    <span>{verificationChallengeId ? 'Xác minh OTP & Đăng ký Gian Hàng' : 'Gửi mã OTP xác minh liên hệ'}</span>
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}

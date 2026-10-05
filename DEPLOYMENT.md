@@ -49,6 +49,20 @@ DEMO_ACCOUNT_PASSWORD=<a-new-private-demo-password>
 SUPPLIER_AUTO_VERIFY=true
 JWT_SECRET=<a-new-random-secret>
 KYC_ENCRYPTION_KEY=<a-different-random-secret>
+OTP_PEPPER=<a-third-independent-random-secret>
+RATE_LIMIT_BACKEND=redis
+REDIS_URL=${{Redis.REDIS_URL}}
+REDIS_TIMEOUT=2s
+SPRING_MAIL_HOST=<smtp-host>
+SPRING_MAIL_PORT=587
+SPRING_MAIL_USERNAME=<smtp-username>
+SPRING_MAIL_PASSWORD=<smtp-password>
+SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
+SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
+OTP_MAIL_FROM=<verified-sender-address>
+TWILIO_ACCOUNT_SID=<twilio-account-sid>
+TWILIO_AUTH_TOKEN=<twilio-auth-token>
+TWILIO_FROM_NUMBER=<twilio-sender-number>
 LOGIN_MAX_PER_IDENTIFIER=8
 LOGIN_MAX_PER_IP=20
 LOGIN_RATE_WINDOW_SECONDS=900
@@ -68,7 +82,7 @@ Generate the secret values locally; do not reuse any development or database pas
 node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 ```
 
-Run the command three times: use independent results for `JWT_SECRET`, `KYC_ENCRYPTION_KEY`, and `DEMO_ACCOUNT_PASSWORD`. Keep `KYC_ENCRYPTION_KEY` stable across redeployments because it protects saved supplier CCCD documents.
+Run the command four times: use independent results for `JWT_SECRET`, `KYC_ENCRYPTION_KEY`, `OTP_PEPPER`, and `DEMO_ACCOUNT_PASSWORD`. Keep `KYC_ENCRYPTION_KEY` and `OTP_PEPPER` stable across redeployments.
 
 ### Demo versus real production
 
@@ -88,7 +102,9 @@ DEMO_DATA_ENABLED=false
 SUPPLIER_AUTO_VERIFY=false
 ```
 
-The application rate limiter is process-local. If Railway runs more than one backend replica, add a shared limiter at the edge or backed by Redis. Real production registration also requires an OTP/email provider so accounts are activated only after the user proves control of the claimed contact channel.
+Add a private Redis service to Railway and keep `RATE_LIMIT_BACKEND=redis`; production fails closed if Redis cannot enforce a limit. Registration sends real SMS through Twilio and email through SMTP. Missing or rejected provider credentials produce a safe `503`, and no account/token is created.
+
+Before the first deployment of this version, take a MySQL backup. Startup performs a narrow idempotent migration that drops the legacy unique payment-per-booking and all-status slot constraints, preserving rows and foreign keys. Verify the startup logs, then confirm multiple payment attempts for one booking in MySQL. Once a second attempt exists, recover by rolling forward rather than reverting to code that assumes one payment row per booking.
 
 Turning demo seeding off does not delete existing demo records. Review `backend/src/main/resources/db/demo-data-cleanup.sql` before removing them.
 
@@ -147,6 +163,7 @@ Verify all of these from the Vercel website:
 - Hà Nội and Hồ Chí Minh can be selected.
 - Categories and homepage services load.
 - A customer can sign in and create a booking.
+- A new customer receives real phone/email OTP messages and cannot register with a wrong, expired, or reused verification token.
 - The booking appears in **Tổng quan & Lịch hẹn**.
 - A PayOS payment opens on the hosted checkout and the booking becomes paid only after its webhook is received.
 - A supplier can sign in, edit its profile, create a service, and update a schedule.
@@ -181,3 +198,4 @@ Verify all of these from the Vercel website:
 - Do not expose the Railway MySQL service publicly unless external database access is specifically required.
 - Replace the demonstration password before any public deployment.
 - Never expose PayOS credentials in `VITE_` variables or frontend source code.
+- Keep Redis private, require TLS/auth where supported, and never expose Twilio, SMTP, or `OTP_PEPPER` values to the frontend.

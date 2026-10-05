@@ -21,14 +21,16 @@ public class BookingService {
         ServiceOffering service = services.findById(request.serviceId()).filter(ServiceOffering::isActive).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SERVICE_NOT_FOUND", "Không tìm thấy dịch vụ"));
         Practitioner practitioner;
         if (request.practitionerId() != null) {
-            practitioner = practitioners.findById(request.practitionerId()).filter(Practitioner::isActive)
+            practitioner = practitioners.findByIdForUpdate(request.practitionerId()).filter(Practitioner::isActive)
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PRACTITIONER_NOT_FOUND", "Không tìm thấy chuyên viên"));
         } else {
-            practitioner = practitioners.findBySupplierIdAndActiveTrue(service.getSupplier().getId()).stream()
-                    .filter(candidate -> availability.availability(service.getId(), candidate.getId(), request.appointmentDate())
+            Practitioner candidate = practitioners.findBySupplierIdAndActiveTrue(service.getSupplier().getId()).stream()
+                    .filter(availablePractitioner -> availability.availability(service.getId(), availablePractitioner.getId(), request.appointmentDate())
                             .availableSlots().contains(request.startTime()))
                     .findFirst()
                     .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Không còn chuyên viên phù hợp cho khung giờ này"));
+            practitioner = practitioners.findByIdForUpdate(candidate.getId()).filter(Practitioner::isActive)
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Khung giờ này không còn khả dụng"));
         }
         if (!practitioner.getSupplier().getId().equals(service.getSupplier().getId())) throw new ApiException(HttpStatus.BAD_REQUEST, "PRACTITIONER_MISMATCH", "Chuyên viên không cung cấp dịch vụ này");
         List<LocalTime> slots = availability.availability(service.getId(), practitioner.getId(), request.appointmentDate()).availableSlots();
@@ -36,7 +38,7 @@ public class BookingService {
         Booking booking = new Booking(); booking.setBookingCode("BL-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         booking.setCustomer(customer); booking.setSupplier(service.getSupplier()); booking.setService(service); booking.setPractitioner(practitioner);
         booking.setAppointmentDate(request.appointmentDate()); booking.setStartTime(request.startTime()); booking.setEndTime(request.startTime().plusMinutes(service.getDurationMinutes()));
-        booking.setTotalAmount(service.getPrice()); booking.setStatus(BookingStatus.PENDING); booking.setPaymentStatus(PaymentStatus.UNPAID); booking.setCustomerNote(request.note());
+        booking.setTotalAmount(service.getPrice()); booking.setStatus(BookingStatus.PENDING); booking.setPaymentStatus(PaymentStatus.UNPAID); booking.setPaymentRetryAllowed(false); booking.setCustomerNote(request.note());
         return response(bookings.save(booking));
     }
     @Transactional(readOnly = true) public List<BookingResponse> customerBookings(UserAccount customer) { return bookings.findByCustomerIdOrderByAppointmentDateDescStartTimeDesc(customer.getId()).stream().map(this::response).toList(); }
@@ -48,7 +50,7 @@ public class BookingService {
         Booking booking = bookings.findById(bookingId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "Không tìm thấy lịch hẹn"));
         if (!booking.getCustomer().getId().equals(customer.getId())) throw new ApiException(HttpStatus.FORBIDDEN, "BOOKING_FORBIDDEN", "Bạn không thể hủy lịch hẹn này");
         if (booking.getStatus() == BookingStatus.COMPLETED) throw new ApiException(HttpStatus.CONFLICT, "BOOKING_COMPLETED", "Lịch hẹn đã hoàn thành");
-        booking.setStatus(BookingStatus.CANCELLED); return response(booking);
+        booking.setStatus(BookingStatus.CANCELLED); booking.setPaymentRetryAllowed(false); return response(booking);
     }
     private BookingResponse response(Booking b) {
         BookingReviewResponse serviceReview = reviews.findByBookingIdAndTargetType(b.getId(), ReviewTargetType.SERVICE).map(this::reviewResponse).orElse(null);

@@ -64,6 +64,18 @@ public class PayOSGateway {
         }
     }
 
+    public PaymentLink cancel(Long orderCode, String reason) {
+        ensureConfigured();
+        PayOS payOS = new PayOS(clientId, apiKey, checksumKey);
+        try {
+            return payOS.paymentRequests().cancel(orderCode, reason);
+        } catch (PayOSException ex) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYOS_CANCEL_FAILED", "Không thể đóng phiên thanh toán PayOS cũ");
+        } finally {
+            payOS.close();
+        }
+    }
+
     public ConfirmWebhookResponse confirmWebhook(String webhookUrl) {
         ensureConfigured();
         PayOS payOS = new PayOS(clientId, apiKey, checksumKey);

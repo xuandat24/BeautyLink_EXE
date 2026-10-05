@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "app.jwt.secret=beautylink-production-config-test-secret-for-hmac-sha256",
         "app.kyc.encryption-key=beautylink-production-config-test-kyc-secret-value",
+        "app.otp.pepper=beautylink-production-config-test-otp-pepper-value",
+        "app.security.rate-limit.backend=memory",
         "app.cors.allowed-origins=https://beautylink.example",
         "app.demo-data.enabled=true",
         "app.demo-data.password=PrivateDeployDemo123!",

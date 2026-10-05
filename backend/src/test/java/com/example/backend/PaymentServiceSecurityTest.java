@@ -5,6 +5,7 @@ import com.example.backend.model.PaymentTransaction;
 import com.example.backend.model.UserAccount;
 import com.example.backend.repository.BookingRepository;
 import com.example.backend.repository.PaymentTransactionRepository;
+import com.example.backend.repository.PractitionerRepository;
 import com.example.backend.service.PayOSGateway;
 import com.example.backend.service.PaymentService;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +21,7 @@ import vn.payos.model.webhooks.WebhookData;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.List;
 
 import static com.example.backend.model.DomainEnums.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,11 +33,12 @@ class PaymentServiceSecurityTest {
     @Mock PaymentTransactionRepository payments;
     @Mock BookingRepository bookings;
     @Mock PayOSGateway gateway;
+    @Mock PractitionerRepository practitioners;
     PaymentService service;
 
     @BeforeEach
     void setUp() {
-        service = new PaymentService(payments, bookings, gateway, "https://frontend/success", "https://frontend/cancel");
+        service = new PaymentService(payments, bookings, practitioners, gateway, "https://frontend/success", "https://frontend/cancel");
     }
 
     @Test
@@ -50,6 +53,7 @@ class PaymentServiceSecurityTest {
         assertEquals(PaymentTransactionStatus.EXPIRED, payment.getStatus());
         assertEquals(BookingStatus.CANCELLED, payment.getBooking().getStatus());
         assertEquals(PaymentStatus.UNPAID, payment.getBooking().getPaymentStatus());
+        assertEquals(true, payment.getBooking().isPaymentRetryAllowed());
     }
 
     @Test
@@ -86,6 +90,35 @@ class PaymentServiceSecurityTest {
         assertEquals(PaymentTransactionStatus.PAID, payment.getStatus());
         assertEquals(PaymentStatus.PAID, payment.getBooking().getPaymentStatus());
         assertEquals(BookingStatus.CANCELLED, payment.getBooking().getStatus());
+    }
+
+    @Test
+    void oldAttemptPaidAfterRetryConfirmsBookingAndClosesNewerPendingAttempt() {
+        PaymentTransaction oldAttempt = pendingPayment();
+        oldAttempt.setStatus(PaymentTransactionStatus.EXPIRED);
+        oldAttempt.getBooking().setStatus(BookingStatus.PENDING);
+        PaymentTransaction newerAttempt = new PaymentTransaction();
+        newerAttempt.setBooking(oldAttempt.getBooking());
+        newerAttempt.setOrderCode(610000052L);
+        newerAttempt.setStatus(PaymentTransactionStatus.PENDING);
+        Webhook webhook = mock(Webhook.class);
+        WebhookData data = mock(WebhookData.class);
+        when(webhook.getSuccess()).thenReturn(true);
+        when(data.getOrderCode()).thenReturn(oldAttempt.getOrderCode());
+        when(data.getAmount()).thenReturn(oldAttempt.getAmount().longValueExact());
+        when(data.getPaymentLinkId()).thenReturn(oldAttempt.getPaymentLinkId());
+        when(data.getCode()).thenReturn("00");
+        when(gateway.verify(webhook)).thenReturn(data);
+        when(payments.findByOrderCode(oldAttempt.getOrderCode())).thenReturn(Optional.of(oldAttempt));
+        when(payments.findAllByBookingIdOrderByCreatedAtDesc(oldAttempt.getBooking().getId()))
+                .thenReturn(List.of(newerAttempt, oldAttempt));
+
+        service.handleWebhook(webhook);
+
+        assertEquals(PaymentTransactionStatus.PAID, oldAttempt.getStatus());
+        assertEquals(PaymentTransactionStatus.CANCELLED, newerAttempt.getStatus());
+        assertEquals(BookingStatus.CONFIRMED, oldAttempt.getBooking().getStatus());
+        assertEquals(PaymentStatus.PAID, oldAttempt.getBooking().getPaymentStatus());
     }
 
     private PaymentTransaction pendingPayment() {
