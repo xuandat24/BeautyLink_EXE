@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { X, Users, Heart, MessageCircle, Star, Sparkles, Send } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Users, Heart, MessageCircle, Star, Sparkles, Send, CheckCircle2 } from 'lucide-react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface CommunityModalProps {
   isOpen: boolean;
@@ -10,8 +11,20 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
   const [likes, setLikes] = useState<Record<number, number>>({ 1: 42, 2: 89, 3: 27 });
   const [hasLiked, setHasLiked] = useState<Record<number, boolean>>({});
   const [newComment, setNewComment] = useState('');
+  const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  if (!isOpen) return null;
+  // Lock body scroll when open
+  useBodyScrollLock(isOpen);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const toggleLike = (id: number) => {
     if (hasLiked[id]) {
@@ -23,6 +36,13 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
     }
   };
 
+  const handlePostComment = () => {
+    if (!newComment.trim()) return;
+    setSubmitSuccess(true);
+    setNewComment('');
+    setTimeout(() => setSubmitSuccess(false), 3500);
+  };
+
   const posts = [
     {
       id: 1,
@@ -31,7 +51,7 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
       salon: 'An Miên Spa Dưỡng Sinh',
       service: 'Gội đầu bồ kết 12 vị + Đả thông cổ vai gáy',
       content:
-        'Hôm nay đi làm về mỏi nhừ người, book qua BeautyPink được giảm 50k mã BEAUTYPINK50. Không gian thơm mùi sả chanh cực kỳ thư thái, bạn kỹ thuật viên massage rất êm tay!',
+        'Hôm nay đi làm về mỏi nhừ người, book qua BeautyLink được giảm 50k. Không gian thơm mùi sả chanh cực kỳ thư thái, bạn kỹ thuật viên massage rất êm tay!',
       rating: 5,
       time: '2 giờ trước',
     },
@@ -50,7 +70,7 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
       id: 3,
       author: 'Ngọc Hân (Hải Châu, Đà Nẵng)',
       avatar: 'NH',
-      salon: 'Euphorea Salon',
+      salon: 'Euphorea Salon & Nail',
       service: 'Nail móng thạch hồng sen ombre',
       content:
         'Mẫu nail hồng sen xinh ngất ngây, sơn gel bóng đẹp bền màu hơn 3 tuần rồi vẫn nguyên vẹn.',
@@ -59,36 +79,66 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
     },
   ];
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden max-h-[85vh] flex flex-col">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 overflow-hidden animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Blurred & Dimmed Backdrop */}
+      <div
+        className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-200 cursor-pointer"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Pristine Modal Card */}
+      <div
+        className="relative z-10 w-full max-w-lg max-h-[88vh] bg-white rounded-[2rem] shadow-2xl border border-pink-100 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#B42D58] via-[#D28474] to-[#EB0F51] text-white p-5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-white" />
+        <div className="bg-gradient-to-r from-[#be185d] via-[#db2777] to-[#e1146c] text-white p-5 flex items-center justify-between shrink-0 shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner">
+              <Users className="w-5 h-5" />
+            </div>
             <div>
-              <h3 className="text-base font-extrabold tracking-tight">Cộng Đồng Làm Đẹp & Đánh Giá</h3>
-              <p className="text-[11px] text-pink-100/90 font-medium">Chia sẻ trải nghiệm thực tế từ hội chị em</p>
+              <h3 className="text-base font-black tracking-tight">Cộng Đồng Làm Đẹp & Đánh Giá</h3>
+              <p className="text-[11px] text-pink-100 font-medium">Chia sẻ trải nghiệm thực tế từ hội chị em</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/30 text-white flex items-center justify-center transition-colors"
+            className="w-9 h-9 rounded-full bg-white/20 hover:bg-white text-white hover:text-[#EB0F51] flex items-center justify-center transition-all shadow-sm cursor-pointer"
+            title="Đóng (ESC)"
+            aria-label="Đóng cửa sổ"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 stroke-[2.5]" />
           </button>
         </div>
 
+        {/* Success Alert if submitted */}
+        {submitSuccess && (
+          <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2.5 flex items-center gap-2 text-xs font-bold text-emerald-800 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Cảm ơn bạn! Đánh giá đã được gửi và đang chờ duyệt hiển thị.</span>
+          </div>
+        )}
+
         {/* Content list */}
-        <div className="p-5 overflow-y-auto space-y-4">
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5 flex-1 overscroll-contain">
           {posts.map((post) => (
             <div
               key={post.id}
-              className="p-4 rounded-2xl border border-pink-100 bg-pink-50/20 space-y-2.5 hover:border-pink-300 transition-colors"
+              className="p-4 rounded-2xl border border-pink-100 bg-[#FFF9FA] space-y-2.5 hover:border-pink-300 transition-colors shadow-xs"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-400 to-[#B42D58] text-white flex items-center justify-center text-xs font-bold">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-400 to-[#be185d] text-white flex items-center justify-center text-xs font-bold shadow-xs">
                     {post.avatar}
                   </div>
                   <div>
@@ -99,30 +149,31 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
 
                 <div className="flex items-center gap-0.5 text-amber-500">
                   {Array.from({ length: post.rating }).map((_, i) => (
-                    <Star key={i} className="w-3 h-3 fill-amber-400" />
+                    <Star key={i} className="w-3.5 h-3.5 fill-amber-400" />
                   ))}
                 </div>
               </div>
 
-              <div className="bg-white p-2 rounded-xl border border-pink-100 text-[11px] text-[#B42D58] font-semibold flex items-center justify-between">
+              <div className="bg-white p-2 rounded-xl border border-pink-100 text-[11px] text-[#be185d] font-semibold flex items-center justify-between">
                 <span>📍 {post.salon}</span>
-                <span className="text-slate-500 font-normal truncate max-w-[150px]">
+                <span className="text-slate-500 font-normal truncate max-w-[170px]">
                   {post.service}
                 </span>
               </div>
 
               <p className="text-xs text-slate-700 leading-relaxed">{post.content}</p>
 
-              <div className="pt-2 flex items-center gap-4 text-xs text-slate-500 border-t border-pink-50">
+              <div className="pt-2 flex items-center gap-4 text-xs text-slate-500 border-t border-pink-100/60">
                 <button
+                  type="button"
                   onClick={() => toggleLike(post.id)}
-                  className={`flex items-center gap-1.5 transition-colors ${
-                    hasLiked[post.id] ? 'text-[#EB0F51] font-bold' : 'hover:text-[#EB0F51]'
+                  className={`flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    hasLiked[post.id] ? 'text-[#e1146c] font-bold' : 'hover:text-[#e1146c]'
                   }`}
                 >
                   <Heart
                     className={`w-3.5 h-3.5 ${
-                      hasLiked[post.id] ? 'fill-[#EB0F51]' : ''
+                      hasLiked[post.id] ? 'fill-[#e1146c]' : ''
                     }`}
                   />
                   <span>{likes[post.id]} Yêu thích</span>
@@ -136,27 +187,38 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
           ))}
         </div>
 
-        {/* Input box */}
-        <div className="p-4 border-t border-pink-100 bg-white flex gap-2">
-          <input
-            type="text"
-            placeholder="Chia sẻ cảm nhận làm đẹp của bạn..."
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            className="flex-1 px-4 py-2 text-xs rounded-full border border-pink-200 focus:outline-none focus:border-[#EB0F51]"
-          />
-          <button
-            onClick={() => {
-              if (newComment.trim()) {
-                alert('Cảm ơn bạn! Đánh giá đã được gửi duyệt thành công.');
-                setNewComment('');
-              }
-            }}
-            className="px-4 py-2 rounded-full bg-[#EB0F51] text-white text-xs font-bold flex items-center gap-1 hover:opacity-90"
-          >
-            <Send className="w-3 h-3" />
-            <span>Đăng</span>
-          </button>
+        {/* Input & Footer Action Bar */}
+        <div className="p-3.5 sm:p-4 border-t border-pink-100 bg-white flex flex-col gap-2 shrink-0">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Chia sẻ cảm nhận làm đẹp của bạn..."
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handlePostComment();
+              }}
+              className="flex-1 px-4 py-2 text-xs rounded-full border border-pink-200 focus:outline-none focus:border-[#e1146c] focus:ring-2 focus:ring-pink-100"
+            />
+            <button
+              type="button"
+              onClick={handlePostComment}
+              className="px-4 py-2 rounded-full bg-[#e1146c] text-white text-xs font-bold flex items-center gap-1.5 hover:bg-[#be185d] transition cursor-pointer shadow-sm active:scale-95"
+            >
+              <Send className="w-3 h-3" />
+              <span>Đăng</span>
+            </button>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs text-slate-500 hover:text-slate-800 font-semibold px-3 py-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+            >
+              Đóng cửa sổ
+            </button>
+          </div>
         </div>
       </div>
     </div>

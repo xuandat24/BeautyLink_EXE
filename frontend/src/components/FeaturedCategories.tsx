@@ -1,116 +1,281 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, LoaderCircle, Sparkles } from 'lucide-react';
-import { getCategoryShortcuts, popularBeautyNeeds } from '../data/categoryCatalog';
-import { platformApi } from '../services/platformApi';
-import type { ServiceCategory } from '../types';
-import { localizedCategoryName, localizedContent, useLanguage } from '../lib/language';
+import React, { useRef, useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { BackendCategory } from '../types';
+import { beautyApi } from '../services/beautyApi';
+import { OptimizedImage } from './OptimizedImage';
 
-interface FeaturedCategoriesProps {
-  onSelectCategory: (category: ServiceCategory) => void;
+export interface FeaturedCategoriesProps {
+  onSelectCategory: (category: BackendCategory) => void;
+  activeCategorySlug?: string | null;
 }
 
-const fallback: ServiceCategory[] = [
-  { id: 1, slug: 'makeup', name: 'Trang điểm', description: 'Cá nhân, cô dâu và sự kiện', imageUrl: 'https://images.unsplash.com/photo-1487412912498-0447578fcca8?auto=format&fit=crop&w=800&q=85' },
-  { id: 2, slug: 'hair', name: 'Làm tóc', description: 'Cắt, nhuộm và tạo kiểu', imageUrl: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&w=800&q=85' },
-  { id: 3, slug: 'spa', name: 'Spa & Massage', description: 'Thư giãn và phục hồi', imageUrl: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=85' },
-  { id: 4, slug: 'nails', name: 'Nail', description: 'Chăm sóc và thiết kế móng', imageUrl: 'https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&w=800&q=85' },
-  { id: 5, slug: 'skincare', name: 'Chăm sóc da', description: 'Liệu trình cá nhân hóa', imageUrl: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=800&q=85' },
+interface CircleCategoryItem {
+  id: string | number;
+  name: string;
+  image: string;
+  slug: string;
+}
+
+const FEATURED_CIRCLE_ITEMS: CircleCategoryItem[] = [
+  // Hàng 1
+  {
+    id: 'mat-ham',
+    name: 'Thẩm Mỹ Mặt - Hàm',
+    image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=260&q=80',
+    slug: 'skincare',
+  },
+  {
+    id: 'phun-xam',
+    name: 'Phun Xăm',
+    image: 'https://images.unsplash.com/photo-1512290900672-1f4a47890453?auto=format&fit=crop&w=260&q=80',
+    slug: 'makeup',
+  },
+  {
+    id: 'tri-lieu-da',
+    name: 'Trị Liệu Da',
+    image: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=260&q=80',
+    slug: 'skincare',
+  },
+  {
+    id: 'tham-my-mat',
+    name: 'Thẩm Mỹ Mắt',
+    image: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=260&q=80',
+    slug: 'makeup',
+  },
+  {
+    id: 'tham-my-nguc',
+    name: 'Thẩm Mỹ Ngực',
+    image: 'https://images.unsplash.com/photo-1519823551278-64ac92734fb1?auto=format&fit=crop&w=260&q=80',
+    slug: 'spa',
+  },
+  {
+    id: 'cham-soc-co-the',
+    name: 'Chăm Sóc Cơ Thể',
+    image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=260&q=80',
+    slug: 'spa',
+  },
+  {
+    id: 'cham-soc-da-mat',
+    name: 'Chăm Sóc Da Mặt',
+    image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=260&q=80',
+    slug: 'skincare',
+  },
+  {
+    id: 'trang-da',
+    name: 'Trắng Da',
+    image: 'https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=260&q=80',
+    slug: 'skincare',
+  },
+
+  // Hàng 2
+  {
+    id: 'khong-xam-lan',
+    name: 'Thẩm Mỹ Viện Không Xâm Lấn',
+    image: 'https://images.unsplash.com/photo-1487412912498-0447578fcca8?auto=format&fit=crop&w=260&q=80',
+    slug: 'skincare',
+  },
+  {
+    id: 'giam-beo',
+    name: 'Giảm Béo',
+    image: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=260&q=80',
+    slug: 'spa',
+  },
+  {
+    id: 'tai-tao-da',
+    name: 'Tái Tạo Da',
+    image: 'https://images.unsplash.com/photo-1506152983158-b4a74a01c721?auto=format&fit=crop&w=260&q=80',
+    slug: 'skincare',
+  },
+  {
+    id: 'tao-kieu-toc',
+    name: 'Tạo Kiểu Tóc',
+    image: 'https://images.unsplash.com/photo-1560869713-7d0a29430803?auto=format&fit=crop&w=260&q=80',
+    slug: 'hair',
+  },
+  {
+    id: 'uon-duoi-nhuom',
+    name: 'Uốn - Duỗi - Nhuộm',
+    image: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&w=260&q=80',
+    slug: 'hair',
+  },
+  {
+    id: 'cham-soc-toc',
+    name: 'Chăm Sóc Tóc',
+    image: 'https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&w=260&q=80',
+    slug: 'hair',
+  },
+  {
+    id: 'nail-nghe-thuat',
+    name: 'Nail & Móng Đẹp',
+    image: 'https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&w=260&q=80',
+    slug: 'nails',
+  },
+  {
+    id: 'noi-mi-thiet-ke',
+    name: 'Nối Mi Thiết Kế',
+    image: 'https://images.unsplash.com/photo-1583001931096-959e9a1a6223?auto=format&fit=crop&w=260&q=80',
+    slug: 'nails',
+  },
 ];
 
-export const FeaturedCategories: React.FC<FeaturedCategoriesProps> = React.memo(({ onSelectCategory }) => {
-  const { language, text } = useLanguage();
-  const [categories, setCategories] = useState<ServiceCategory[]>([]);
-  const [activeSlug, setActiveSlug] = useState('');
-  const [loading, setLoading] = useState(true);
+export const FeaturedCategories: React.FC<FeaturedCategoriesProps> = React.memo(
+  ({ onSelectCategory }) => {
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const [backendCategories, setBackendCategories] = useState<BackendCategory[]>([]);
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+    const [canScrollRight, setCanScrollRight] = useState(true);
 
-  useEffect(() => {
-    platformApi.categories()
-      .then((items) => setCategories(items.length ? items : fallback))
-      .catch(() => setCategories(fallback))
-      .finally(() => setLoading(false));
-  }, []);
+    useEffect(() => {
+      beautyApi
+        .categories()
+        .then((data) => {
+          if (data && data.length > 0) {
+            setBackendCategories(data);
+          }
+        })
+        .catch(() => {});
+    }, []);
 
-  useEffect(() => {
-    if (!activeSlug && categories.length) setActiveSlug(categories[0].slug);
-  }, [activeSlug, categories]);
+    const updateScrollButtons = () => {
+      if (!scrollContainerRef.current) return;
+      const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
+      setCanScrollLeft(scrollLeft > 20);
+      setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 20);
+    };
 
-  const activeCategory = useMemo(
-    () => categories.find((category) => category.slug === activeSlug) || categories[0],
-    [activeSlug, categories],
-  );
+    const handleScroll = (direction: 'left' | 'right') => {
+      if (!scrollContainerRef.current) return;
+      const scrollAmount = 400;
+      scrollContainerRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth',
+      });
+    };
 
-  const openActiveCategory = () => {
-    if (activeCategory) onSelectCategory(activeCategory);
-  };
+    const handleItemClick = (item: CircleCategoryItem) => {
+      // Find matching backend category by slug
+      const matched = backendCategories.find((c) => c.slug === item.slug);
+      if (matched) {
+        onSelectCategory(matched);
+      } else {
+        // Fallback category representation
+        onSelectCategory({
+          id: typeof item.id === 'number' ? item.id : 1,
+          slug: item.slug,
+          name: item.name,
+          description: `Dịch vụ ${item.name} uy tín, chất lượng cao`,
+          imageUrl: item.image,
+        });
+      }
+    };
 
-  return (
-    <section id="categories" className="mx-auto max-w-7xl scroll-mt-32 px-4 py-10 sm:px-6">
-      <div className="mb-6 flex items-end justify-between gap-4">
-        <div>
-          <p className="mb-2 flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.2em] text-[#EB0F51]">
-            <Sparkles className="h-4 w-4" /> {text('Chọn theo nhu cầu', 'Browse by need')}
-          </p>
-          <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{text('Hôm nay bạn muốn làm đẹp gì?', 'What beauty service do you need today?')}</h2>
-          <p className="mt-2 text-sm text-slate-500">{text('Chọn một nhóm dịch vụ để tìm đúng chuyên gia nhanh hơn.', 'Choose a category to find the right professional faster.')}</p>
-        </div>
-      </div>
+    // Split items into 2 rows (8 items per row)
+    const row1 = FEATURED_CIRCLE_ITEMS.slice(0, 8);
+    const row2 = FEATURED_CIRCLE_ITEMS.slice(8, 16);
 
-      {loading ? (
-        <div className="grid h-64 place-items-center rounded-[2rem] border border-pink-100 bg-white">
-          <LoaderCircle className="h-7 w-7 animate-spin text-[#EB0F51]" />
-        </div>
-      ) : activeCategory ? (
-        <div className="overflow-hidden rounded-[2rem] border border-pink-100 bg-white shadow-[0_20px_60px_-35px_rgba(180,45,88,0.35)]">
-          <div className="grid lg:grid-cols-[280px_1fr]">
-            <button type="button" onClick={openActiveCategory} className="group relative min-h-56 overflow-hidden text-left lg:min-h-[330px]">
-              <img src={activeCategory.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105" />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-[#B42D58]/35 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 p-6 text-white">
-                <span className="mb-3 inline-flex rounded-full bg-white/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md">{text('Gợi ý cho bạn', 'Recommended for you')}</span>
-                <h3 className="text-2xl font-black">{localizedCategoryName(activeCategory.slug, activeCategory.name, language)}</h3>
-                <p className="mt-1 text-sm text-white/80">{language === 'vi' ? activeCategory.description : 'Services tailored to your beauty needs'}</p>
-                <span className="mt-4 inline-flex items-center gap-2 text-sm font-extrabold">{text('Khám phá ngay', 'Explore now')} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" /></span>
-              </div>
+    return (
+      <section
+        id="categories"
+        className="mx-auto max-w-7xl px-4 sm:px-6 py-3.5 sm:py-4 bg-white rounded-2xl sm:rounded-3xl shadow-xs border border-pink-100/80 my-2 sm:my-3 relative"
+      >
+        {/* Header Title */}
+        <div className="flex items-center justify-between mb-3 sm:mb-3.5">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+            Danh mục nổi bật
+          </h2>
+
+          {/* Arrow navigation buttons */}
+          <div className="hidden sm:flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => handleScroll('left')}
+              disabled={!canScrollLeft}
+              className={`w-7 h-7 rounded-full border border-slate-200 flex items-center justify-center transition-all ${
+                canScrollLeft
+                  ? 'bg-white text-slate-700 hover:bg-pink-50 hover:border-pink-300 hover:text-[#EB0F51] shadow-xs cursor-pointer'
+                  : 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+              }`}
+              aria-label="Cuộn sang trái"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
             </button>
+            <button
+              type="button"
+              onClick={() => handleScroll('right')}
+              disabled={!canScrollRight}
+              className={`w-7 h-7 rounded-full border border-slate-200 flex items-center justify-center transition-all ${
+                canScrollRight
+                  ? 'bg-white text-slate-700 hover:bg-pink-50 hover:border-pink-300 hover:text-[#EB0F51] shadow-xs cursor-pointer'
+                  : 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+              }`}
+              aria-label="Cuộn sang phải"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
 
-            <div className="min-w-0 p-4 sm:p-6">
-              <div className="flex gap-1 overflow-x-auto border-b border-slate-100 pb-px [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {categories.map((category) => {
-                  const isActive = category.slug === activeCategory.slug;
-                  return (
-                    <button key={category.slug} type="button" onClick={() => setActiveSlug(category.slug)} className={`relative shrink-0 px-4 py-3 text-sm font-extrabold transition sm:flex-1 ${isActive ? 'text-[#EB0F51]' : 'text-slate-600 hover:text-[#B42D58]'}`} aria-pressed={isActive}>
-                      {localizedCategoryName(category.slug, category.name, language)}
-                      <span className={`absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#EB0F51] transition-transform ${isActive ? 'scale-x-100' : 'scale-x-0'}`} />
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
-                {getCategoryShortcuts(activeCategory.slug).map((item) => (
-                  <button key={item.label} type="button" onClick={openActiveCategory} className="group rounded-2xl border border-slate-100 bg-slate-50 p-3 text-left transition hover:-translate-y-0.5 hover:border-pink-200 hover:bg-pink-50 hover:shadow-md">
-                    <span className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-white text-xl shadow-sm transition group-hover:scale-105">{item.icon}</span>
-                    <span className="block text-sm font-extrabold text-slate-800">{localizedContent(item.label, language)}</span>
-                    <span className="mt-1 block text-[11px] leading-4 text-slate-500">{localizedContent(item.caption, language)}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-                <span className="mr-1 text-xs font-bold text-slate-400">{text('Phổ biến:', 'Popular:')}</span>
-                {popularBeautyNeeds.map((need) => (
-                  <button key={need} type="button" onClick={openActiveCategory} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-pink-300 hover:bg-pink-50 hover:text-[#B42D58]">{localizedContent(need, language)}</button>
-                ))}
-                <button type="button" onClick={openActiveCategory} className="ml-auto inline-flex items-center gap-1 px-2 py-1.5 text-xs font-black text-[#EB0F51] hover:text-[#B42D58]">
-                  {text('Xem tất cả', 'View all')} <ArrowRight className="h-3.5 w-3.5" />
+        {/* Scrollable Container with 2 Rows of Circles */}
+        <div
+          ref={scrollContainerRef}
+          onScroll={updateScrollButtons}
+          className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1"
+        >
+          <div className="min-w-[760px] space-y-3 sm:space-y-3.5">
+            {/* Row 1 */}
+            <div className="grid grid-cols-8 gap-2 sm:gap-3">
+              {row1.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleItemClick(item)}
+                  className="group flex flex-col items-center text-center p-1 cursor-pointer transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none active:scale-95"
+                >
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-slate-100 p-0.5 border-2 border-pink-100/70 group-hover:border-[#EB0F51] shadow-xs group-hover:shadow-lg group-hover:shadow-pink-500/25 transition-all duration-300 ease-out transform group-hover:scale-110 mb-1.5">
+                    <OptimizedImage
+                      src={item.image}
+                      alt={item.name}
+                      preset="category-thumb"
+                      className="w-full h-full object-cover rounded-full transition-transform duration-500 ease-out group-hover:scale-110"
+                      containerClassName="w-full h-full rounded-full"
+                    />
+                  </div>
+                  <span className="text-[11px] sm:text-xs font-medium text-slate-800 group-hover:text-[#EB0F51] transition-colors duration-200 leading-tight max-w-[85px] line-clamp-2 text-center group-hover:font-bold">
+                    {item.name}
+                  </span>
                 </button>
-              </div>
+              ))}
+            </div>
+
+            {/* Row 2 */}
+            <div className="grid grid-cols-8 gap-2 sm:gap-3">
+              {row2.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleItemClick(item)}
+                  className="group flex flex-col items-center text-center p-1 cursor-pointer transition-all duration-300 ease-out hover:-translate-y-1 focus:outline-none active:scale-95"
+                >
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-slate-100 p-0.5 border-2 border-pink-100/70 group-hover:border-[#EB0F51] shadow-xs group-hover:shadow-lg group-hover:shadow-pink-500/25 transition-all duration-300 ease-out transform group-hover:scale-110 mb-1.5">
+                    <OptimizedImage
+                      src={item.image}
+                      alt={item.name}
+                      preset="category-thumb"
+                      className="w-full h-full object-cover rounded-full transition-transform duration-500 ease-out group-hover:scale-110"
+                      containerClassName="w-full h-full rounded-full"
+                    />
+                  </div>
+                  <span className="text-[11px] sm:text-xs font-medium text-slate-800 group-hover:text-[#EB0F51] transition-colors duration-200 leading-tight max-w-[85px] line-clamp-2 text-center group-hover:font-bold">
+                    {item.name}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
-      ) : null}
-    </section>
-  );
-});
+      </section>
+    );
+  }
+);
 
 FeaturedCategories.displayName = 'FeaturedCategories';

@@ -20,6 +20,7 @@ import {
   KeyRound,
   Heart,
 } from 'lucide-react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -78,7 +79,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   }, [otpCountdown]);
 
-  if (!isOpen) return null;
+  // Lock body scroll when modal is open
+  useBodyScrollLock(isOpen);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Password strength calculation
   const getPasswordStrength = (pass: string) => {
@@ -225,19 +237,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }, 500);
   };
 
+  if (!isOpen) return null;
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/65 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
-      onClick={onClose}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
     >
+      {/* Blurred & Dimmed Backdrop */}
       <div
-        className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden flex flex-col md:flex-row my-auto transition-all"
+        className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-200 cursor-pointer"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Pristine Modal Card */}
+      <div
+        className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden flex flex-col md:flex-row transition-all animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* =========================================================================
             LEFT PANEL: Branding, Member Privileges & Visual Inspiration (Desktop)
         ========================================================================= */}
-        <div className="hidden md:flex md:w-5/12 bg-gradient-to-br from-[#831843] via-[#B42D58] to-[#EB0F51] text-white p-8 flex-col justify-between relative overflow-hidden shrink-0">
+        <div className="hidden md:flex md:w-5/12 bg-gradient-to-br from-[#831843] via-[#be185d] to-[#e1146c] text-white p-8 flex-col justify-between relative overflow-hidden shrink-0">
           {/* Ambient Background Accents */}
           <div className="absolute -right-16 -top-16 w-56 h-56 rounded-full bg-white/10 blur-2xl pointer-events-none" />
           <div className="absolute -left-16 -bottom-16 w-56 h-56 rounded-full bg-pink-400/20 blur-2xl pointer-events-none" />
@@ -250,7 +273,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-10 h-10 rounded-2xl bg-white text-[#EB0F51] flex items-center justify-center font-black text-xl shadow-lg shadow-black/15">
+              <div className="w-10 h-10 rounded-2xl bg-white text-[#e1146c] flex items-center justify-center font-black text-xl shadow-lg shadow-black/15">
                 B
               </div>
               <div className="flex flex-col">
@@ -337,7 +360,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Đóng cửa sổ"
-            className="absolute right-4 top-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-pink-100 text-slate-500 hover:text-[#EB0F51] flex items-center justify-center transition-all cursor-pointer z-20"
+            className="absolute right-4 top-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-pink-100 text-slate-500 hover:text-[#e1146c] flex items-center justify-center transition-all cursor-pointer z-20"
           >
             <X className="w-5 h-5" />
           </button>
@@ -369,7 +392,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     }}
                     className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       mode === 'login'
-                        ? 'bg-white text-[#B42D58] shadow-sm font-extrabold'
+                        ? 'bg-white text-[#be185d] shadow-sm font-extrabold'
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
@@ -384,12 +407,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     }}
                     className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
                       mode === 'register'
-                        ? 'bg-white text-[#B42D58] shadow-sm font-extrabold'
+                        ? 'bg-white text-[#be185d] shadow-sm font-extrabold'
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
                     <span>Đăng ký mới</span>
-                    <span className="w-2 h-2 rounded-full bg-[#EB0F51]" />
+                    <span className="w-2 h-2 rounded-full bg-[#e1146c]" />
                   </button>
                 </div>
               </div>
@@ -403,7 +426,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setErrorMsg(null);
                     setSuccessMsg(null);
                   }}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-[#B42D58] hover:underline mb-2 cursor-pointer"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-[#be185d] hover:underline mb-2 cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Quay lại Đăng nhập</span>
@@ -448,7 +471,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     onClick={() => setLoginMethod('password')}
                     className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                       loginMethod === 'password'
-                        ? 'bg-pink-100 text-[#B42D58]'
+                        ? 'bg-pink-100 text-[#be185d]'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
@@ -459,7 +482,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     onClick={() => setLoginMethod('otp')}
                     className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 ${
                       loginMethod === 'otp'
-                        ? 'bg-pink-100 text-[#B42D58]'
+                        ? 'bg-pink-100 text-[#be185d]'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
@@ -480,7 +503,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       placeholder="09xx xxx xxx hoặc email@domain.com"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
+                      className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
                     />
                     <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   </div>
@@ -497,7 +520,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           setMode('forgot');
                           setForgotStep(1);
                         }}
-                        className="text-[11px] font-bold text-[#B42D58] hover:underline cursor-pointer"
+                        className="text-[11px] font-bold text-[#be185d] hover:underline cursor-pointer"
                       >
                         Quên mật khẩu?
                       </button>
@@ -509,7 +532,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         placeholder="••••••••"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full pl-10 pr-10 py-2.5 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
+                        className="w-full pl-10 pr-10 py-2.5 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
                       />
                       <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                       <button
@@ -537,7 +560,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           placeholder="Nhập 6 số (VD: 888999)"
                           value={otpCode}
                           onChange={(e) => setOtpCode(e.target.value)}
-                          className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm tracking-widest font-mono rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51] focus:ring-2 focus:ring-pink-100 transition-all"
+                          className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm tracking-widest font-mono rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c] focus:ring-2 focus:ring-pink-100 transition-all"
                         />
                         <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                       </div>
@@ -545,7 +568,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         type="button"
                         onClick={handleSendOtp}
                         disabled={otpCountdown > 0}
-                        className="px-3.5 py-2.5 rounded-2xl bg-pink-50 hover:bg-pink-100 text-[#B42D58] border border-pink-200 text-xs font-bold whitespace-nowrap transition-colors disabled:opacity-50 cursor-pointer"
+                        className="px-3.5 py-2.5 rounded-2xl bg-pink-50 hover:bg-pink-100 text-[#be185d] border border-pink-200 text-xs font-bold whitespace-nowrap transition-colors disabled:opacity-50 cursor-pointer"
                       >
                         {otpCountdown > 0 ? `Gửi lại (${otpCountdown}s)` : 'Gửi mã OTP'}
                       </button>
@@ -560,7 +583,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded text-[#EB0F51] focus:ring-pink-400 accent-[#EB0F51] cursor-pointer"
+                      className="w-4 h-4 rounded text-[#e1146c] focus:ring-pink-400 accent-[#e1146c] cursor-pointer"
                     />
                     <span>Ghi nhớ đăng nhập trên thiết bị này</span>
                   </label>
@@ -570,7 +593,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] hover:from-[#B42D58] hover:to-[#B42D58] text-white text-xs sm:text-sm font-bold shadow-md shadow-pink-600/30 hover:shadow-pink-600/40 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-70 mt-3"
+                  className="w-full py-3 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] hover:from-[#c2185b] hover:to-[#9d174d] text-white text-xs sm:text-sm font-bold shadow-md shadow-pink-600/30 hover:shadow-pink-600/40 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-70 mt-3"
                 >
                   {isLoading ? (
                     <>
@@ -590,10 +613,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <button
                     type="button"
                     onClick={handleQuickDemoLogin}
-                    className="w-full py-2 px-3 rounded-2xl bg-pink-50/80 hover:bg-pink-100/80 border border-pink-200 text-xs font-bold text-[#B42D58] transition-all flex items-center justify-center gap-2 cursor-pointer group shadow-xs"
+                    className="w-full py-2 px-3 rounded-2xl bg-pink-50/80 hover:bg-pink-100/80 border border-pink-200 text-xs font-bold text-[#be185d] transition-all flex items-center justify-center gap-2 cursor-pointer group shadow-xs"
                     title="Bấm để đăng nhập thử nghiệm ngay với tài khoản mẫu"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-[#EB0F51] group-hover:scale-110 transition-transform" />
+                    <Sparkles className="w-3.5 h-3.5 text-[#e1146c] group-hover:scale-110 transition-transform" />
                     <span>Đăng nhập thử: Hội viên VIP Phương Thảo</span>
                   </button>
                 </div>
@@ -606,10 +629,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {mode === 'register' && (
               <form onSubmit={handleSubmit} className="space-y-3">
                 {/* Welcome Perk Pill */}
-                <div className="bg-pink-50/90 border border-pink-200/80 rounded-2xl p-2.5 flex items-center gap-2.5 text-xs text-[#B42D58]">
-                  <Gift className="w-4 h-4 text-[#EB0F51] shrink-0" />
+                <div className="bg-pink-50/90 border border-pink-200/80 rounded-2xl p-2.5 flex items-center gap-2.5 text-xs text-[#be185d]">
+                  <Gift className="w-4 h-4 text-[#e1146c] shrink-0" />
                   <span className="font-semibold">
-                    Đăng ký hôm nay: Tặng ngay voucher <strong className="font-black text-[#EB0F51]">100K</strong> & Miễn phí soi da 3D!
+                    Đăng ký hôm nay: Tặng ngay voucher <strong className="font-black text-[#e1146c]">100K</strong> & Miễn phí soi da 3D!
                   </span>
                 </div>
 
@@ -625,7 +648,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       placeholder="Ví dụ: Nguyễn Phương Thảo"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
+                      className="w-full pl-10 pr-3.5 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
                     />
                     <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   </div>
@@ -645,7 +668,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         placeholder="09xx xxx xxx"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="w-full pl-10 pr-3.5 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
+                        className="w-full pl-10 pr-3.5 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
                       />
                       <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     </div>
@@ -662,7 +685,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         onClick={() => setGender('female')}
                         className={`flex-1 h-full rounded-xl transition-all ${
                           gender === 'female'
-                            ? 'bg-white text-[#B42D58] font-bold shadow-xs'
+                            ? 'bg-white text-[#be185d] font-bold shadow-xs'
                             : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
@@ -673,7 +696,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         onClick={() => setGender('male')}
                         className={`flex-1 h-full rounded-xl transition-all ${
                           gender === 'male'
-                            ? 'bg-white text-[#B42D58] font-bold shadow-xs'
+                            ? 'bg-white text-[#be185d] font-bold shadow-xs'
                             : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
@@ -684,7 +707,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         onClick={() => setGender('other')}
                         className={`flex-1 h-full rounded-xl transition-all ${
                           gender === 'other'
-                            ? 'bg-white text-[#B42D58] font-bold shadow-xs'
+                            ? 'bg-white text-[#be185d] font-bold shadow-xs'
                             : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
@@ -705,7 +728,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       placeholder="ban@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
+                      className="w-full pl-10 pr-3.5 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
                     />
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   </div>
@@ -723,7 +746,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       placeholder="Ít nhất 6 ký tự..."
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-10 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
+                      className="w-full pl-10 pr-10 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
                     />
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <button
@@ -777,7 +800,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       placeholder="Xác nhận mật khẩu giống ở trên..."
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full pl-10 pr-10 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
+                      className="w-full pl-10 pr-10 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c] focus:ring-2 focus:ring-pink-100 transition-all font-medium"
                     />
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <button
@@ -800,7 +823,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     placeholder="Nhập mã nếu có (VD: PINKFRIEND)"
                     value={referralCode}
                     onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                    className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51] uppercase font-mono"
+                    className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c] uppercase font-mono"
                   />
                 </div>
 
@@ -811,15 +834,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type="checkbox"
                       checked={agreeTerms}
                       onChange={(e) => setAgreeTerms(e.target.checked)}
-                      className="w-4 h-4 rounded text-[#EB0F51] focus:ring-pink-400 accent-[#EB0F51] cursor-pointer mt-0.5"
+                      className="w-4 h-4 rounded text-[#e1146c] focus:ring-pink-400 accent-[#e1146c] cursor-pointer mt-0.5"
                     />
                     <span>
                       Tôi đồng ý với{' '}
-                      <a href="#" className="text-[#B42D58] font-bold hover:underline">
+                      <a href="#" className="text-[#be185d] font-bold hover:underline">
                         Điều khoản dịch vụ
                       </a>{' '}
                       và{' '}
-                      <a href="#" className="text-[#B42D58] font-bold hover:underline">
+                      <a href="#" className="text-[#be185d] font-bold hover:underline">
                         Chính sách bảo mật
                       </a>{' '}
                       của BeautyPink.
@@ -831,7 +854,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] hover:from-[#B42D58] hover:to-[#B42D58] text-white text-xs sm:text-sm font-bold shadow-md shadow-pink-600/30 hover:shadow-pink-600/40 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-70 mt-2"
+                  className="w-full py-3 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] hover:from-[#c2185b] hover:to-[#9d174d] text-white text-xs sm:text-sm font-bold shadow-md shadow-pink-600/30 hover:shadow-pink-600/40 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-70 mt-2"
                 >
                   {isLoading ? (
                     <>
@@ -855,9 +878,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Step indicators */}
                 <div className="flex items-center justify-between gap-2 mb-4">
-                  <div className={`flex-1 h-1.5 rounded-full ${forgotStep >= 1 ? 'bg-[#EB0F51]' : 'bg-slate-200'}`} />
-                  <div className={`flex-1 h-1.5 rounded-full ${forgotStep >= 2 ? 'bg-[#EB0F51]' : 'bg-slate-200'}`} />
-                  <div className={`flex-1 h-1.5 rounded-full ${forgotStep >= 3 ? 'bg-[#EB0F51]' : 'bg-slate-200'}`} />
+                  <div className={`flex-1 h-1.5 rounded-full ${forgotStep >= 1 ? 'bg-[#e1146c]' : 'bg-slate-200'}`} />
+                  <div className={`flex-1 h-1.5 rounded-full ${forgotStep >= 2 ? 'bg-[#e1146c]' : 'bg-slate-200'}`} />
+                  <div className={`flex-1 h-1.5 rounded-full ${forgotStep >= 3 ? 'bg-[#e1146c]' : 'bg-slate-200'}`} />
                 </div>
 
                 {forgotStep === 1 && (
@@ -872,7 +895,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         placeholder="Nhập số điện thoại đã đăng ký..."
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51] font-medium"
+                        className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c] font-medium"
                       />
                       <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     </div>
@@ -896,7 +919,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           placeholder="VD: 888999"
                           value={otpCode}
                           onChange={(e) => setOtpCode(e.target.value)}
-                          className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm tracking-widest font-mono rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51]"
+                          className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm tracking-widest font-mono rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c]"
                         />
                         <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                       </div>
@@ -904,7 +927,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         type="button"
                         onClick={handleSendOtp}
                         disabled={otpCountdown > 0}
-                        className="px-3 py-2 rounded-2xl bg-pink-50 text-[#B42D58] border border-pink-200 text-xs font-bold disabled:opacity-50"
+                        className="px-3 py-2 rounded-2xl bg-pink-50 text-[#be185d] border border-pink-200 text-xs font-bold disabled:opacity-50"
                       >
                         {otpCountdown > 0 ? `(${otpCountdown}s)` : 'Gửi lại'}
                       </button>
@@ -924,7 +947,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         placeholder="Nhập mật khẩu mới..."
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51]"
+                        className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c]"
                       />
                     </div>
                     <div>
@@ -937,7 +960,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         placeholder="Nhập lại mật khẩu mới..."
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#EB0F51]"
+                        className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-2xl border border-pink-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#e1146c]"
                       />
                     </div>
                   </div>
@@ -945,7 +968,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white text-xs sm:text-sm font-bold shadow-md shadow-pink-600/30 hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer mt-3"
+                  className="w-full py-3 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs sm:text-sm font-bold shadow-md shadow-pink-600/30 hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer mt-3"
                 >
                   <span>
                     {forgotStep === 1 && 'Tiếp tục nhận mã OTP'}
@@ -1034,7 +1057,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setMode('register');
                     setErrorMsg(null);
                   }}
-                  className="font-bold text-[#B42D58] hover:underline cursor-pointer"
+                  className="font-bold text-[#be185d] hover:underline cursor-pointer"
                 >
                   Đăng ký nhận quà 100K ngay
                 </button>
@@ -1048,7 +1071,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setMode('login');
                     setErrorMsg(null);
                   }}
-                  className="font-bold text-[#B42D58] hover:underline cursor-pointer"
+                  className="font-bold text-[#be185d] hover:underline cursor-pointer"
                 >
                   Đăng nhập tại đây
                 </button>

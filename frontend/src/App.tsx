@@ -6,99 +6,188 @@ import { HotDealsSection } from './components/HotDealsSection';
 import { NearYouSection } from './components/NearYouSection';
 import { CampaignBanners } from './components/CampaignBanners';
 import { NewPartnersSection } from './components/NewPartnersSection';
+import { CustomerReviewsSection } from './components/CustomerReviewsSection';
 import { WhyChooseUs } from './components/WhyChooseUs';
-import { PartnerBlogCTA } from './components/PartnerBlogCTA';
 import { Footer } from './components/Footer';
 
+// Pages
+import { CategoryServicePage } from './components/CategoryServicePage';
+import { SupplierDashboard } from './components/SupplierDashboard';
+import { SupplierRegisterPage } from './components/SupplierRegisterPage';
+import { BookingsPage } from './components/BookingsPage';
+import { ReportsPage } from './components/ReportsPage';
+import { AuthPage } from './components/AuthPage';
+import { AccountPage } from './components/AccountPage';
+import { CheckoutPage } from './components/CheckoutPage';
+import { FilterExplorePage, ExploreContext } from './components/FilterExplorePage';
+import { PartnerDetailPage } from './components/PartnerDetailPage';
+
 // Modals
+import { BookingModal } from './components/BookingModal';
 import { CartDrawer } from './components/CartDrawer';
 import { VoucherModal } from './components/VoucherModal';
 import { CommunityModal } from './components/CommunityModal';
 import { RewardsModal } from './components/RewardsModal';
-import { SupplierRegisterPage } from './components/SupplierRegisterPage';
 import { LocationSelectModal } from './components/LocationSelectModal';
 import { BlogModal } from './components/BlogModal';
 import { ViewAllServicesModal, ViewAllContext } from './components/ViewAllServicesModal';
-import { AuthPage } from './components/AuthPage';
-import { AccountPage } from './components/AccountPage';
-import { BookingDialog, ServicePage } from './components/ServicePage';
-import { SupplierSchedulePage } from './components/SupplierSchedulePage';
-import { MyBookingsPage } from './components/MyBookingsPage';
-import { StaffReportsPage } from './components/StaffReportsPage';
-import { ShopPage } from './components/ShopPage';
+import { FavoriteToast, FavoriteToastInfo } from './components/FavoriteToast';
 
-// Central Store & Types (Enterprise Modular Architecture)
+// Central Store & Types
 import { useBeautyStore } from './store/beautyStore';
 import {
   HotDeal,
   Salon,
   NewPartner,
+  BackendService,
+  BackendCategory,
   CurrentUser,
-  ServiceCategory,
-  BeautyService,
+  SearchFilters,
 } from './types';
+import { beautyApi, DEFAULT_CATEGORIES } from './services/beautyApi';
 import { updateMetaTags } from './lib/seo';
-import { useLanguage } from './lib/language';
-import { getBrowserCoordinates, getLocationFailureMessage } from './lib/geolocation';
-
-import { platformApi } from './services/platformApi';
 import { CheckCircle2 } from 'lucide-react';
 
-const logoFor = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
-const categoryForCard = (slug: string): Salon['category'] => ({ spa: 'spa', nails: 'nail', hair: 'salon-toc', skincare: 'clinic', makeup: 'tham-my-vien' }[slug] as Salon['category']) || 'spa';
-const districtFrom = (address: string) => address.match(/(Quận\s+[^,]+|Phú Nhuận|Bình Thạnh|Tân Bình|Thủ Đức)/i)?.[1] || 'TP. Hồ Chí Minh';
+// ==========================================
+// Data Transformation Helpers
+// ==========================================
+const getInitials = (str: string) =>
+  str
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0])
+    .join('')
+    .toUpperCase();
 
-type GeoPoint = { latitude: number; longitude: number };
-const distanceInKm = (from: GeoPoint, to: GeoPoint) => {
-  const radius = 6371;
-  const radians = (degrees: number) => degrees * Math.PI / 180;
-  const latitudeDelta = radians(to.latitude - from.latitude);
-  const longitudeDelta = radians(to.longitude - from.longitude);
-  const value = Math.sin(latitudeDelta / 2) ** 2
-    + Math.cos(radians(from.latitude)) * Math.cos(radians(to.latitude)) * Math.sin(longitudeDelta / 2) ** 2;
-  return radius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+const mapCategorySlug = (slug: string) => {
+  const map: Record<string, string> = {
+    spa: 'spa',
+    nails: 'nail',
+    hair: 'salon-toc',
+    skincare: 'clinic',
+    makeup: 'tham-my-vien',
+  };
+  return map[slug] || 'spa';
 };
 
-const toDeal = (service: BeautyService, index: number): HotDeal => ({
-  id: `service-${service.id}`, serviceId: service.id, supplierId: service.supplierId, title: service.name, brandName: service.supplierName,
-  brandLogo: logoFor(service.supplierName), image: service.imageUrl, originalPrice: service.originalPrice || service.price,
-  salePrice: service.price, discountPercent: service.originalPrice > service.price ? Math.round((1 - service.price / service.originalPrice) * 100) : 0,
-  isNew: index < 4, rating: service.rating, reviewsCount: service.serviceReviewCount,
-  duration: `${service.durationMinutes} phút`, category: categoryForCard(service.categorySlug),
-  highlightText: service.highlightText || service.description, distanceKm: 0.8 + (index % 7) * 0.6,
-  district: districtFrom(service.supplierAddress),
-});
-
-const toSalon = (service: BeautyService, index: number, userLocation: GeoPoint | null): Salon => {
-  const hasCoordinates = service.supplierLatitude != null && service.supplierLongitude != null;
-  const exactDistance = userLocation && hasCoordinates
-    ? distanceInKm(userLocation, { latitude: service.supplierLatitude!, longitude: service.supplierLongitude! })
-    : null;
-  return ({
-  id: `supplier-${service.supplierId}`, supplierId: service.supplierId, serviceId: service.id, name: service.supplierName,
-  category: categoryForCard(service.categorySlug), categoryLabel: service.supplierBusinessType,
-  address: service.supplierAddress, district: districtFrom(service.supplierAddress), distanceKm: exactDistance == null ? 0.8 + (index % 8) * 0.7 : Number(exactDistance.toFixed(1)),
-  rating: service.supplierRating, reviewsCount: service.supplierReviewCount, image: service.supplierImageUrl || service.imageUrl,
-  logo: logoFor(service.supplierName), badge: 'Đã xác minh',
-  isFeatured: true, minPrice: service.price, maxPrice: service.originalPrice || service.price,
-  hasExactDistance: exactDistance != null,
-  });
+const extractDistrict = (address: string) => {
+  const match = address.match(
+    /(Quận\s+[^,]+|Phú Nhuận|Bình Thạnh|Tân Bình|Thủ Đức|Cầu Giấy|Đống Đa|Ba Đình|Hoàn Kiếm|Hai Bà Trưng|Tây Hồ|Thanh Xuân|Nam Từ Liêm|Bắc Từ Liêm)/i
+  );
+  return match?.[1] || 'TP. Hồ Chí Minh';
 };
 
-const toNewPartner = (service: BeautyService): NewPartner => ({
-  id: `new-supplier-${service.supplierId}`, supplierId: service.supplierId, serviceId: service.id, name: service.supplierName,
-  subTitle: service.supplierBusinessType.toUpperCase(), address: service.supplierAddress,
-  image: service.supplierImageUrl || service.imageUrl, logo: logoFor(service.supplierName),
-  specialty: service.name, promoNotice: service.highlightText || 'Ưu đãi trải nghiệm dành cho khách hàng mới',
+const calculateDistanceKm = (
+  coord1: { latitude: number; longitude: number },
+  coord2: { latitude: number; longitude: number }
+) => {
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const dLat = toRad(coord2.latitude - coord1.latitude);
+  const dLon = toRad(coord2.longitude - coord1.longitude);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(coord1.latitude)) *
+      Math.cos(toRad(coord2.latitude)) *
+      Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const mapServiceToDeal = (item: BackendService, idx: number): HotDeal => ({
+  id: `service-${item.id}`,
+  serviceId: item.id,
+  title: item.name,
+  brandName: item.supplierName,
+  brandLogo: getInitials(item.supplierName),
+  image: item.imageUrl,
+  originalPrice: item.originalPrice || item.price,
+  salePrice: item.price,
+  discountPercent:
+    item.originalPrice && item.originalPrice > item.price
+      ? Math.round((1 - item.price / item.originalPrice) * 100)
+      : 0,
+  isNew: idx < 4,
+  rating: item.rating,
+  reviewsCount: item.supplierReviewCount,
+  duration: `${item.durationMinutes} phút`,
+  category: mapCategorySlug(item.categorySlug),
+  highlightText: item.highlightText || item.description || '',
+  distanceKm: 0.8 + (idx % 7) * 0.6,
+  district: extractDistrict(item.supplierAddress),
 });
+
+const mapServiceToSalon = (
+  item: BackendService,
+  idx: number,
+  userCoords: { latitude: number; longitude: number } | null
+): Salon => {
+  const hasCoords = item.supplierLatitude != null && item.supplierLongitude != null;
+  const calculatedDist =
+    userCoords && hasCoords
+      ? calculateDistanceKm(userCoords, {
+          latitude: item.supplierLatitude!,
+          longitude: item.supplierLongitude!,
+        })
+      : null;
+
+  return {
+    id: `supplier-${item.supplierId}`,
+    serviceId: item.id,
+    name: item.supplierName,
+    category: mapCategorySlug(item.categorySlug),
+    categoryLabel: item.supplierBusinessType,
+    address: item.supplierAddress,
+    district: extractDistrict(item.supplierAddress),
+    distanceKm:
+      calculatedDist != null
+        ? Number(calculatedDist.toFixed(1))
+        : 0.8 + (idx % 8) * 0.7,
+    rating: item.rating,
+    reviewsCount: item.supplierReviewCount,
+    image: item.supplierImageUrl || item.imageUrl,
+    logo: getInitials(item.supplierName),
+    badge: 'Đã xác minh',
+    isFeatured: true,
+    minPrice: item.price,
+    maxPrice: item.originalPrice || item.price,
+    hasExactDistance: calculatedDist != null,
+  };
+};
+
+const mapServiceToPartner = (item: BackendService): NewPartner => ({
+  id: `new-supplier-${item.supplierId}`,
+  serviceId: item.id,
+  name: item.supplierName,
+  subTitle: item.supplierBusinessType.toUpperCase(),
+  address: item.supplierAddress,
+  image: item.supplierImageUrl || item.imageUrl,
+  logo: getInitials(item.supplierName),
+  specialty: item.name,
+  promoNotice: 'Đối tác mới · Ưu đãi độc quyền',
+});
+
+type AppView =
+  | 'home'
+  | 'service'
+  | 'supplier-dashboard'
+  | 'supplier-register'
+  | 'bookings'
+  | 'reports'
+  | 'login'
+  | 'register'
+  | 'account'
+  | 'checkout'
+  | 'filter-explore'
+  | 'partner-detail';
 
 export default function App() {
-  const { language, text } = useLanguage();
-  // Use persistent store (instant F5 hydration, zero lag, state preserved)
   const {
     selectedCity,
     selectedLocationId,
     locationConfirmed,
+    selectedIntentCategory,
+    onboardingCompleted,
+    completeOnboarding,
     setSelectedLocation,
     cartItems,
     addToCart,
@@ -113,44 +202,82 @@ export default function App() {
     clearAllNotifications,
     soundEnabled,
     setSoundEnabled,
+    favorites,
+    toggleFavorite,
   } = useBeautyStore();
 
-  // Initialize SEO meta tags once
+  // Favorite Toast System
+  const [favoriteToast, setFavoriteToast] = useState<FavoriteToastInfo | null>(null);
+
+  const handleToggleFavoriteDeal = useCallback((deal: HotDeal) => {
+    const isNowFav = toggleFavorite(deal.id);
+    setFavoriteToast({
+      id: deal.id,
+      title: deal.title,
+      salonName: deal.brandName,
+      image: deal.image,
+      isFavorited: isNowFav,
+    });
+  }, [toggleFavorite]);
+
+  const handleToggleFavoriteSalon = useCallback((salon: Salon) => {
+    const isNowFav = toggleFavorite(salon.id);
+    setFavoriteToast({
+      id: salon.id,
+      title: salon.name,
+      salonName: salon.address,
+      image: salon.image,
+      isFavorited: isNowFav,
+    });
+  }, [toggleFavorite]);
+
   useEffect(() => {
     updateMetaTags();
   }, []);
 
-  // Modal open states
+  // Check if onboarding is required (not logged in and hasn't completed city + service selection)
+  const isVisitorOnboardingRequired = !currentUser && !onboardingCompleted;
+
+  // Modals state
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [isCommunityModalOpen, setIsCommunityModalOpen] = useState(false);
   const [isRewardsModalOpen, setIsRewardsModalOpen] = useState(false);
-  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(isVisitorOnboardingRequired);
   const [isBlogModalOpen, setIsBlogModalOpen] = useState(false);
-  const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
-  const [locationPermission, setLocationPermission] = useState<'idle' | 'loading' | 'ready' | 'denied'>('idle');
-  const [userLocationSource, setUserLocationSource] = useState<'device' | 'network' | null>(null);
 
+  // If visitor is not logged in and hasn't chosen city & service, keep selection modal open
   useEffect(() => {
-    const hasPreferredService = Boolean(localStorage.getItem('beautylink_preferred_category'));
-    const dismissedThisSession = sessionStorage.getItem('beautylink_discovery_prompt_dismissed') === 'true';
-    if ((!locationConfirmed || !hasPreferredService) && !dismissedThisSession) setIsLocationModalOpen(true);
-  }, [locationConfirmed]);
-  // Dedicated Page View Navigation ('home' | 'login' | 'register' | 'account')
-  // Allows Login/Register and Account/Logout to be standalone pages with zero background overlap
-  const [currentPage, setCurrentPage] = useState<'home' | 'login' | 'register' | 'supplier-register' | 'account' | 'service' | 'shop' | 'supplier-dashboard' | 'bookings' | 'reports'>('home');
-  const [selectedShopId, setSelectedShopId] = useState<number | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | null>(null);
-  const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
-  const [returnAfterAuth, setReturnAfterAuth] = useState<'home' | 'service' | 'shop' | 'bookings'>('home');
+    if (isVisitorOnboardingRequired) {
+      setIsLocationModalOpen(true);
+    }
+  }, [isVisitorOnboardingRequired]);
 
+  // Page Routing & Hash Navigation
+  const [currentPage, setCurrentPage] = useState<AppView>('home');
+  const [selectedCategory, setSelectedCategory] = useState<BackendCategory | null>(null);
+  const [serviceCategories, setServiceCategories] = useState<BackendCategory[]>([]);
+  const [returnTarget, setReturnTarget] = useState<string>('home');
+  const [selectedPartner, setSelectedPartner] = useState<NewPartner | null>(null);
+  const [filterExploreContext, setFilterExploreContext] = useState<ExploreContext>('all');
+  const [filterExploreCategory, setFilterExploreCategory] = useState<string>('all');
+  const [directCheckoutConfig, setDirectCheckoutConfig] = useState<{
+    service: BackendService;
+    preselectedDate?: string;
+    preselectedTime?: string;
+  } | null>(null);
+
+  // Load categories
   useEffect(() => {
-    platformApi.categories().then(setServiceCategories).catch(() => setServiceCategories([]));
+    beautyApi
+      .categories()
+      .then((data) => setServiceCategories(data))
+      .catch(() => setServiceCategories([]));
   }, []);
 
-  // Support URL hash routing (#login, #register, #account, #logout)
+  // Listen to hash changes
   useEffect(() => {
-    const handleHashChange = () => {
+    const handleHash = () => {
       const hash = window.location.hash.toLowerCase();
       if (hash === '#login') {
         setCurrentPage('login');
@@ -166,180 +293,169 @@ export default function App() {
         setCurrentPage('bookings');
       } else if (hash === '#reports') {
         setCurrentPage('reports');
-      } else if (/^#shop\/\d+$/.test(hash)) {
-        setSelectedShopId(Number(hash.split('/')[1]));
-        setCurrentPage('shop');
+      } else if (hash === '#checkout') {
+        setCurrentPage('checkout');
+      } else if (hash === '#filter-explore' || hash === '#filter' || hash === '#explore') {
+        setCurrentPage('filter-explore');
+      } else if (hash === '#partner-detail') {
+        setCurrentPage('partner-detail');
       } else if (!hash || hash === '#home') {
         setCurrentPage('home');
       }
     };
-    handleHashChange();
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+
+    handleHash();
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
-  const handleOpenAuth = (mode: 'login' | 'register', returnTo: 'home' | 'service' | 'shop' | 'bookings' = 'home') => {
-    setReturnAfterAuth(returnTo);
-    setCurrentPage(mode);
-    window.location.hash = mode;
+  const navigateTo = (view: AppView, fallbackReturn = 'home') => {
+    setReturnTarget(fallbackReturn);
+    setCurrentPage(view);
+    window.location.hash = view;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenAccount = () => {
     if (currentUser?.role === 'SUPPLIER') {
-      setCurrentPage('supplier-dashboard');
-      window.location.hash = 'supplier-dashboard';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      navigateTo('supplier-dashboard');
       return;
     }
     if (currentUser?.role === 'STAFF' || currentUser?.role === 'ADMIN') {
-      setCurrentPage('reports');
-      window.location.hash = 'reports';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      navigateTo('reports');
       return;
     }
-    setCurrentPage('account');
-    window.location.hash = 'account';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo('account');
   };
 
   const handleBackToHome = () => {
     setCurrentPage('home');
-    if (['#login', '#register', '#supplier-register', '#account', '#logout', '#schedule', '#supplier-dashboard', '#service', '#bookings', '#reports'].includes(window.location.hash) || window.location.hash.startsWith('#shop/')) {
+    const hashes = [
+      '#login',
+      '#register',
+      '#supplier-register',
+      '#account',
+      '#logout',
+      '#schedule',
+      '#supplier-dashboard',
+      '#service',
+      '#bookings',
+      '#reports',
+      '#checkout',
+      '#filter-explore',
+      '#filter',
+      '#explore',
+      '#partner-detail',
+    ];
+    if (hashes.includes(window.location.hash)) {
       window.history.replaceState(null, '', window.location.pathname);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Data loading state with Skeleton Effect support to avoid Layout Shift
-  const [isLoadingServices, setIsLoadingServices] = useState(true);
-  const [homepageServices, setHomepageServices] = useState<BeautyService[]>([]);
-
-  // Toast feedback
+  // Toast Notification System
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 2800);
+    setTimeout(() => setToastMessage(null), 2800);
   }, []);
 
-  const requestUserLocation = useCallback(async () => {
-    setLocationPermission('loading');
-    try {
-      const coordinates = await getBrowserCoordinates();
-      setUserLocation({ latitude: coordinates.latitude, longitude: coordinates.longitude });
-      setUserLocationSource(coordinates.source);
-      setLocationPermission('ready');
-      showToast(coordinates.source === 'device'
-        ? text('Đã sắp xếp cơ sở theo khoảng cách GPS từ bạn.', 'Providers are now sorted by your GPS distance.')
-        : text('GPS phản hồi chậm nên đang dùng vị trí gần đúng theo mạng.', 'GPS was slow, so an approximate network location is being used.'));
-    } catch (locationError) {
+  // Geolocation state
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationPermission, setLocationPermission] = useState<'idle' | 'loading' | 'ready' | 'denied'>('idle');
+
+  const handleEnableLocation = useCallback(() => {
+    if (!navigator.geolocation) {
       setLocationPermission('denied');
-      showToast(getLocationFailureMessage(locationError, language));
+      showToast('Trình duyệt không hỗ trợ định vị GPS.');
+      return;
     }
-  }, [language, showToast, text]);
+    setLocationPermission('loading');
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setUserCoords({ latitude: coords.latitude, longitude: coords.longitude });
+        setLocationPermission('ready');
+        showToast('Đã sắp xếp cơ sở theo khoảng cách thật từ bạn.');
+      },
+      () => {
+        setLocationPermission('denied');
+        showToast('Không thể lấy vị trí. Bạn có thể cấp quyền GPS rồi thử lại.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 120000 }
+    );
+  }, [showToast]);
+
+  // Load Homepage Services
+  const [loadingServices, setLoadingServices] = useState<boolean>(true);
+  const [rawServices, setRawServices] = useState<BackendService[]>([]);
 
   useEffect(() => {
-    let active = true;
-    setIsLoadingServices(true);
-    const load = async () => {
+    let isMounted = true;
+    setLoadingServices(true);
+
+    (async () => {
       try {
-        let result = await platformApi.homepageServices(selectedLocationId);
-        if (result.length === 0 && selectedLocationId) result = await platformApi.homepageServices();
-        if (active) setHomepageServices(result);
+        let list = await beautyApi.homepageServices(selectedLocationId || undefined);
+        if (list.length === 0 && selectedLocationId) {
+          list = await beautyApi.homepageServices();
+        }
+        if (isMounted) setRawServices(list);
       } catch {
-        if (active) { setHomepageServices([]); showToast('Không thể tải danh mục từ cơ sở dữ liệu.'); }
+        if (isMounted) {
+          setRawServices([]);
+          showToast('Không thể tải danh mục từ cơ sở dữ liệu.');
+        }
       } finally {
-        if (active) setIsLoadingServices(false);
+        if (isMounted) setLoadingServices(false);
       }
+    })();
+
+    return () => {
+      isMounted = false;
     };
-    void load();
-    return () => { active = false; };
   }, [selectedLocationId, showToast]);
 
-  const handleLoginSuccess = (user: CurrentUser, rememberSession = true) => {
-    setCurrentUser(user, rememberSession);
+  // Auth Callbacks
+  const handleUserSuccess = (user: CurrentUser) => {
+    setCurrentUser(user);
     if (user.role === 'SUPPLIER') {
-      setCurrentPage('supplier-dashboard');
-      window.location.hash = 'supplier-dashboard';
+      navigateTo('supplier-dashboard');
     } else if (user.role === 'STAFF' || user.role === 'ADMIN') {
-      setCurrentPage('reports');
-      window.location.hash = 'reports';
-    } else if (returnAfterAuth === 'bookings') {
-      setCurrentPage('bookings');
-      window.location.hash = 'bookings';
-    } else if (returnAfterAuth === 'service' && selectedCategory) {
-      setCurrentPage('service');
-      window.location.hash = 'service';
-    } else if (returnAfterAuth === 'shop' && selectedShopId) {
-      setCurrentPage('shop');
-      window.location.hash = `shop/${selectedShopId}`;
+      navigateTo('reports');
+    } else if (returnTarget === 'bookings') {
+      navigateTo('bookings');
+    } else if (returnTarget === 'service' && selectedCategory) {
+      navigateTo('service');
     } else {
       handleBackToHome();
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setReturnAfterAuth('home');
-    showToast(text(`🌸 Chào mừng ${user.name} đã đăng nhập thành công!`, `🌸 Welcome back, ${user.name}!`));
+    showToast(`🌸 Chào mừng ${user.name} đã đăng nhập thành công!`);
   };
 
-  const handleSupplierRegistrationSuccess = (user: CurrentUser) => {
+  const handleSupplierSuccess = (user: CurrentUser) => {
     setCurrentUser(user);
-    setCurrentPage('supplier-dashboard');
-    window.location.hash = 'supplier-dashboard';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo('supplier-dashboard');
     showToast('Đăng ký thành công. Hãy hoàn thiện đội ngũ và giờ làm việc của bạn.');
   };
 
-  const handleOpenSupplierRegistration = () => {
-    setCurrentPage('supplier-register');
-    window.location.hash = 'supplier-register';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleOpenBookings = () => {
+  const handleOpenAppointments = () => {
     if (!currentUser) {
-      handleOpenAuth('login', 'bookings');
+      navigateTo('login', 'bookings');
       return;
     }
-    setCurrentPage('bookings');
-    window.location.hash = 'bookings';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo('bookings');
   };
 
-  const handleOpenShop = useCallback((supplierId: number) => {
-    setSelectedShopId(supplierId);
-    setCurrentPage('shop');
-    window.location.hash = `shop/${supplierId}`;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  const handleImmediateLogout = () => {
+  const handleLogout = () => {
     logout();
-    setCurrentPage('home');
-    window.history.replaceState(null, '', window.location.pathname);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    handleBackToHome();
     showToast('Đã đăng xuất tài khoản.');
   };
 
-  const handleMarkAllAsRead = () => {
-    markAllNotificationsRead();
-    showToast('Đã đánh dấu tất cả thông báo là đã đọc.');
-  };
+  // Booking Modal State
+  const [activeBookingService, setActiveBookingService] = useState<BackendService | null>(null);
 
-  const handleMarkAsRead = (id: string) => {
-    markNotificationRead(id);
-  };
-
-  const handleClearAllNotifications = () => {
-    clearAllNotifications();
-    showToast('Đã xóa danh sách thông báo.');
-  };
-
-  const [bookingService, setBookingService] = useState<BeautyService | null>(null);
-
-  // View All Services & Partners Modal State (with full filter and sort system)
+  // View All Services Modal
   const [viewAllModal, setViewAllModal] = useState<{
     isOpen: boolean;
     context: ViewAllContext;
@@ -349,148 +465,189 @@ export default function App() {
     context: 'deals',
   });
 
-  const handleOpenViewAll = useCallback((context: ViewAllContext, initialCategory?: string) => {
-    setViewAllModal({
-      isOpen: true,
-      context,
-      initialCategory,
-    });
+  const openViewAll = useCallback((context: ViewAllContext, initialCategory?: string) => {
+    setFilterExploreContext(context as any);
+    if (initialCategory) setFilterExploreCategory(initialCategory);
+    navigateTo('filter-explore');
   }, []);
 
-  const handleViewAllDeals = useCallback(() => {
-    handleOpenViewAll('deals');
-  }, [handleOpenViewAll]);
+  const handleAddToCart = useCallback(
+    (deal: HotDeal) => {
+      addToCart(deal);
+      showToast(`Đã thêm "${deal.title}" vào giỏ dịch vụ!`);
+    },
+    [addToCart, showToast]
+  );
 
-  const handleViewAllNearby = useCallback(() => {
-    handleOpenViewAll('nearby');
-  }, [handleOpenViewAll]);
+  const handleRemoveFromCart = useCallback(
+    (dealId: string) => {
+      removeFromCart(dealId);
+      showToast('Đã xóa dịch vụ khỏi giỏ.');
+    },
+    [removeFromCart, showToast]
+  );
 
-  const handleViewAllNewPartners = useCallback(() => {
-    handleOpenViewAll('new-partners');
-  }, [handleOpenViewAll]);
+  const handleBookDeal = useCallback(
+    (dealTitle: string, salonName: string) => {
+      const found =
+        rawServices.find((s) => s.name === dealTitle || s.supplierName === salonName) ||
+        rawServices[0];
+      if (found) {
+        setActiveBookingService(found);
+      } else {
+        showToast('Dịch vụ này chưa sẵn sàng để đặt lịch.');
+      }
+    },
+    [rawServices, showToast]
+  );
 
-  // Add to cart handler
-  const handleAddToCart = useCallback((deal: HotDeal) => {
-    addToCart(deal);
-    showToast(`Đã thêm "${deal.title}" vào giỏ dịch vụ!`);
-  }, [addToCart, showToast]);
+  const handleOpenServiceById = useCallback(
+    (id: number) => {
+      const found = rawServices.find((s) => s.id === id);
+      if (found) {
+        setActiveBookingService(found);
+      } else {
+        showToast('Không tìm thấy dịch vụ trong cơ sở dữ liệu.');
+      }
+    },
+    [rawServices, showToast]
+  );
 
-  const handleRemoveFromCart = useCallback((id: string) => {
-    removeFromCart(id);
-    showToast('Đã xóa dịch vụ khỏi giỏ.');
-  }, [removeFromCart, showToast]);
-
-  // Direct booking handlers
-  const handleOpenBooking = useCallback((
-    title: string,
-    salonName: string,
-    _price: number,
-    _originalPrice: number
-  ) => {
-    const match = homepageServices.find((service) => service.name === title || service.supplierName === salonName) || homepageServices[0];
-    if (match) setBookingService(match);
-    else showToast('Dịch vụ này chưa sẵn sàng để đặt lịch.');
-  }, [homepageServices, showToast]);
-
-  const openServiceById = useCallback((serviceId?: number) => {
-    const service = homepageServices.find((item) => item.id === serviceId);
-    if (service) setBookingService(service);
-    else showToast('Không tìm thấy dịch vụ trong cơ sở dữ liệu.');
-  }, [homepageServices, showToast]);
-
-  const handleBookDeal = useCallback((deal: HotDeal) => {
-    openServiceById(deal.serviceId);
-  }, [openServiceById]);
-
-  const handleSelectSalon = useCallback((salon: Salon) => {
-    if (salon.supplierId) handleOpenShop(salon.supplierId);
-    else openServiceById(salon.serviceId);
-  }, [handleOpenShop, openServiceById]);
-
-  const handleSelectPartner = useCallback((partner: NewPartner) => {
-    if (partner.supplierId) handleOpenShop(partner.supplierId);
-    else openServiceById(partner.serviceId);
-  }, [handleOpenShop, openServiceById]);
-
-  // Search filter
+  // Search Filter & Chips State
   const [searchQuery, setSearchQuery] = useState('');
-  const handleSearch = useCallback((query: string) => {
-    setSearchQuery(query);
-    if (query.trim()) {
-      showToast(`Đang tìm kiếm dịch vụ: "${query}"`);
-      const dealsSection = document.getElementById('deals');
-      dealsSection?.scrollIntoView({ behavior: 'smooth' });
-    }
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({
+    priceRange: 'all',
+    minRating: 0,
+    maxDistance: 0,
+  });
+
+  const handleSearch = useCallback(
+    (query: string, filters?: SearchFilters) => {
+      setSearchQuery(query);
+      if (filters) {
+        setSearchFilters(filters);
+      }
+      if (query.trim()) {
+        const filterDetails: string[] = [];
+        const active = filters || searchFilters;
+        if (active.priceRange === 'under-300') filterDetails.push('Giá < 300k');
+        if (active.priceRange === '300-800') filterDetails.push('Giá 300k-800k');
+        if (active.priceRange === 'over-800') filterDetails.push('Giá > 800k');
+        if (active.minRating > 0) filterDetails.push(`Đánh giá ${active.minRating}★+`);
+        if (active.maxDistance > 0) filterDetails.push(`Bán kính < ${active.maxDistance}km`);
+
+        const extraText = filterDetails.length > 0 ? ` (${filterDetails.join(' · ')})` : '';
+        showToast(`Tìm kiếm: "${query}"${extraText}`);
+        const dealsEl = document.getElementById('deals');
+        dealsEl?.scrollIntoView({ behavior: 'smooth' });
+      }
+    },
+    [showToast, searchFilters]
+  );
+
+  const handleResetSearch = useCallback(() => {
+    setSearchQuery('');
+    setSearchFilters({
+      priceRange: 'all',
+      minRating: 0,
+      maxDistance: 0,
+    });
+    showToast('Đã xóa tìm kiếm và bộ lọc.');
   }, [showToast]);
 
-  const handleSelectCategory = useCallback((category: ServiceCategory) => {
-    localStorage.setItem('beautylink_preferred_category', category.slug);
-    setSelectedCategory(category);
+  const handleSelectServiceCategory = useCallback((cat: BackendCategory) => {
+    setSelectedCategory(cat);
     setCurrentPage('service');
     window.location.hash = 'service';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  const homepageDeals = useMemo(() => homepageServices.filter((service) => service.featured).map(toDeal), [homepageServices]);
-  const nearbySalons = useMemo(() => {
-    const unique = new Map<number, BeautyService>();
-    homepageServices.filter((service) => service.supplierNearbyFeatured).forEach((service) => { if (!unique.has(service.supplierId)) unique.set(service.supplierId, service); });
-    return [...unique.values()].map((service, index) => toSalon(service, index, userLocation))
-      .sort((left, right) => left.distanceKm - right.distanceKm);
-  }, [homepageServices, userLocation]);
-  const newPartners = useMemo(() => {
-    const unique = new Map<number, BeautyService>();
-    homepageServices.filter((service) => service.supplierNewPartner).forEach((service) => { if (!unique.has(service.supplierId)) unique.set(service.supplierId, service); });
-    return [...unique.values()].map(toNewPartner);
-  }, [homepageServices]);
+  // Mapped Data Sets from Live Backend Services
+  const deals = useMemo(() => rawServices.filter((s) => s.featured).map(mapServiceToDeal), [
+    rawServices,
+  ]);
+
+  const salons = useMemo(() => {
+    const map = new Map<number, BackendService>();
+    rawServices
+      .filter((s) => s.supplierNearbyFeatured)
+      .forEach((s) => {
+        if (!map.has(s.supplierId)) map.set(s.supplierId, s);
+      });
+    return [...map.values()]
+      .map((s, idx) => mapServiceToSalon(s, idx, userCoords))
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+  }, [rawServices, userCoords]);
+
+  const partners = useMemo(() => {
+    const map = new Map<number, BackendService>();
+    rawServices
+      .filter((s) => s.supplierNewPartner)
+      .forEach((s) => {
+        if (!map.has(s.supplierId)) map.set(s.supplierId, s);
+      });
+    return [...map.values()].map(mapServiceToPartner);
+  }, [rawServices]);
 
   const filteredDeals = useMemo(() => {
-    if (!searchQuery.trim()) return homepageDeals;
-    const q = searchQuery.toLowerCase();
-    return homepageDeals.filter(
-      (d) =>
-        d.title.toLowerCase().includes(q) ||
-        d.brandName.toLowerCase().includes(q) ||
-        d.category.toLowerCase().includes(q)
-    );
-  }, [searchQuery, homepageDeals]);
+    let result = deals;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (d) =>
+          d.title.toLowerCase().includes(q) ||
+          d.brandName.toLowerCase().includes(q) ||
+          d.category.toLowerCase().includes(q) ||
+          (d.district && d.district.toLowerCase().includes(q))
+      );
+    }
+
+    // Filter by Price Range
+    if (searchFilters.priceRange === 'under-300') {
+      result = result.filter((d) => d.salePrice < 300000);
+    } else if (searchFilters.priceRange === '300-800') {
+      result = result.filter((d) => d.salePrice >= 300000 && d.salePrice <= 800000);
+    } else if (searchFilters.priceRange === 'over-800') {
+      result = result.filter((d) => d.salePrice > 800000);
+    }
+
+    // Filter by Rating
+    if (searchFilters.minRating > 0) {
+      result = result.filter((d) => d.rating >= searchFilters.minRating);
+    }
+
+    // Filter by Distance
+    if (searchFilters.maxDistance > 0) {
+      result = result.filter((d) => d.distanceKm != null && d.distanceKm <= searchFilters.maxDistance);
+    }
+
+    return result;
+  }, [searchQuery, searchFilters, deals]);
 
   // =========================================================================
-  // DEDICATED FULL-PAGE ROUTING (No background overlay blur)
+  // STANDALONE ROUTING SCREENS (No background overlay)
   // =========================================================================
-  if (currentPage === 'service' && selectedCategory) {
+  if (currentPage === 'supplier-dashboard') {
+    return <SupplierDashboard onBack={handleBackToHome} onLogout={handleLogout} />;
+  }
+
+  if (currentPage === 'supplier-register') {
     return (
-      <ServicePage
-        category={selectedCategory}
-        locationId={selectedLocationId}
-        locationLabel={selectedCity}
-        currentUser={currentUser}
+      <SupplierRegisterPage
         onBack={handleBackToHome}
-        onNeedLogin={() => handleOpenAuth('login', 'service')}
-        onBookingCreated={showToast}
-        onOpenShop={handleOpenShop}
+        onSuccess={handleSupplierSuccess}
+        onLogin={() => navigateTo('login')}
       />
     );
   }
 
-  if (currentPage === 'supplier-dashboard') {
-    return <SupplierSchedulePage onBack={handleBackToHome} onLogout={handleImmediateLogout} />;
-  }
-
-  if (currentPage === 'shop' && selectedShopId) {
-    return <ShopPage supplierId={selectedShopId} currentUser={currentUser} onBack={handleBackToHome} onNeedLogin={() => handleOpenAuth('login', 'shop')} onBookingCreated={showToast} />;
-  }
-
-  if (currentPage === 'supplier-register') {
-    return <SupplierRegisterPage onBack={handleBackToHome} onSuccess={handleSupplierRegistrationSuccess} onLogin={() => handleOpenAuth('login')} />;
-  }
-
   if (currentPage === 'bookings') {
-    return <MyBookingsPage onBack={handleBackToHome} onBookNew={handleBackToHome} onOpenShop={handleOpenShop} />;
+    return <BookingsPage onBack={handleBackToHome} onBookNew={handleBackToHome} />;
   }
 
   if (currentPage === 'reports') {
-    return <StaffReportsPage onBack={handleBackToHome} />;
+    return <ReportsPage onBack={handleBackToHome} />;
   }
 
   if (currentPage === 'login' || currentPage === 'register') {
@@ -499,11 +656,11 @@ export default function App() {
         <AuthPage
           initialMode={currentPage === 'register' ? 'register' : 'login'}
           onBackToHome={handleBackToHome}
-          onSuccess={handleLoginSuccess}
-          onPartnerRegistration={handleOpenSupplierRegistration}
+          onSuccess={handleUserSuccess}
+          onNavigateSupplierRegister={() => navigateTo('supplier-register')}
         />
         {toastMessage && (
-          <div className="fixed bottom-20 right-5 z-[120] bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
             <span>{toastMessage}</span>
           </div>
         )}
@@ -517,28 +674,21 @@ export default function App() {
         <AccountPage
           currentUser={currentUser}
           onBackToHome={handleBackToHome}
-          onLogoutConfirm={handleImmediateLogout}
-          onNavigateLogin={() => {
-            setCurrentPage('login');
-            window.location.hash = 'login';
-          }}
-          onOpenAppointments={() => {
-            setCurrentPage('bookings');
-            window.location.hash = 'bookings';
-          }}
+          onLogoutConfirm={handleLogout}
+          onNavigateLogin={() => navigateTo('login')}
+          onOpenAppointments={handleOpenAppointments}
           onOpenVouchers={() => setIsVoucherModalOpen(true)}
-          onOpenShop={(supplierId) => handleOpenShop(supplierId)}
         />
         <VoucherModal
           isOpen={isVoucherModalOpen}
           onClose={() => setIsVoucherModalOpen(false)}
-          onApplyVoucher={(code: string) => {
+          onApplyVoucher={(code) => {
             showToast(`Đã chọn mã voucher: ${code}`);
             setIsVoucherModalOpen(false);
           }}
         />
         {toastMessage && (
-          <div className="fixed bottom-20 right-5 z-[120] bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
             <span>{toastMessage}</span>
           </div>
         )}
@@ -546,118 +696,369 @@ export default function App() {
     );
   }
 
+  if (currentPage === 'checkout') {
+    return (
+      <div className="min-h-screen bg-[#FFF8F9] font-sans text-slate-800 antialiased selection:bg-[#fce7f3] selection:text-[#B42D58]">
+        <CheckoutPage
+          currentUser={currentUser}
+          directService={directCheckoutConfig?.service || null}
+          preselectedDate={directCheckoutConfig?.preselectedDate}
+          preselectedTime={directCheckoutConfig?.preselectedTime}
+          onBack={() => {
+            setDirectCheckoutConfig(null);
+            handleBackToHome();
+          }}
+          onViewBookings={() => {
+            setDirectCheckoutConfig(null);
+            navigateTo('bookings');
+          }}
+          onNeedLogin={() => navigateTo('login', 'checkout')}
+        />
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+            <span>{toastMessage}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (currentPage === 'filter-explore') {
+    return (
+      <div className="min-h-screen bg-[#FFF5F7] font-sans text-slate-800 antialiased selection:bg-[#fce7f3] selection:text-[#B42D58]">
+        <FilterExplorePage
+          initialContext={filterExploreContext}
+          initialCategory={filterExploreCategory}
+          onBack={handleBackToHome}
+          onBookDeal={handleBookDeal}
+          onAddToCart={handleAddToCart}
+          onSelectPartner={(partner) => {
+            setSelectedPartner(partner);
+            navigateTo('partner-detail');
+          }}
+          deals={deals}
+          salons={salons}
+          partners={partners}
+          currentUser={currentUser}
+        />
+        {activeBookingService && (
+          <BookingModal
+            service={activeBookingService}
+            currentUser={currentUser}
+            onClose={() => setActiveBookingService(null)}
+            onNeedLogin={() => navigateTo('login')}
+            onCreated={(bookingCode) => {
+              showToast(`Đặt lịch thành công · Mã ${bookingCode}. Bạn có thể chia sẻ lịch hẹn ngay.`);
+            }}
+            onViewMyBookings={() => {
+              setActiveBookingService(null);
+              navigateTo('account');
+            }}
+          />
+        )}
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+            <span>{toastMessage}</span>
+          </div>
+        )}
+        <FavoriteToast
+          toast={favoriteToast}
+          onClose={() => setFavoriteToast(null)}
+        />
+      </div>
+    );
+  }
+
+  if (currentPage === 'partner-detail') {
+    return (
+      <div className="min-h-screen bg-[#FFF9FA] font-sans text-slate-800 antialiased selection:bg-[#fce7f3] selection:text-[#B42D58] flex flex-col justify-between">
+        {/* Unified Platform Header */}
+        <Header
+          cartCount={cartItems.length}
+          onOpenCart={() => setIsCartOpen(true)}
+          onOpenPartnerModal={() => navigateTo('supplier-register')}
+          onOpenLocationModal={() => setIsLocationModalOpen(true)}
+          onOpenAuthModal={(mode) => navigateTo(mode)}
+          onOpenAccount={handleOpenAccount}
+          onOpenFilterPage={() => {
+            setFilterExploreContext('all');
+            navigateTo('filter-explore');
+          }}
+          onSearch={handleSearch}
+          deals={deals}
+          searchFilters={searchFilters}
+          onFiltersChange={setSearchFilters}
+          selectedCity={selectedCity}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          serviceCategories={serviceCategories}
+          onSelectServiceCategory={handleSelectServiceCategory}
+          unreadNotificationsCount={notifications.filter((n) => !n.isRead).length}
+          notifications={notifications}
+          onMarkAllAsRead={() => {
+            markAllNotificationsRead();
+            showToast('Đã đánh dấu tất cả thông báo là đã đọc.');
+          }}
+          onMarkAsRead={markNotificationRead}
+          onClearAllNotifications={() => {
+            clearAllNotifications();
+            showToast('Đã xóa danh sách thông báo.');
+          }}
+          soundEnabled={soundEnabled}
+          onToggleSound={() => setSoundEnabled((prev) => !prev)}
+        />
+
+        <main className="flex-1">
+          <PartnerDetailPage
+            partner={selectedPartner || partners[0]}
+            currentUser={currentUser}
+            onBack={handleBackToHome}
+            onBookService={handleBookDeal}
+            onNeedLogin={() => navigateTo('login')}
+          />
+        </main>
+
+        {/* Unified Platform Footer */}
+        <Footer />
+
+        {/* Drawers & Modals */}
+        <CartDrawer
+          isOpen={isCartOpen}
+          onClose={() => setIsCartOpen(false)}
+          items={cartItems}
+          onRemoveItem={handleRemoveFromCart}
+          onClearCart={clearCart}
+          onCheckout={() => {
+            setIsCartOpen(false);
+            setDirectCheckoutConfig(null);
+            navigateTo('checkout');
+          }}
+        />
+
+        <LocationSelectModal
+          isOpen={isLocationModalOpen}
+          onClose={() => setIsLocationModalOpen(false)}
+          required={false}
+          selectedLocationId={selectedLocationId}
+          selectedIntentCategory={selectedIntentCategory}
+          onSelectLocation={(loc, name, categorySlug) => {
+            completeOnboarding(loc.id, name, categorySlug || 'all');
+            showToast(`Đã chuyển khu vực sang ${name}`);
+          }}
+        />
+
+        {activeBookingService && (
+          <BookingModal
+            service={activeBookingService}
+            currentUser={currentUser}
+            onClose={() => setActiveBookingService(null)}
+            onNeedLogin={() => navigateTo('login')}
+            onCreated={(bookingCode) => {
+              showToast(`Đặt lịch thành công · Mã ${bookingCode}. Bạn có thể chia sẻ lịch hẹn ngay.`);
+            }}
+            onViewMyBookings={() => {
+              setActiveBookingService(null);
+              navigateTo('account');
+            }}
+          />
+        )}
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+            <span>{toastMessage}</span>
+          </div>
+        )}
+        <FavoriteToast
+          toast={favoriteToast}
+          onClose={() => setFavoriteToast(null)}
+        />
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // MAIN HOMEPAGE
+  // =========================================================================
   return (
     <div className="min-h-screen bg-[#FFF0F3] flex flex-col selection:bg-pink-200 selection:text-pink-900">
       {/* Toast Notification */}
       {toastMessage && (
-        <div role="status" aria-live="polite" className="fixed bottom-20 right-5 z-[120] max-w-sm bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-pink-400/30 flex items-center gap-2.5">
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-pink-400/30 flex items-center gap-2.5">
           <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
           <span className="text-xs font-semibold">{toastMessage}</span>
         </div>
       )}
 
-      {/* Header */}
+      {/* Main Header */}
       <Header
         cartCount={cartItems.length}
         onOpenCart={() => setIsCartOpen(true)}
-        onOpenPartnerModal={handleOpenSupplierRegistration}
+        onOpenPartnerModal={() => navigateTo('supplier-register')}
         onOpenLocationModal={() => setIsLocationModalOpen(true)}
-        onOpenAuthModal={(mode) => handleOpenAuth(mode)}
-        onOpenAccount={() => handleOpenAccount()}
+        onOpenAuthModal={(mode) => navigateTo(mode)}
+        onOpenAccount={handleOpenAccount}
+        onOpenFilterPage={() => {
+          setFilterExploreContext('all');
+          navigateTo('filter-explore');
+        }}
         onSearch={handleSearch}
+        deals={deals}
+        searchFilters={searchFilters}
+        onFiltersChange={setSearchFilters}
         selectedCity={selectedCity}
         currentUser={currentUser}
-        onLogout={handleImmediateLogout}
+        onLogout={handleLogout}
         serviceCategories={serviceCategories}
-        onSelectServiceCategory={handleSelectCategory}
+        onSelectServiceCategory={handleSelectServiceCategory}
         unreadNotificationsCount={notifications.filter((n) => !n.isRead).length}
         notifications={notifications}
-        onMarkAllAsRead={handleMarkAllAsRead}
-        onMarkAsRead={handleMarkAsRead}
-        onClearAllNotifications={handleClearAllNotifications}
+        onMarkAllAsRead={() => {
+          markAllNotificationsRead();
+          showToast('Đã đánh dấu tất cả thông báo là đã đọc.');
+        }}
+        onMarkAsRead={markNotificationRead}
+        onClearAllNotifications={() => {
+          clearAllNotifications();
+          showToast('Đã xóa danh sách thông báo.');
+        }}
         soundEnabled={soundEnabled}
         onToggleSound={() => setSoundEnabled((prev) => !prev)}
       />
 
-      {/* Main Homepage Flow (Replicating exact UI/UX from the screenshots) */}
+      {/* Main Content Sections */}
       <main className="flex-1">
-        {/* 1. Hero Section + 4 Quick Hub Buttons */}
-        <HeroSection
-          onOpenCommunity={() => setIsCommunityModalOpen(true)}
-          onOpenAppointments={handleOpenBookings}
-          onOpenVouchers={() => setIsVoucherModalOpen(true)}
-          onOpenRewards={() => setIsRewardsModalOpen(true)}
-          onBookDirect={(title, price, originalPrice) =>
-            handleOpenBooking(title, 'Paradise Skin Clinic', price, originalPrice)
-          }
-        />
+        {currentPage === 'service' && selectedCategory ? (
+          <CategoryServicePage
+            category={selectedCategory}
+            categories={serviceCategories}
+            onSelectCategory={handleSelectServiceCategory}
+            locationId={selectedLocationId}
+            locationLabel={selectedCity}
+            currentUser={currentUser}
+            onBack={handleBackToHome}
+            onNeedLogin={() => navigateTo('login', 'service')}
+            onBookingCreated={showToast}
+            onOpenLocationModal={() => setIsLocationModalOpen(true)}
+            onAddToCart={(svc) => {
+              handleAddToCart({
+                id: String(svc.id),
+                title: svc.name,
+                brandName: svc.supplierName,
+                brandLogo: svc.supplierName.slice(0, 2).toUpperCase(),
+                highlightText: svc.highlightText || 'Ưu đãi đặt lịch',
+                originalPrice: svc.originalPrice || svc.price,
+                salePrice: svc.price,
+                discountPercent:
+                  svc.originalPrice && svc.originalPrice > svc.price
+                    ? Math.round(((svc.originalPrice - svc.price) / svc.originalPrice) * 100)
+                    : 0,
+                rating: svc.rating,
+                reviewsCount: svc.supplierReviewCount,
+                image: svc.imageUrl,
+                category: svc.categorySlug,
+                duration: `${svc.durationMinutes} phút`,
+                serviceId: svc.id,
+              });
+            }}
+            onDirectCheckout={(svc, preDate, preTime) => {
+              setDirectCheckoutConfig({
+                service: svc,
+                preselectedDate: preDate,
+                preselectedTime: preTime,
+              });
+              navigateTo('checkout');
+            }}
+          />
+        ) : (
+          <>
+            <HeroSection
+              onOpenCommunity={() => setIsCommunityModalOpen(true)}
+              onOpenAppointments={handleOpenAppointments}
+              onOpenVouchers={() => setIsVoucherModalOpen(true)}
+              onOpenRewards={() => setIsRewardsModalOpen(true)}
+              onBookDirect={(title, price, orig) =>
+                handleBookDeal(title, 'Paradise Skin Clinic')
+              }
+            />
 
-        {/* 2. Danh mục nổi bật (Featured Circular Categories) */}
-        <FeaturedCategories
-          onSelectCategory={handleSelectCategory}
-        />
+            <FeaturedCategories
+              onSelectCategory={handleSelectServiceCategory}
+              activeCategorySlug={selectedIntentCategory}
+            />
 
-        {/* 3. Khuyến Mãi Hot (Hot Deals & Flash Sales) */}
-        <HotDealsSection
-          deals={filteredDeals}
-          isLoading={isLoadingServices}
-          onBookDeal={handleBookDeal}
-          onOpenShop={handleOpenShop}
-          onAddToCart={handleAddToCart}
-          onViewAll={handleViewAllDeals}
-        />
+            <HotDealsSection
+              deals={filteredDeals}
+              isLoading={loadingServices}
+              searchQuery={searchQuery}
+              searchFilters={searchFilters}
+              onResetSearch={handleResetSearch}
+              onBookDeal={(deal) => {
+                if (deal.serviceId) {
+                  handleOpenServiceById(deal.serviceId);
+                } else {
+                  handleBookDeal(deal.title, deal.brandName);
+                }
+              }}
+              onAddToCart={handleAddToCart}
+              onViewAll={() => openViewAll('deals')}
+              favorites={favorites}
+              onToggleFavorite={handleToggleFavoriteDeal}
+            />
 
-        {/* 4. Gần Bạn (Nearby Verified Salons & Spa) */}
-        <NearYouSection
-          salons={nearbySalons}
-          isLoading={isLoadingServices}
-          locationPermission={locationPermission}
-          locationSource={userLocationSource}
-          onEnableLocation={requestUserLocation}
-          onSelectSalon={handleSelectSalon}
-          onViewAll={handleViewAllNearby}
-        />
+            <NearYouSection
+              salons={salons}
+              isLoading={loadingServices}
+              locationPermission={locationPermission}
+              onEnableLocation={handleEnableLocation}
+              onSelectSalon={(salon) => {
+                if (salon.serviceId) {
+                  handleOpenServiceById(salon.serviceId);
+                } else {
+                  handleBookDeal(salon.name, salon.name);
+                }
+              }}
+              onViewAll={() => openViewAll('nearby')}
+              favoritesList={favorites}
+              onToggleFavorite={handleToggleFavoriteSalon}
+            />
 
-        {/* 5. Phun Xăm Thẩm Mỹ, Quảng Cáo & Bí Kíp Sắc Đẹp Carousel */}
-        {language === 'vi' && <CampaignBanners
-          onOpenCampaign={(title) => {
-            handleOpenBooking(title, 'Hệ Thống Thẩm Mỹ & Spa Đối Tác', 450000, 900000);
-          }}
-          onBookDeal={handleOpenBooking}
-        />}
+            <CampaignBanners
+              onOpenCampaign={(title) => {
+                handleBookDeal(title, 'Hệ Thống Thẩm Mỹ & Spa Đối Tác');
+              }}
+              onBookDeal={handleBookDeal}
+            />
 
-        {/* 6. Doanh nghiệp mới tham gia (Newly Joined Partners) */}
-        <NewPartnersSection
-          partners={newPartners}
-          onSelectPartner={handleSelectPartner}
-          onViewAll={handleViewAllNewPartners}
-        />
+            <NewPartnersSection
+              partners={partners}
+              onSelectPartner={(partner) => {
+                setSelectedPartner(partner);
+                navigateTo('partner-detail');
+              }}
+              onViewAll={() => openViewAll('new-partners')}
+            />
 
-        {/* 7. Vì sao nên chọn BeautyPink? (Why Choose Us) */}
-        <WhyChooseUs />
+            <CustomerReviewsSection />
 
-        {/* 8. Trở thành Đối tác & Khám phá Blog */}
-        <PartnerBlogCTA
-          onOpenPartnerModal={handleOpenSupplierRegistration}
-          onOpenBlogModal={() => setIsBlogModalOpen(true)}
-        />
-
+            <WhyChooseUs onBookService={handleBookDeal} />
+          </>
+        )}
       </main>
 
-      {/* Footer */}
       <Footer />
 
-      {/* Modals & Slide-Overs */}
-      {bookingService && (
-        <BookingDialog
-          service={bookingService}
+      {/* Modals & Drawers */}
+      {activeBookingService && (
+        <BookingModal
+          service={activeBookingService}
           currentUser={currentUser}
-          onClose={() => setBookingService(null)}
-          onNeedLogin={() => handleOpenAuth('login')}
-          onOpenShop={handleOpenShop}
-          onCreated={(code) => {
-            setBookingService(null);
-            showToast(`Đặt lịch thành công · Mã ${code}. Lịch đã được lưu vào tài khoản.`);
+          onClose={() => setActiveBookingService(null)}
+          onNeedLogin={() => navigateTo('login')}
+          onCreated={(bookingCode) => {
+            showToast(`Đặt lịch thành công · Mã ${bookingCode}. Bạn có thể chia sẻ lịch hẹn ngay bên dưới.`);
+          }}
+          onViewMyBookings={() => {
+            setActiveBookingService(null);
+            navigateTo('bookings');
           }}
         />
       )}
@@ -670,11 +1071,8 @@ export default function App() {
         onClearCart={clearCart}
         onCheckout={() => {
           setIsCartOpen(false);
-          if (cartItems.length > 0) {
-            const first = cartItems[0];
-            if (first.deal.serviceId) openServiceById(first.deal.serviceId);
-            else handleOpenBooking(first.deal.title, first.deal.brandName, first.deal.salePrice, first.deal.originalPrice);
-          }
+          setDirectCheckoutConfig(null);
+          navigateTo('checkout');
         }}
       />
 
@@ -698,25 +1096,34 @@ export default function App() {
 
       <LocationSelectModal
         isOpen={isLocationModalOpen}
-        onClose={() => {
-          sessionStorage.setItem('beautylink_discovery_prompt_dismissed', 'true');
-          setIsLocationModalOpen(false);
-        }}
+        onClose={() => setIsLocationModalOpen(false)}
+        required={isVisitorOnboardingRequired}
         selectedLocationId={selectedLocationId}
-        categories={serviceCategories}
-        onSelectCategory={handleSelectCategory}
-        onGpsLocated={(latitude, longitude, source) => {
-          setUserLocation({ latitude, longitude });
-          setUserLocationSource(source);
-          setLocationPermission('ready');
-          showToast(source === 'device'
-            ? text('Đã xác định thành phố bằng GPS.', 'City detected by GPS.')
-            : text('Đã xác định thành phố gần đúng theo mạng.', 'City detected approximately from your network.'));
-        }}
-        onSelectLocation={(location, label) => {
-          const city = label;
-          setSelectedLocation(location.id, label);
-          showToast(`Đã chuyển vị trí sang: ${city}`);
+        selectedIntentCategory={selectedIntentCategory}
+        onSelectLocation={(loc, name, categorySlug) => {
+          completeOnboarding(loc.id, name, categorySlug || 'all');
+          if (categorySlug && categorySlug !== 'all') {
+            const slugToMatch = categorySlug === 'duong-sinh' ? 'spa' : categorySlug;
+            const matched =
+              serviceCategories.find((c) => c.slug === slugToMatch) ||
+              DEFAULT_CATEGORIES.find((c) => c.slug === slugToMatch) ||
+              DEFAULT_CATEGORIES[0];
+
+            if (matched) {
+              setSelectedCategory(matched);
+              setCurrentPage('service');
+              window.location.hash = 'service';
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          } else {
+            setCurrentPage('home');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+          const catLabel =
+            categorySlug && categorySlug !== 'all'
+              ? ` · ${categorySlug.toUpperCase()}`
+              : '';
+          showToast(`Chào mừng bạn đến với BeautyLink tại ${name}${catLabel}!`);
         }}
       />
 
@@ -725,18 +1132,22 @@ export default function App() {
         onClose={() => setIsBlogModalOpen(false)}
       />
 
-      {/* Global View All Modal with Full Filter & Sort System */}
       <ViewAllServicesModal
         isOpen={viewAllModal.isOpen}
         onClose={() => setViewAllModal((prev) => ({ ...prev, isOpen: false }))}
         context={viewAllModal.context}
         initialCategory={viewAllModal.initialCategory}
-        onBookDeal={handleOpenBooking}
-        onOpenShop={handleOpenShop}
+        onBookDeal={handleBookDeal}
         onAddToCart={handleAddToCart}
-        deals={homepageDeals}
-        salons={nearbySalons}
-        partners={newPartners}
+        deals={deals}
+        salons={salons}
+        partners={partners}
+      />
+
+      {/* Professional Favorite Toast */}
+      <FavoriteToast
+        toast={favoriteToast}
+        onClose={() => setFavoriteToast(null)}
       />
     </div>
   );

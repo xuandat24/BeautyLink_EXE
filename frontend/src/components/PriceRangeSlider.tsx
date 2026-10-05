@@ -128,13 +128,13 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all cursor-pointer shadow-xs select-none ${
           isFiltered
-            ? 'bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white border-transparent shadow-pink-500/25'
+            ? 'bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white border-transparent shadow-pink-500/25'
             : 'bg-white text-slate-700 border-pink-200 hover:border-pink-300 hover:bg-pink-50/70'
         }`}
         title="Tùy chỉnh khoảng giá tối thiểu và tối đa"
       >
         <SlidersHorizontal
-          className={`w-3.5 h-3.5 ${isFiltered ? 'text-white' : 'text-[#EB0F51]'}`}
+          className={`w-3.5 h-3.5 ${isFiltered ? 'text-white' : 'text-[#e1146c]'}`}
         />
         <span>{label}:</span>
         <span className={isFiltered ? 'text-pink-100 font-extrabold' : 'text-slate-800'}>
@@ -160,7 +160,7 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-pink-50">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-xl bg-pink-50 flex items-center justify-center text-[#EB0F51]">
+              <div className="w-7 h-7 rounded-xl bg-pink-50 flex items-center justify-center text-[#e1146c]">
                 <Tag className="w-3.5 h-3.5" />
               </div>
               <div>
@@ -177,7 +177,7 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
               <button
                 type="button"
                 onClick={handleReset}
-                className="text-[11px] font-bold text-[#EB0F51] hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-[11px] font-bold text-[#e1146c] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>Đặt lại</span>
@@ -191,7 +191,7 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
               <span className="text-[10px] font-bold text-slate-400 block uppercase">
                 Tối thiểu
               </span>
-              <span className="text-sm font-black text-[#B42D58]">
+              <span className="text-sm font-black text-[#be185d]">
                 {formatVNDFull(localRange.min)}
               </span>
             </div>
@@ -202,7 +202,7 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
               <span className="text-[10px] font-bold text-slate-400 block uppercase">
                 Tối đa
               </span>
-              <span className="text-sm font-black text-[#B42D58]">
+              <span className="text-sm font-black text-[#be185d]">
                 {formatVNDFull(localRange.max)}
               </span>
             </div>
@@ -214,7 +214,7 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
             <div className="relative h-2.5 w-full bg-slate-100 rounded-full">
               {/* Highlight Active Range Bar */}
               <div
-                className="absolute top-0 bottom-0 bg-gradient-to-r from-[#EB0F51] to-[#B42D58] rounded-full shadow-sm"
+                className="absolute top-0 bottom-0 bg-gradient-to-r from-[#e1146c] to-[#be185d] rounded-full shadow-sm"
                 style={{
                   left: `${minPercent}%`,
                   right: `${100 - maxPercent}%`,
@@ -250,17 +250,17 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
 
             {/* Visual Thumb Handles */}
             <div
-              className="absolute top-4 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-[#EB0F51] shadow-md shadow-pink-500/20 flex items-center justify-center pointer-events-none z-10 transition-transform active:scale-110"
+              className="absolute top-4 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-[#e1146c] shadow-md shadow-pink-500/20 flex items-center justify-center pointer-events-none z-10 transition-transform active:scale-110"
               style={{ left: `${minPercent}%` }}
             >
-              <div className="w-2 h-2 rounded-full bg-[#EB0F51]" />
+              <div className="w-2 h-2 rounded-full bg-[#e1146c]" />
             </div>
 
             <div
-              className="absolute top-4 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-[#B42D58] shadow-md shadow-pink-500/20 flex items-center justify-center pointer-events-none z-10 transition-transform active:scale-110"
+              className="absolute top-4 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-[#be185d] shadow-md shadow-pink-500/20 flex items-center justify-center pointer-events-none z-10 transition-transform active:scale-110"
               style={{ left: `${maxPercent}%` }}
             >
-              <div className="w-2 h-2 rounded-full bg-[#B42D58]" />
+              <div className="w-2 h-2 rounded-full bg-[#be185d]" />
             </div>
 
             {/* Scale Endpoints */}
@@ -288,7 +288,7 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
                     onClick={() => handlePresetSelect(preset.min, preset.max)}
                     className={`text-[11px] font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
                       isActive
-                        ? 'bg-[#EB0F51] text-white shadow-xs'
+                        ? 'bg-[#e1146c] text-white shadow-xs'
                         : 'bg-pink-50/70 hover:bg-pink-100/70 text-slate-600 hover:text-pink-900 border border-pink-100'
                     }`}
                   >
@@ -304,7 +304,7 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
             <span className="text-[11px] font-medium text-slate-500">
               {itemCount !== undefined && (
                 <>
-                  <strong className="text-[#EB0F51] font-black">{itemCount}</strong> kết quả
+                  <strong className="text-[#e1146c] font-black">{itemCount}</strong> kết quả
                 </>
               )}
             </span>
@@ -312,7 +312,7 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="px-4 py-1.5 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white text-xs font-bold shadow-md shadow-pink-500/20 hover:opacity-95 transition-opacity cursor-pointer flex items-center gap-1"
+              className="px-4 py-1.5 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs font-bold shadow-md shadow-pink-500/20 hover:opacity-95 transition-opacity cursor-pointer flex items-center gap-1"
             >
               <Check className="w-3.5 h-3.5" />
               <span>Áp dụng</span>

@@ -17,6 +17,8 @@ import {
   Flame,
   Star,
 } from 'lucide-react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { useScrollReveal } from '../hooks/useScrollReveal';
 
 export interface BannerSlide {
   id: string;
@@ -293,7 +295,7 @@ const BANNER_SLIDES: BannerSlide[] = [
     priceHighlight: 'Mẹo Chuyên Gia',
     discountBadge: 'BÍ KÍP HOT',
     ctaText: 'Xem Cẩm Nang Dưỡng Môi',
-    bgStyle: 'bg-gradient-to-r from-[#be123c] via-[#e11d48] to-[#D28474]',
+    bgStyle: 'bg-gradient-to-r from-[#be123c] via-[#e11d48] to-[#fb7185]',
     image: 'https://images.unsplash.com/photo-1588510841489-f008214744be?auto=format&fit=crop&w=800&q=80',
     tipDetails: {
       readingTime: '2.5 phút đọc',
@@ -358,6 +360,19 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
   const [copiedVoucher, setCopiedVoucher] = useState(false);
   const [isAutoPlay, setIsAutoPlay] = useState(true);
 
+  // Lock body scroll when modal is active
+  useBodyScrollLock(Boolean(activeModalSlide));
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!activeModalSlide) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActiveModalSlide(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeModalSlide]);
+
   const filteredSlides = BANNER_SLIDES.filter((slide) => {
     if (selectedCategory === 'all') return true;
     if (selectedCategory === 'ad') return slide.type === 'ad';
@@ -405,9 +420,14 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
     setTimeout(() => setCopiedVoucher(false), 2200);
   };
 
+  const { ref: sectionRef, isVisible } = useScrollReveal<HTMLElement>({ threshold: 0.08 });
+
   return (
     <section
-      className="py-8 max-w-7xl mx-auto px-4 sm:px-6 select-none"
+      ref={sectionRef}
+      className={`py-8 max-w-7xl mx-auto px-4 sm:px-6 select-none reveal-on-scroll ${
+        isVisible ? 'is-revealed' : ''
+      }`}
       onMouseEnter={() => setIsAutoPlay(false)}
       onMouseLeave={() => setIsAutoPlay(true)}
     >
@@ -415,7 +435,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full bg-pink-100 text-[#EB0F51] text-[10px] font-black uppercase tracking-wider">
+            <span className="px-2.5 py-0.5 rounded-full bg-pink-100 text-[#e1146c] text-[10px] font-black uppercase tracking-wider">
               {currentSlide.type === 'tip' ? '💡 BÍ KÍP SẮC ĐẸP' : '🔥 QUẢNG CÁO & HOT DEAL'}
             </span>
             <span className="text-xs text-slate-400 font-medium hidden sm:inline">
@@ -425,7 +445,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
 
           <h2 className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight leading-snug uppercase flex items-center gap-2">
             <span>{currentSlide.headerTitle}</span>
-            <Sparkles className="w-5 h-5 text-[#EB0F51] shrink-0 animate-pulse" />
+            <Sparkles className="w-5 h-5 text-[#e1146c] shrink-0 animate-pulse" />
           </h2>
         </div>
 
@@ -436,8 +456,8 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
             onClick={() => setSelectedCategory('all')}
             className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === 'all'
-                ? 'bg-[#EB0F51] text-white shadow-xs'
-                : 'bg-pink-50 text-slate-600 hover:bg-pink-100 hover:text-[#EB0F51]'
+                ? 'bg-[#e1146c] text-white shadow-xs'
+                : 'bg-pink-50 text-slate-600 hover:bg-pink-100 hover:text-[#e1146c]'
             }`}
           >
             Tất cả ({BANNER_SLIDES.length})
@@ -447,8 +467,8 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
             onClick={() => setSelectedCategory('ad')}
             className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === 'ad'
-                ? 'bg-[#EB0F51] text-white shadow-xs'
-                : 'bg-pink-50 text-slate-600 hover:bg-pink-100 hover:text-[#EB0F51]'
+                ? 'bg-[#e1146c] text-white shadow-xs'
+                : 'bg-pink-50 text-slate-600 hover:bg-pink-100 hover:text-[#e1146c]'
             }`}
           >
             🔥 Quảng cáo & Deal
@@ -458,8 +478,8 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
             onClick={() => setSelectedCategory('tip')}
             className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === 'tip'
-                ? 'bg-[#EB0F51] text-white shadow-xs'
-                : 'bg-pink-50 text-slate-600 hover:bg-pink-100 hover:text-[#EB0F51]'
+                ? 'bg-[#e1146c] text-white shadow-xs'
+                : 'bg-pink-50 text-slate-600 hover:bg-pink-100 hover:text-[#e1146c]'
             }`}
           >
             💡 Bí kíp làm đẹp
@@ -469,8 +489,8 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
             onClick={() => setSelectedCategory('clinic')}
             className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === 'clinic'
-                ? 'bg-[#EB0F51] text-white shadow-xs'
-                : 'bg-pink-50 text-slate-600 hover:bg-pink-100 hover:text-[#EB0F51]'
+                ? 'bg-[#e1146c] text-white shadow-xs'
+                : 'bg-pink-50 text-slate-600 hover:bg-pink-100 hover:text-[#e1146c]'
             }`}
           >
             🏥 Clinic Y Khoa
@@ -480,8 +500,8 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
             onClick={() => setSelectedCategory('spa')}
             className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               selectedCategory === 'spa'
-                ? 'bg-[#EB0F51] text-white shadow-xs'
-                : 'bg-pink-50 text-slate-600 hover:bg-pink-100 hover:text-[#EB0F51]'
+                ? 'bg-[#e1146c] text-white shadow-xs'
+                : 'bg-pink-50 text-slate-600 hover:bg-pink-100 hover:text-[#e1146c]'
             }`}
           >
             💆‍♀️ Dưỡng Sinh
@@ -495,7 +515,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
         <button
           type="button"
           onClick={handlePrev}
-          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/95 text-slate-700 hover:text-[#EB0F51] hover:bg-white flex items-center justify-center shadow-lg border border-pink-100/80 transition-all hover:scale-110 active:scale-95 cursor-pointer"
+          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/95 text-slate-700 hover:text-[#e1146c] hover:bg-white flex items-center justify-center shadow-lg border border-pink-100/80 transition-all hover:scale-110 active:scale-95 cursor-pointer"
           title="Banner trước"
         >
           <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6 text-pink-700" />
@@ -505,7 +525,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
         <button
           type="button"
           onClick={handleNext}
-          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/95 text-slate-700 hover:text-[#EB0F51] hover:bg-white flex items-center justify-center shadow-lg border border-pink-100/80 transition-all hover:scale-110 active:scale-95 cursor-pointer"
+          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/95 text-slate-700 hover:text-[#e1146c] hover:bg-white flex items-center justify-center shadow-lg border border-pink-100/80 transition-all hover:scale-110 active:scale-95 cursor-pointer"
           title="Banner kế tiếp"
         >
           <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-pink-700" />
@@ -629,7 +649,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
               {/* Action Button */}
               <button
                 type="button"
-                className="px-5 py-2.5 sm:px-6 sm:py-3 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white text-xs sm:text-sm font-extrabold shadow-lg shadow-pink-600/40 group-hover:scale-105 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                className="px-5 py-2.5 sm:px-6 sm:py-3 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs sm:text-sm font-extrabold shadow-lg shadow-pink-600/40 group-hover:scale-105 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
               >
                 <span>{currentSlide.ctaText}</span>
                 <ArrowUpRight className="w-4 h-4" />
@@ -688,7 +708,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
               onClick={() => setCurrentIndex(idx)}
               className={`transition-all rounded-full cursor-pointer ${
                 idx === currentIndex
-                  ? 'w-8 h-2 bg-[#EB0F51]'
+                  ? 'w-8 h-2 bg-[#e1146c]'
                   : 'w-2 h-2 bg-pink-200 hover:bg-pink-300'
               }`}
               title={slide.title}
@@ -699,10 +719,25 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
 
       {/* Interactive Detail Modal (For Beauty Tips or Promotional Deals) */}
       {activeModalSlide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden max-h-[90vh] flex flex-col">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+        >
+          {/* Blurred & Dimmed Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-200 cursor-pointer"
+            onClick={() => setActiveModalSlide(null)}
+            aria-hidden="true"
+          />
+
+          {/* Pristine Modal Card */}
+          <div
+            className="relative z-10 w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
-            <div className={`p-6 text-white relative ${activeModalSlide.bgStyle}`}>
+            <div className={`shrink-0 p-6 text-white relative ${activeModalSlide.bgStyle}`}>
               <button
                 type="button"
                 onClick={() => setActiveModalSlide(null)}
@@ -731,28 +766,28 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-5 text-slate-700">
+            <div className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-5 text-slate-700">
               {/* If it is a Beauty Tip */}
               {activeModalSlide.type === 'tip' && activeModalSlide.tipDetails && (
                 <div className="space-y-4">
                   {/* Meta Bar */}
                   <div className="flex flex-wrap items-center gap-4 p-3.5 rounded-2xl bg-pink-50/70 border border-pink-100 text-xs">
                     <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
-                      <Clock className="w-4 h-4 text-[#EB0F51]" />
+                      <Clock className="w-4 h-4 text-[#e1146c]" />
                       <span>{activeModalSlide.tipDetails.readingTime}</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
-                      <UserCheck className="w-4 h-4 text-[#EB0F51]" />
+                      <UserCheck className="w-4 h-4 text-[#e1146c]" />
                       <span>{activeModalSlide.tipDetails.expertDoctor}</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
-                      <ShieldCheck className="w-4 h-4 text-[#EB0F51]" />
+                      <ShieldCheck className="w-4 h-4 text-[#e1146c]" />
                       <span>Dành cho: {activeModalSlide.tipDetails.targetSkin}</span>
                     </div>
                   </div>
 
                   {/* Summary */}
-                  <p className="text-xs sm:text-sm leading-relaxed text-slate-600 italic border-l-3 border-[#EB0F51] pl-3">
+                  <p className="text-xs sm:text-sm leading-relaxed text-slate-600 italic border-l-3 border-[#e1146c] pl-3">
                     {activeModalSlide.tipDetails.summary}
                   </p>
 
@@ -767,7 +802,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
                         className="p-3.5 rounded-2xl border border-pink-100 bg-white shadow-xs hover:border-pink-300 transition-colors"
                       >
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="w-6 h-6 rounded-full bg-[#EB0F51] text-white text-xs font-black flex items-center justify-center">
+                          <span className="w-6 h-6 rounded-full bg-[#e1146c] text-white text-xs font-black flex items-center justify-center">
                             {step.stepNumber}
                           </span>
                           <span className="text-xs sm:text-sm font-bold text-slate-800">
@@ -777,7 +812,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
                         <p className="text-xs text-slate-600 pl-8 leading-relaxed">
                           {step.description}
                         </p>
-                        <div className="mt-2 pl-8 flex items-center gap-1.5 text-[11px] font-semibold text-[#B42D58]">
+                        <div className="mt-2 pl-8 flex items-center gap-1.5 text-[11px] font-semibold text-[#be185d]">
                           <Sparkles className="w-3.5 h-3.5" />
                           <span>Mẹo sản phẩm: {step.productTip}</span>
                         </div>
@@ -794,7 +829,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
                   {/* Recommended Clinic Service */}
                   <div className="p-4 rounded-2xl bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <span className="text-[10px] font-bold text-[#B42D58] uppercase tracking-wider block">
+                      <span className="text-[10px] font-bold text-[#be185d] uppercase tracking-wider block">
                         Dịch vụ bổ trợ khuyên dùng
                       </span>
                       <h5 className="text-xs sm:text-sm font-extrabold text-slate-800">
@@ -813,7 +848,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
                           )}
                           đ
                         </span>
-                        <span className="text-base font-black text-[#EB0F51]">
+                        <span className="text-base font-black text-[#e1146c]">
                           {activeModalSlide.tipDetails.recommendedService.price.toLocaleString(
                             'vi-VN'
                           )}
@@ -832,7 +867,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
                           }
                           setActiveModalSlide(null);
                         }}
-                        className="px-4 py-2 rounded-full bg-[#EB0F51] hover:bg-[#B42D58] text-white text-xs font-bold shadow-md cursor-pointer transition-all"
+                        className="px-4 py-2 rounded-full bg-[#e1146c] hover:bg-[#be185d] text-white text-xs font-bold shadow-md cursor-pointer transition-all"
                       >
                         Đặt lịch trải nghiệm
                       </button>
@@ -860,7 +895,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
                         onClick={() =>
                           handleCopyCode(activeModalSlide.dealDetails!.voucherCode!)
                         }
-                        className="px-4 py-2 rounded-full bg-white text-[#B42D58] text-xs font-bold shadow hover:bg-pink-50 transition-colors flex items-center gap-1.5 cursor-pointer"
+                        className="px-4 py-2 rounded-full bg-white text-[#be185d] text-xs font-bold shadow hover:bg-pink-50 transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
                         {copiedVoucher ? (
                           <>
@@ -910,7 +945,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
                         {activeModalSlide.dealDetails.originalPrice.toLocaleString('vi-VN')}
                         đ
                       </span>
-                      <span className="text-2xl font-black text-[#EB0F51]">
+                      <span className="text-2xl font-black text-[#e1146c]">
                         {activeModalSlide.dealDetails.price.toLocaleString('vi-VN')}đ
                       </span>
                     </div>
@@ -926,7 +961,7 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
                         }
                         setActiveModalSlide(null);
                       }}
-                      className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white text-xs font-bold shadow-lg shadow-pink-600/30 hover:opacity-95 transition-all cursor-pointer flex items-center gap-1.5"
+                      className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs font-bold shadow-lg shadow-pink-600/30 hover:opacity-95 transition-all cursor-pointer flex items-center gap-1.5"
                     >
                       <span>Đặt lịch nhận ưu đãi</span>
                       <ArrowUpRight className="w-4 h-4" />

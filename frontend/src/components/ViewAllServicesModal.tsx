@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   Search,
@@ -18,8 +18,10 @@ import {
   ShieldCheck,
   SlidersHorizontal,
 } from 'lucide-react';
-import type { HotDeal, Salon, NewPartner } from '../data/mockData';
+import { HotDeal, Salon, NewPartner, HOT_DEALS, NEARBY_SALONS, NEW_PARTNERS } from '../data/mockData';
 import { PriceRangeSlider, PriceRange } from './PriceRangeSlider';
+import { OptimizedImage } from './OptimizedImage';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 export type ViewAllContext = 'deals' | 'nearby' | 'new-partners' | 'all';
 
@@ -29,18 +31,15 @@ interface ViewAllServicesModalProps {
   context: ViewAllContext;
   initialCategory?: string;
   onBookDeal: (serviceTitle: string, salonName: string, price: number, originalPrice: number) => void;
-  onOpenShop: (supplierId: number) => void;
   onAddToCart: (deal: HotDeal) => void;
-  deals: HotDeal[];
-  salons: Salon[];
-  partners: NewPartner[];
+  deals?: HotDeal[];
+  salons?: Salon[];
+  partners?: NewPartner[];
 }
 
 // Unified item representation for filtering & sorting
 export interface UnifiedServiceItem {
   id: string;
-  serviceId?: number;
-  supplierId?: number;
   type: 'deal' | 'salon' | 'partner';
   title: string;
   brandName: string;
@@ -66,13 +65,23 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
   context,
   initialCategory,
   onBookDeal,
-  onOpenShop,
   onAddToCart,
-  deals,
-  salons,
-  partners,
+  deals = HOT_DEALS,
+  salons = NEARBY_SALONS,
+  partners = NEW_PARTNERS,
 }) => {
-  if (!isOpen) return null;
+  // Lock body scroll when open
+  useBodyScrollLock(isOpen);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Active view tab inside modal
   const [activeTab, setActiveTab] = useState<ViewAllContext>(context);
@@ -92,8 +101,6 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
   const allItems: UnifiedServiceItem[] = useMemo(() => {
     const dealsList: UnifiedServiceItem[] = deals.map((d) => ({
       id: d.id,
-      serviceId: d.serviceId,
-      supplierId: d.supplierId,
       type: 'deal',
       title: d.title,
       brandName: d.brandName,
@@ -114,8 +121,6 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
 
     const salonsList: UnifiedServiceItem[] = salons.map((s) => ({
       id: s.id,
-      serviceId: s.serviceId,
-      supplierId: s.supplierId,
       type: 'salon',
       title: `Gói Trải Nghiệm Tiêu Chuẩn tại ${s.name}`,
       brandName: s.name,
@@ -137,8 +142,6 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
 
     const partnersList: UnifiedServiceItem[] = partners.map((p, idx) => ({
       id: p.id,
-      serviceId: p.serviceId,
-      supplierId: p.supplierId,
       type: 'partner',
       title: p.specialty,
       brandName: p.name,
@@ -159,7 +162,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
     }));
 
     return [...dealsList, ...salonsList, ...partnersList];
-  }, [deals, salons, partners]);
+  }, []);
 
   // Filter items based on active tab
   const tabFilteredItems = useMemo(() => {
@@ -255,8 +258,6 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
     e.stopPropagation();
     const dealMock: HotDeal = {
       id: item.id,
-      serviceId: item.serviceId,
-      supplierId: item.supplierId,
       title: item.title,
       brandName: item.brandName,
       brandLogo: item.brandLogo,
@@ -290,11 +291,28 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-6xl bg-white rounded-3xl shadow-2xl border border-pink-100 flex flex-col h-[94vh] overflow-hidden">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Blurred & Dimmed Backdrop */}
+      <div
+        className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-200 cursor-pointer"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Pristine Modal Card */}
+      <div
+        className="relative z-10 w-full max-w-6xl bg-white rounded-3xl shadow-2xl border border-pink-100 flex flex-col h-[92vh] max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Modal Top Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-[#B42D58] via-[#EB0F51] to-[#D28474] text-white flex items-center justify-between shadow-md shrink-0">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-[#be185d] via-[#e1146c] to-[#fb7185] text-white flex items-center justify-between shadow-md shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-xs">
               <Sparkles className="w-5 h-5 text-white" />
@@ -302,7 +320,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
             <div>
               <h2 className="text-base sm:text-xl font-black tracking-tight">{getModalTitle()}</h2>
               <p className="text-xs text-pink-100 font-medium hidden sm:block">
-                Hơn 120+ dịch vụ & cơ sở làm đẹp đã kiểm định uy tín trên BeautyPink
+                Hơn 120+ dịch vụ & cơ sở làm đẹp đã kiểm định uy tín trên BeautyLink
               </p>
             </div>
           </div>
@@ -321,10 +339,11 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer"
-              title="Đóng cửa sổ"
+              className="w-9 h-9 rounded-full bg-white/20 hover:bg-white text-white hover:text-[#EB0F51] flex items-center justify-center transition-all shadow-sm cursor-pointer"
+              title="Đóng cửa sổ (ESC)"
+              aria-label="Đóng cửa sổ"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 stroke-[2.5]" />
             </button>
           </div>
         </div>
@@ -337,8 +356,8 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
               onClick={() => setActiveTab('deals')}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'deals'
-                  ? 'bg-[#EB0F51] text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:text-[#EB0F51] border border-pink-100'
+                  ? 'bg-[#e1146c] text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:text-[#e1146c] border border-pink-100'
               }`}
             >
               <Flame className="w-3.5 h-3.5" />
@@ -349,8 +368,8 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
               onClick={() => setActiveTab('nearby')}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'nearby'
-                  ? 'bg-[#EB0F51] text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:text-[#EB0F51] border border-pink-100'
+                  ? 'bg-[#e1146c] text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:text-[#e1146c] border border-pink-100'
               }`}
             >
               <MapPin className="w-3.5 h-3.5" />
@@ -361,8 +380,8 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
               onClick={() => setActiveTab('new-partners')}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'new-partners'
-                  ? 'bg-[#EB0F51] text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:text-[#EB0F51] border border-pink-100'
+                  ? 'bg-[#e1146c] text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:text-[#e1146c] border border-pink-100'
               }`}
             >
               <Building2 className="w-3.5 h-3.5" />
@@ -373,8 +392,8 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
               onClick={() => setActiveTab('all')}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'all'
-                  ? 'bg-[#EB0F51] text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:text-[#EB0F51] border border-pink-100'
+                  ? 'bg-[#e1146c] text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:text-[#e1146c] border border-pink-100'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -385,13 +404,13 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
           {/* Result Count and Reset Button */}
           <div className="flex items-center gap-2 shrink-0 text-xs">
             <span className="text-slate-500 font-semibold hidden lg:inline">
-              Tìm thấy <strong className="text-[#EB0F51]">{filteredAndSortedItems.length}</strong> kết quả
+              Tìm thấy <strong className="text-[#e1146c]">{filteredAndSortedItems.length}</strong> kết quả
             </span>
             {hasActiveFilters && (
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="px-2.5 py-1 rounded-full bg-pink-100 text-[#EB0F51] hover:bg-pink-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                className="px-2.5 py-1 rounded-full bg-pink-100 text-[#e1146c] hover:bg-pink-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>Đặt lại lọc</span>
@@ -416,7 +435,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
                 placeholder="Tìm tên dịch vụ, spa, quận..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#EB0F51] focus:ring-1 focus:ring-pink-200 bg-slate-50/50"
+                className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#e1146c] focus:ring-1 focus:ring-pink-200 bg-slate-50/50"
               />
               {searchQuery && (
                 <button
@@ -432,13 +451,13 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
             {/* Sort Selector Dropdown */}
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <span className="text-xs font-bold text-slate-600 flex items-center gap-1 shrink-0">
-                <ArrowUpDown className="w-3.5 h-3.5 text-[#EB0F51]" />
+                <ArrowUpDown className="w-3.5 h-3.5 text-[#e1146c]" />
                 <span>Sắp xếp theo:</span>
               </span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="px-3 py-2 text-xs rounded-xl border border-pink-200 bg-white font-bold text-slate-700 focus:outline-none focus:border-[#EB0F51] cursor-pointer shadow-xs"
+                className="px-3 py-2 text-xs rounded-xl border border-pink-200 bg-white font-bold text-slate-700 focus:outline-none focus:border-[#e1146c] cursor-pointer shadow-xs"
               >
                 <option value="popular">🔥 Phổ biến & Nổi bật nhất</option>
                 <option value="price-asc">💵 Giá: Thấp đến Cao</option>
@@ -465,7 +484,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
 
             {/* 2. LỌC THEO KHOẢNG CÁCH ĐỊA LÝ */}
             <div className="flex items-center gap-1.5 bg-pink-50/80 px-2.5 py-1 rounded-xl border border-pink-100">
-              <span className="font-extrabold text-[#B42D58] flex items-center gap-1 text-[11px]">
+              <span className="font-extrabold text-[#be185d] flex items-center gap-1 text-[11px]">
                 <MapPin className="w-3 h-3" />
                 <span>Khoảng cách:</span>
               </span>
@@ -484,7 +503,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
 
             {/* 3. LỌC THEO XẾP HẠNG SAO */}
             <div className="flex items-center gap-1.5 bg-pink-50/80 px-2.5 py-1 rounded-xl border border-pink-100">
-              <span className="font-extrabold text-[#B42D58] flex items-center gap-1 text-[11px]">
+              <span className="font-extrabold text-[#be185d] flex items-center gap-1 text-[11px]">
                 <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                 <span>Đánh giá:</span>
               </span>
@@ -502,7 +521,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
 
             {/* 4. LỌC THEO DANH MỤC */}
             <div className="flex items-center gap-1.5 bg-pink-50/80 px-2.5 py-1 rounded-xl border border-pink-100">
-              <span className="font-extrabold text-[#B42D58] text-[11px]">Danh mục:</span>
+              <span className="font-extrabold text-[#be185d] text-[11px]">Danh mục:</span>
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
@@ -519,7 +538,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
 
             {/* 5. LỌC THEO KHU VỰC / QUẬN */}
             <div className="flex items-center gap-1.5 bg-pink-50/80 px-2.5 py-1 rounded-xl border border-pink-100">
-              <span className="font-extrabold text-[#B42D58] text-[11px]">Khu vực:</span>
+              <span className="font-extrabold text-[#be185d] text-[11px]">Khu vực:</span>
               <select
                 value={districtFilter}
                 onChange={(e) => setDistrictFilter(e.target.value)}
@@ -542,7 +561,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
           {filteredAndSortedItems.length === 0 ? (
             /* Empty State */
             <div className="py-16 text-center space-y-4 max-w-md mx-auto">
-              <div className="w-16 h-16 rounded-full bg-pink-100 text-[#EB0F51] flex items-center justify-center mx-auto text-2xl">
+              <div className="w-16 h-16 rounded-full bg-pink-100 text-[#e1146c] flex items-center justify-center mx-auto text-2xl">
                 🔍
               </div>
               <h3 className="text-base sm:text-lg font-bold text-slate-800">
@@ -554,7 +573,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="px-5 py-2.5 rounded-full bg-[#EB0F51] text-white text-xs font-bold shadow-md hover:bg-[#B42D58] transition-all cursor-pointer"
+                className="px-5 py-2.5 rounded-full bg-[#e1146c] text-white text-xs font-bold shadow-md hover:bg-[#be185d] transition-all cursor-pointer"
               >
                 Xóa tất cả bộ lọc
               </button>
@@ -565,24 +584,25 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
               {filteredAndSortedItems.map((item) => (
                 <div
                   key={`${item.type}-${item.id}`}
-                  onClick={() => {
-                    onClose();
-                    onBookDeal(item.title, item.brandName, item.salePrice, item.originalPrice);
-                  }}
+                  onClick={() =>
+                    onBookDeal(item.title, item.brandName, item.salePrice, item.originalPrice)
+                  }
                   className="group flex flex-col justify-between bg-white rounded-2xl border border-pink-100 hover:border-pink-300 shadow-xs hover:shadow-lg hover:shadow-pink-500/10 transition-all duration-300 overflow-hidden cursor-pointer"
                 >
                   {/* Image & Badges */}
                   <div className="relative aspect-video sm:aspect-square w-full overflow-hidden bg-pink-50">
-                    <img
+                    <OptimizedImage
                       src={item.image}
                       alt={item.title}
+                      preset="deal-card"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      containerClassName="w-full h-full"
                     />
 
                     {/* Discount Badge */}
                     <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
                       {item.discountPercent > 0 && (
-                        <span className="px-2 py-0.5 rounded-md bg-gradient-to-r from-[#EB0F51] to-[#D28474] text-white text-[11px] font-black shadow-md tracking-wider">
+                        <span className="px-2 py-0.5 rounded-md bg-gradient-to-r from-[#e1146c] to-[#f43f5e] text-white text-[11px] font-black shadow-md tracking-wider">
                           -{item.discountPercent}%
                         </span>
                       )}
@@ -595,7 +615,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
 
                     {/* Brand Logo & Distance Tag */}
                     <div className="absolute top-2 left-2 flex items-center gap-1.5">
-                      <div className="w-7 h-7 rounded-full bg-white/95 backdrop-blur-sm border border-pink-200 flex items-center justify-center text-[10px] font-bold text-[#B42D58] shadow-sm">
+                      <div className="w-7 h-7 rounded-full bg-white/95 backdrop-blur-sm border border-pink-200 flex items-center justify-center text-[10px] font-bold text-[#be185d] shadow-sm">
                         {item.brandLogo}
                       </div>
                       <span className="px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
@@ -611,7 +631,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
                       className={`absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center shadow-md transition-all ${
                         addedItemId === item.id
                           ? 'bg-emerald-500 text-white scale-110'
-                          : 'bg-white/90 text-[#B42D58] hover:bg-[#EB0F51] hover:text-white'
+                          : 'bg-white/90 text-[#be185d] hover:bg-[#e1146c] hover:text-white'
                       }`}
                       title="Thêm vào giỏ"
                     >
@@ -628,26 +648,12 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
                     <div>
                       {/* Salon / Brand & District */}
                       <div className="flex items-center justify-between text-[11px] text-pink-700/80 font-semibold mb-1">
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            if (item.supplierId) {
-                              onClose();
-                              onOpenShop(item.supplierId);
-                            }
-                          }}
-                          disabled={!item.supplierId}
-                          className="max-w-[130px] truncate text-left hover:underline focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:no-underline"
-                          aria-label={`Xem cửa hàng ${item.brandName}`}
-                        >
-                          {item.brandName}
-                        </button>
+                        <span className="truncate max-w-[130px]">{item.brandName}</span>
                         <span className="text-slate-400 font-medium">📍 {item.district}</span>
                       </div>
 
                       {/* Service Title */}
-                      <h4 className="text-xs sm:text-sm font-bold text-slate-800 group-hover:text-[#EB0F51] transition-colors line-clamp-2 leading-snug">
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-800 group-hover:text-[#e1146c] transition-colors line-clamp-2 leading-snug">
                         {item.title}
                       </h4>
 
@@ -663,7 +669,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
                     <div className="mt-3 pt-2 border-t border-pink-50">
                       <div className="flex items-baseline justify-between">
                         <div>
-                          <span className="text-base sm:text-lg font-black text-[#EB0F51] tracking-tight">
+                          <span className="text-base sm:text-lg font-black text-[#e1146c] tracking-tight">
                             {formatVND(item.salePrice)}
                           </span>
                           {item.originalPrice > item.salePrice && (
@@ -687,7 +693,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
                           <span className="text-slate-400 font-normal">({item.reviewsCount})</span>
                         </span>
 
-                        <span className="text-[11px] font-bold text-[#EB0F51] group-hover:underline">
+                        <span className="text-[11px] font-bold text-[#e1146c] group-hover:underline">
                           Đặt lịch ngay →
                         </span>
                       </div>

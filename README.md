@@ -67,7 +67,7 @@ The current VNPAY-QR screen is a UI simulation. It is not connected to VNPAY San
 |---|---|
 | Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 4 |
 | Client state/API | React hooks, Axios, localStorage persistence, QRCode |
-| Backend | Java 25, Spring Boot 3.5, Spring Web |
+| Backend | Java 21 LTS, Spring Boot 3.5, Spring Web |
 | Authentication | Spring Security, JWT, BCrypt |
 | Persistence | Spring Data JPA, Hibernate |
 | Database | MySQL 8 |
@@ -93,7 +93,7 @@ During local development, Vite proxies `/api` requests to Spring Boot. In deploy
 Install these before starting:
 
 - Git
-- Node.js 20 or newer and npm
+- Node.js 20.19 or newer and npm
 - Java Development Kit 21
 - Maven 3.9 or newer (`mvn` must be available in the terminal)
 - MySQL Server 8

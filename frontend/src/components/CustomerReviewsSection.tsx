@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Star,
   CheckCircle2,
@@ -14,6 +14,8 @@ import {
   User,
   Heart,
 } from 'lucide-react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { useScrollReveal } from '../hooks/useScrollReveal';
 
 export interface CustomerReview {
   id: string;
@@ -173,6 +175,22 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
   const [newContent, setNewContent] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
+  // Lock body scroll when review modal or preview image is open
+  useBodyScrollLock(Boolean(previewImage || isWriteModalOpen));
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!previewImage && !isWriteModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (previewImage) setPreviewImage(null);
+        else if (isWriteModalOpen) setIsWriteModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewImage, isWriteModalOpen]);
+
   // Toggle like
   const handleToggleLike = (id: string) => {
     setLikedMap((prev) => {
@@ -222,14 +240,21 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
     return rev.salonCategory === activeCategory;
   });
 
+  const { ref: sectionRef, isVisible } = useScrollReveal<HTMLElement>({ threshold: 0.08 });
+
   return (
-    <section className="py-12 bg-gradient-to-b from-[#FFF5F7] via-white to-[#FFF5F7] border-t border-b border-pink-100/70">
+    <section
+      ref={sectionRef}
+      className={`py-12 bg-gradient-to-b from-[#FFF5F7] via-white to-[#FFF5F7] border-t border-b border-pink-100/70 reveal-on-scroll ${
+        isVisible ? 'is-revealed' : ''
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-5 mb-8">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-3 py-1 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white text-[11px] font-black uppercase tracking-wider shadow-xs flex items-center gap-1.5">
+              <span className="px-3 py-1 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-[11px] font-black uppercase tracking-wider shadow-xs flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span>100% ĐÁNH GIÁ THỰC TẾ TỪ KHÁCH HÀNG</span>
               </span>
@@ -240,7 +265,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">
-              Khách Hàng Nói Gì Về <span className="text-[#EB0F51]">BeautyPink</span>?
+              Khách Hàng Nói Gì Về <span className="text-[#e1146c]">BeautyPink</span>?
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-xl">
               Hơn 12.850+ khách hàng đã tin tưởng đặt lịch và trải nghiệm dịch vụ tại các cơ sở Spa, Thẩm mỹ viện & Clinic liên kết trên toàn quốc.
@@ -251,7 +276,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
           <button
             type="button"
             onClick={() => setIsWriteModalOpen(true)}
-            className="px-5 py-2.5 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] hover:from-[#B42D58] hover:to-[#B42D58] text-white text-xs sm:text-sm font-bold shadow-md shadow-pink-500/25 hover:shadow-pink-500/40 transition-all flex items-center gap-2 cursor-pointer self-start md:self-auto shrink-0 active:scale-95"
+            className="px-5 py-2.5 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] hover:from-[#c2185b] hover:to-[#9d174d] text-white text-xs sm:text-sm font-bold shadow-md shadow-pink-500/25 hover:shadow-pink-500/40 transition-all flex items-center gap-2 cursor-pointer self-start md:self-auto shrink-0 active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>Viết đánh giá của bạn</span>
@@ -277,8 +302,8 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
             <span className="text-xs text-slate-500 font-medium">
               Dựa trên <strong>12.850+</strong> lượt đánh giá có hóa đơn xác thực
             </span>
-            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-50 text-[11px] font-bold text-[#B42D58]">
-              <Award className="w-3.5 h-3.5 text-[#EB0F51]" />
+            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-50 text-[11px] font-bold text-[#be185d]">
+              <Award className="w-3.5 h-3.5 text-[#e1146c]" />
               <span>Top 1 Nền tảng Đặt lịch Sắc đẹp hài lòng nhất 2026</span>
             </div>
           </div>
@@ -324,20 +349,20 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
 
           {/* Key Trust Pillars */}
           <div className="md:col-span-3 bg-pink-50/60 rounded-2xl p-4 border border-pink-100 space-y-2 text-xs">
-            <div className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider mb-1 text-[#B42D58]">
+            <div className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider mb-1 text-[#be185d]">
               Chỉ số cam kết chất lượng:
             </div>
             <div className="flex items-center justify-between text-slate-700">
               <span>Tay nghề chuyên viên:</span>
-              <strong className="text-[#EB0F51]">4.95 / 5</strong>
+              <strong className="text-[#e1146c]">4.95 / 5</strong>
             </div>
             <div className="flex items-center justify-between text-slate-700">
               <span>Vệ sinh & cơ sở vật chất:</span>
-              <strong className="text-[#EB0F51]">4.98 / 5</strong>
+              <strong className="text-[#e1146c]">4.98 / 5</strong>
             </div>
             <div className="flex items-center justify-between text-slate-700">
               <span>Đúng giá niêm yết:</span>
-              <strong className="text-[#EB0F51]">100%</strong>
+              <strong className="text-[#e1146c]">100%</strong>
             </div>
           </div>
         </div>
@@ -349,7 +374,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
             onClick={() => setActiveCategory('all')}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeCategory === 'all'
-                ? 'bg-[#EB0F51] text-white shadow-xs'
+                ? 'bg-[#e1146c] text-white shadow-xs'
                 : 'bg-white text-slate-600 hover:bg-pink-50 border border-pink-200/80'
             }`}
           >
@@ -360,11 +385,11 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
             onClick={() => setActiveCategory('with-photos')}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
               activeCategory === 'with-photos'
-                ? 'bg-[#EB0F51] text-white shadow-xs'
+                ? 'bg-[#e1146c] text-white shadow-xs'
                 : 'bg-white text-slate-600 hover:bg-pink-50 border border-pink-200/80'
             }`}
           >
-            <Camera className="w-3.5 h-3.5 text-[#EB0F51]" />
+            <Camera className="w-3.5 h-3.5 text-[#e1146c]" />
             <span>Có hình ảnh thực tế</span>
           </button>
           <button
@@ -372,7 +397,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
             onClick={() => setActiveCategory('spa')}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeCategory === 'spa'
-                ? 'bg-[#EB0F51] text-white shadow-xs'
+                ? 'bg-[#e1146c] text-white shadow-xs'
                 : 'bg-white text-slate-600 hover:bg-pink-50 border border-pink-200/80'
             }`}
           >
@@ -383,7 +408,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
             onClick={() => setActiveCategory('clinic')}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeCategory === 'clinic'
-                ? 'bg-[#EB0F51] text-white shadow-xs'
+                ? 'bg-[#e1146c] text-white shadow-xs'
                 : 'bg-white text-slate-600 hover:bg-pink-50 border border-pink-200/80'
             }`}
           >
@@ -394,7 +419,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
             onClick={() => setActiveCategory('nail')}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeCategory === 'nail'
-                ? 'bg-[#EB0F51] text-white shadow-xs'
+                ? 'bg-[#e1146c] text-white shadow-xs'
                 : 'bg-white text-slate-600 hover:bg-pink-50 border border-pink-200/80'
             }`}
           >
@@ -449,7 +474,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
 
                 {/* Salon & Service Tag */}
                 <div className="p-2.5 rounded-2xl bg-pink-50/60 border border-pink-100/80 mb-3 text-xs">
-                  <div className="font-bold text-[#B42D58] flex items-center gap-1 truncate">
+                  <div className="font-bold text-[#be185d] flex items-center gap-1 truncate">
                     <span>📍 {review.salonName}</span>
                   </div>
                   <div className="text-[11px] text-slate-600 truncate mt-0.5">
@@ -486,7 +511,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                 {review.salonReply && (
                   <div className="mt-3.5 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
                     <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                      <span className="text-[#B42D58] flex items-center gap-1">
+                      <span className="text-[#be185d] flex items-center gap-1">
                         <MessageSquare className="w-3 h-3" />
                         <span>{review.salonReply.responderName}</span>
                       </span>
@@ -506,13 +531,13 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                   onClick={() => handleToggleLike(review.id)}
                   className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors cursor-pointer ${
                     likedMap[review.id]
-                      ? 'bg-pink-100 text-[#EB0F51]'
-                      : 'text-slate-500 hover:text-[#EB0F51] hover:bg-pink-50'
+                      ? 'bg-pink-100 text-[#e1146c]'
+                      : 'text-slate-500 hover:text-[#e1146c] hover:bg-pink-50'
                   }`}
                 >
                   <ThumbsUp
                     className={`w-3.5 h-3.5 ${
-                      likedMap[review.id] ? 'fill-[#EB0F51]' : ''
+                      likedMap[review.id] ? 'fill-[#e1146c]' : ''
                     }`}
                   />
                   <span>Hữu ích ({review.likesCount})</span>
@@ -524,7 +549,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                     onClick={() =>
                       onBookService(review.serviceTitle, review.salonName, 299000, 450000)
                     }
-                    className="text-xs font-bold text-[#EB0F51] hover:text-[#B42D58] flex items-center gap-1 hover:underline cursor-pointer"
+                    className="text-xs font-bold text-[#e1146c] hover:text-[#be185d] flex items-center gap-1 hover:underline cursor-pointer"
                   >
                     <span>Trải nghiệm ngay</span>
                     <ArrowRight className="w-3 h-3" />
@@ -539,20 +564,28 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
       {/* Image Lightbox Modal */}
       {previewImage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in"
-          onClick={() => setPreviewImage(null)}
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 overflow-hidden animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
         >
-          <div className="relative max-w-2xl max-h-[85vh] rounded-2xl overflow-hidden shadow-2xl">
+          <div
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity cursor-pointer"
+            onClick={() => setPreviewImage(null)}
+            aria-hidden="true"
+          />
+          <div className="relative z-10 max-w-2xl max-h-[85vh] rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
             <button
               type="button"
               onClick={() => setPreviewImage(null)}
-              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black"
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black cursor-pointer shadow-md"
+              title="Đóng (ESC)"
+              aria-label="Đóng xem ảnh"
             >
               <X className="w-4 h-4" />
             </button>
             <img
               src={previewImage}
-              alt="Preview"
+              alt="Review attachment preview"
               className="w-full h-full object-contain"
             />
           </div>
@@ -561,10 +594,24 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
 
       {/* Write Review Modal */}
       {isWriteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+        >
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-200 cursor-pointer"
+            onClick={() => setIsWriteModalOpen(false)}
+            aria-hidden="true"
+          />
+
+          <div
+            className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-[#B42D58] via-[#D28474] to-[#EB0F51] text-white p-5 flex items-center justify-between">
+            <div className="shrink-0 bg-gradient-to-r from-[#be185d] via-[#db2777] to-[#e1146c] text-white p-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-white" />
                 <h3 className="text-base font-extrabold">Đánh giá trải nghiệm dịch vụ</h3>
@@ -573,12 +620,15 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                 type="button"
                 onClick={() => setIsWriteModalOpen(false)}
                 className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer"
+                title="Đóng (ESC)"
+                aria-label="Đóng cửa sổ"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {submitSuccess ? (
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+              {submitSuccess ? (
               <div className="p-8 text-center space-y-3">
                 <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
                   <CheckCircle2 className="w-8 h-8" />
@@ -602,7 +652,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                     placeholder="Ví dụ: Hoàng Thảo"
                     value={newAuthor}
                     onChange={(e) => setNewAuthor(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#EB0F51]"
+                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#e1146c]"
                   />
                 </div>
 
@@ -614,7 +664,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                     <select
                       value={newSalon}
                       onChange={(e) => setNewSalon(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#EB0F51] bg-white"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#e1146c] bg-white"
                     >
                       <option value="An Miên Spa Dưỡng Sinh">An Miên Spa Dưỡng Sinh</option>
                       <option value="PMT Aesthetic Clinic">PMT Aesthetic Clinic</option>
@@ -635,7 +685,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                       placeholder="Gội đầu, Cấy HA..."
                       value={newService}
                       onChange={(e) => setNewService(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#EB0F51]"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#e1146c]"
                     />
                   </div>
                 </div>
@@ -683,18 +733,19 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                     placeholder="Cảm nhận về tay nghề chuyên viên, không gian, mức độ sạch sẽ và hiệu quả dịch vụ..."
                     value={newContent}
                     onChange={(e) => setNewContent(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#EB0F51] resize-none"
+                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#e1146c] resize-none"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-2.5 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white text-xs font-bold shadow-md shadow-pink-600/30 hover:opacity-95 transition-all mt-1 cursor-pointer"
+                  className="w-full py-2.5 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs font-bold shadow-md shadow-pink-600/30 hover:opacity-95 transition-all mt-1 cursor-pointer"
                 >
                   Gửi đánh giá & Nhận 20 PinkPoints
                 </button>
               </form>
             )}
+            </div>
           </div>
         </div>
       )}

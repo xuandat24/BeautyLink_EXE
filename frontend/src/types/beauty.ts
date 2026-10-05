@@ -1,13 +1,158 @@
 import { z } from 'zod';
 
 // ==========================================
-// Domain Entity Interfaces
+// User & Auth Types
+// ==========================================
+
+export type UserRole = 'CUSTOMER' | 'SUPPLIER' | 'STAFF' | 'ADMIN';
+
+export interface CurrentUser {
+  id?: number | string;
+  name: string;
+  phone?: string;
+  email?: string;
+  avatar?: string;
+  role: UserRole;
+  memberTier?: 'Standard' | 'Silver' | 'Gold' | 'VIP' | string;
+  loyaltyPoints?: number;
+  points?: number;
+  address?: string;
+  citizenId?: string; // Số CCCD / CMND
+  gender?: 'Nam' | 'Nữ' | 'Khác' | string;
+  dateOfBirth?: string; // Ngày sinh
+}
+
+// ==========================================
+// Backend Entity Types (from Railway API)
+// ==========================================
+
+export interface BackendCategory {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+  imageUrl: string;
+}
+
+export interface BackendPractitioner {
+  id: number;
+  name?: string;
+  displayName?: string;
+  specialty?: string;
+  bio?: string;
+  avatarUrl?: string;
+}
+
+export interface BackendService {
+  id: number;
+  categoryId?: number;
+  name: string;
+  description?: string | null;
+  price: number;
+  originalPrice?: number;
+  durationMinutes: number;
+  imageUrl: string;
+  categorySlug: string;
+  categoryName?: string;
+  featured?: boolean;
+  rating: number;
+  supplierId: number;
+  supplierName: string;
+  supplierAddress: string;
+  supplierImageUrl?: string;
+  supplierBusinessType: string;
+  supplierReviewCount: number;
+  supplierLatitude?: number | null;
+  supplierLongitude?: number | null;
+  supplierNearbyFeatured?: boolean;
+  supplierNewPartner?: boolean;
+  highlightText?: string;
+  practitioners?: BackendPractitioner[];
+  district?: string;
+  availableTodaySlots?: string[];
+}
+
+export interface BackendLocation {
+  id: number;
+  name: string;
+  slug: string;
+  type: string;
+  parentId?: number | null;
+}
+
+export interface ScheduleRule {
+  id?: number;
+  dayOfWeek: number; // 1 = Monday ... 7 = Sunday
+  dayName?: string;
+  isWorking: boolean;
+  startTime: string; // HH:mm
+  endTime: string;   // HH:mm
+  breakStartTime?: string | null;
+  breakEndTime?: string | null;
+  slotDurationMinutes: number;
+}
+
+export interface BackendBooking {
+  id: number;
+  bookingCode: string;
+  serviceId: number;
+  serviceName: string;
+  supplierId: number;
+  supplierName: string;
+  practitionerId?: number;
+  practitionerName: string;
+  appointmentDate: string;
+  startTime: string;
+  endTime: string;
+  price?: number;
+  totalAmount: number;
+  status: 'CONFIRMED' | 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  note?: string;
+  createdAt?: string;
+  serviceImageUrl?: string | null;
+  supplierImageUrl?: string | null;
+  supplierAddress?: string | null;
+  paymentStatus?: 'SIMULATED' | 'UNPAID' | 'PAID' | 'REFUNDED';
+  reviewEligible?: boolean;
+}
+
+export interface BackendSupplierProfile {
+  id: number;
+  userId: number;
+  name: string;
+  businessType: string;
+  locationId: number;
+  address: string;
+  addressLine?: string;
+  imageUrl?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  specialty?: string;
+  description?: string;
+  verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED';
+}
+
+export interface BackendReport {
+  id: number;
+  bookingId?: number;
+  targetType: string;
+  targetId: number;
+  userId?: number;
+  reporterName: string;
+  reason: string;
+  details: string;
+  status: 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'REJECTED';
+  resolutionNote?: string;
+  createdAt: string;
+}
+
+// ==========================================
+// Frontend Domain Entity Interfaces
 // ==========================================
 
 export interface HotDeal {
   id: string;
   serviceId?: number;
-  supplierId?: number;
   title: string;
   brandName: string;
   brandLogo: string;
@@ -27,10 +172,9 @@ export interface HotDeal {
 
 export interface Salon {
   id: string;
-  supplierId?: number;
   serviceId?: number;
   name: string;
-  category: 'spa' | 'tham-my-vien' | 'clinic' | 'massage' | 'nail' | 'salon-toc';
+  category: 'spa' | 'tham-my-vien' | 'clinic' | 'massage' | 'nail' | 'salon-toc' | string;
   categoryLabel: string;
   address: string;
   district: string;
@@ -48,7 +192,6 @@ export interface Salon {
 
 export interface NewPartner {
   id: string;
-  supplierId?: number;
   serviceId?: number;
   name: string;
   subTitle: string;
@@ -99,6 +242,7 @@ export interface CartItem {
 }
 
 export interface BookingDetails {
+  id?: string;
   serviceTitle: string;
   salonName: string;
   price: number;
@@ -112,21 +256,15 @@ export interface BookingDetails {
   bookingCode?: string;
   status?: 'confirmed' | 'pending' | 'completed' | 'cancelled';
   createdAt?: number;
-}
-
-export interface CurrentUser {
-  id?: number;
-  name: string;
-  phone: string;
-  email?: string;
-  role?: 'CUSTOMER' | 'SUPPLIER' | 'STAFF' | 'ADMIN';
-  avatar?: string;
-  loyaltyPoints?: number;
-  memberTier?: 'Standard' | 'Silver' | 'Gold' | 'VIP';
+  paymentTime?: string; // Thời gian thanh toán tiền ngay dưới số tiền
+  paidAmount?: number;
+  remainingAmount?: number;
+  depositType?: 'deposit50' | 'full100';
+  paymentMethod?: string;
 }
 
 // ==========================================
-// Zod Validation Schemas (Strict Data Validation)
+// Zod Validation Schemas
 // ==========================================
 
 export const BookingSchema = z.object({
@@ -154,3 +292,9 @@ export const UserAuthSchema = z.object({
 
 export type BookingInput = z.infer<typeof BookingSchema>;
 export type UserAuthInput = z.infer<typeof UserAuthSchema>;
+
+export interface SearchFilters {
+  priceRange: 'all' | 'under-300' | '300-800' | 'over-800';
+  minRating: number; // 0 for all, or 4.0, 4.5, 4.8
+  maxDistance: number; // 0 for all, or 2, 5, 10 (in km)
+}

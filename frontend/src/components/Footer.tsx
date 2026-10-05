@@ -1,31 +1,152 @@
 import React from 'react';
-import { Heart, Mail, MapPin, Phone, QrCode, ShieldCheck, Sparkles } from 'lucide-react';
-import { useLanguage } from '../lib/language';
+import { Sparkles, Phone, Mail, MapPin, ShieldCheck, Heart, QrCode } from 'lucide-react';
 
 export const Footer: React.FC = () => {
-  const { text } = useLanguage();
-  const companyLinks = [text('Giới thiệu nền tảng', 'About the platform'), text('Danh sách đối tác', 'Partner directory'), text('Tuyển dụng', 'Careers'), text('Điều khoản sử dụng', 'Terms of use'), text('Chính sách bảo mật', 'Privacy policy')];
-  const customerLinks = [text('Khuyến mãi hôm nay', 'Today’s promotions'), text('Hướng dẫn đặt lịch', 'Booking guide'), text('Chính sách hoàn hủy', 'Cancellation policy'), text('Trở thành đối tác', 'Become a partner'), text('Quy chế hoạt động', 'Platform policy')];
-
   return (
-    <footer className="mt-12 border-t border-pink-200 bg-white pb-8 pt-12 text-slate-600">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="grid grid-cols-1 gap-8 border-b border-pink-100 pb-10 md:grid-cols-2 lg:grid-cols-5">
-          <div className="space-y-4 lg:col-span-2">
-            <div className="flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-tr from-[#EB0F51] to-[#f472b6] text-white shadow-md shadow-pink-500/20"><Sparkles className="h-5 w-5" /></span><span className="text-2xl font-black text-slate-900">Beauty<span className="text-[#EB0F51]">Link</span></span></div>
-            <p className="max-w-sm text-xs leading-relaxed text-slate-500">{text('BeautyLink kết nối khách hàng với các nhà cung cấp dịch vụ làm đẹp, spa, salon và chuyên viên đã được xác minh.', 'BeautyLink connects customers with verified beauty providers, spas, salons, and professionals.')}</p>
-            <div className="space-y-2 text-xs"><p className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[#EB0F51]" /><strong>{text('Hotline hỗ trợ:', 'Support hotline:')}</strong> 1900 8868</p><p className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-[#EB0F51]" /><strong>{text('Email hỗ trợ:', 'Support email:')}</strong> support@beautylink.vn</p><p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#EB0F51]" />{text('Phục vụ tại Hà Nội và Thành phố Hồ Chí Minh', 'Serving Hanoi and Ho Chi Minh City')}</p></div>
+    <footer className="bg-white border-t border-pink-200 mt-12 pt-12 pb-8 text-slate-600">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 pb-10 border-b border-pink-100">
+          {/* Col 1: Brand Info */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#e1146c] to-[#f472b6] flex items-center justify-center text-white shadow-md shadow-pink-500/20">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-2xl font-black bg-gradient-to-r from-[#be185d] via-[#db2777] to-[#ec4899] bg-clip-text text-transparent">
+                BeautyPink
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed max-w-sm">
+              BeautyPink là nền tảng công nghệ kết nối khách hàng với hàng ngàn cơ sở làm đẹp, thẩm mỹ viện, spa, salon tóc và clinic uy tín hàng đầu Việt Nam.
+            </p>
+
+            <div className="space-y-2 text-xs text-slate-600">
+              <div className="flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5 text-[#e1146c]" />
+                <span className="font-semibold">Hotline CSKH:</span>
+                <span className="text-[#e1146c] font-bold">1900 8868 (8:00 - 22:00)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Mail className="w-3.5 h-3.5 text-[#e1146c]" />
+                <span className="font-semibold">Email hỗ trợ:</span>
+                <span>cskh@beautypink.vn</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <MapPin className="w-3.5 h-3.5 text-[#e1146c] shrink-0 mt-0.5" />
+                <span>Tòa nhà Innovation Hub, 180 Nguyễn Thị Minh Khai, Quận 3, TP. Hồ Chí Minh</span>
+              </div>
+            </div>
           </div>
-          <FooterLinks title={text('Về BeautyLink', 'About BeautyLink')} items={companyLinks} />
-          <FooterLinks title={text('Dành cho bạn', 'For you')} items={customerLinks} />
-          <div className="space-y-3"><h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">{text('Ứng dụng BeautyLink', 'BeautyLink app')}</h4><p className="text-xs text-slate-500">{text('Quét mã QR để theo dõi lịch hẹn thuận tiện hơn.', 'Scan the QR code to manage appointments on the go.')}</p><div className="flex max-w-[200px] items-center gap-3 rounded-2xl border border-pink-200/60 bg-pink-50/70 p-3"><span className="grid h-14 w-14 place-items-center rounded-xl border border-pink-100 bg-white"><QrCode className="h-12 w-12 text-slate-800" /></span><span className="text-[10px] font-semibold"><strong className="block rounded bg-[#EB0F51] px-2 py-0.5 text-center text-white">iOS / Android</strong><span className="mt-1 block">4.9 ★</span></span></div><p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600"><ShieldCheck className="h-3.5 w-3.5" />{text('Bảo vệ dữ liệu người dùng', 'User data protected')}</p></div>
+
+          {/* Col 2: Về BeautyPink */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Về BeautyPink
+            </h4>
+            <ul className="space-y-2 text-xs">
+              <li>
+                <a href="#deals" className="hover:text-[#e1146c] transition-colors">
+                  Giới thiệu nền tảng
+                </a>
+              </li>
+              <li>
+                <a href="#nearby" className="hover:text-[#e1146c] transition-colors">
+                  Danh sách đối tác
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-[#e1146c] transition-colors">
+                  Tuyển dụng nhân tài
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-[#e1146c] transition-colors">
+                  Điều khoản sử dụng
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-[#e1146c] transition-colors">
+                  Chính sách bảo mật
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Col 3: Khách hàng & Đối tác */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Dành cho bạn
+            </h4>
+            <ul className="space-y-2 text-xs">
+              <li>
+                <a href="#deals" className="hover:text-[#e1146c] transition-colors">
+                  Khuyến mãi Hot hôm nay
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-[#e1146c] transition-colors">
+                  Hướng dẫn đặt lịch trực tuyến
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-[#e1146c] transition-colors">
+                  Chính sách hoàn hủy lịch hẹn
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-[#e1146c] transition-colors">
+                  Trở thành đối tác kinh doanh
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-[#e1146c] transition-colors">
+                  Quy chế hoạt động sàn TMĐT
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Col 4: Tải ứng dụng */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Tải ứng dụng BeautyPink
+            </h4>
+            <p className="text-xs text-slate-500">
+              Quét mã QR để nhận ngay voucher giảm 50K khi tải app lần đầu:
+            </p>
+
+            <div className="flex items-center gap-3 bg-pink-50/70 p-3 rounded-2xl border border-pink-200/60 max-w-[200px]">
+              <div className="w-14 h-14 bg-white p-1 rounded-xl shadow-sm flex items-center justify-center border border-pink-100">
+                <QrCode className="w-12 h-12 text-slate-800" />
+              </div>
+              <div className="flex flex-col text-[10px] text-slate-600 font-semibold gap-1">
+                <span className="px-2 py-0.5 rounded bg-[#e1146c] text-white text-center">
+                  iOS / Android
+                </span>
+                <span>4.9 ★ (45k+)</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Đã xác thực Bộ Công Thương</span>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col items-center justify-between gap-4 pt-6 text-xs text-slate-400 sm:flex-row"><p>© 2026 BeautyLink. {text('Mọi quyền được bảo lưu.', 'All rights reserved.')}</p><div className="flex flex-wrap items-center justify-center gap-2"><span>{text('Bảo mật SSL', 'SSL secured')}</span><span>·</span><span>{text('Thanh toán đang mô phỏng', 'Payments are simulated')}</span><span>·</span><span className="inline-flex items-center gap-1 font-bold text-pink-600">Made with <Heart className="h-3 w-3 fill-current" /> in Vietnam</span></div></div>
+
+        {/* Bottom Bar */}
+        <div className="pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-4">
+          <p>© 2026 BeautyPink. All rights reserved. Nền tảng đặt lịch làm đẹp & spa.</p>
+          <div className="flex items-center gap-4 text-xs">
+            <span>Bảo mật SSL 256-bit</span>
+            <span>·</span>
+            <span>Thanh toán chuẩn PCI-DSS</span>
+            <span>·</span>
+            <span className="text-pink-600 font-bold">Made with ♥ in Vietnam</span>
+          </div>
+        </div>
       </div>
     </footer>
   );
 };
-
-const FooterLinks: React.FC<{ title: string; items: string[] }> = ({ title, items }) => (
-  <div className="space-y-3"><h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">{title}</h4><ul className="space-y-2 text-xs">{items.map((item) => <li key={item}><a href="#" className="transition-colors hover:text-[#EB0F51]">{item}</a></li>)}</ul></div>
-);
