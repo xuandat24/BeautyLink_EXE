@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import { CurrentUser } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { customerAuthSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
+import { FieldError } from './FieldError';
 
 interface AuthPageProps {
   initialMode: 'login' | 'register';
@@ -89,6 +91,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [rememberMe, setRememberMe] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   // Dynamic live booking ticker
   const [activeBookingIndex, setActiveBookingIndex] = useState(0);
@@ -104,12 +107,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     e.preventDefault();
     setError('');
 
-    const cleanPhone = identifier.replace(/[\s.-]/g, '');
-
-    if (mode === 'register' && password !== confirmPassword) {
-      setError('Mật khẩu xác nhận chưa khớp. Vui lòng kiểm tra lại.');
+    const validation = customerAuthSchema.safeParse({
+      mode,
+      fullName,
+      identifier,
+      email,
+      password,
+      confirmPassword,
+    });
+    if (!validation.success) {
+      const errors = zodFieldErrors(validation.error);
+      setFieldErrors(errors);
+      setError('Vui lòng kiểm tra các trường được đánh dấu.');
       return;
     }
+    setFieldErrors({});
+
+    const cleanPhone = identifier.replace(/[\s.-]/g, '');
 
     setLoading(true);
     try {
@@ -348,11 +362,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         type="text"
                         required
                         value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
+                        onChange={(e) => { setFullName(e.target.value); setFieldErrors((prev) => ({ ...prev, fullName: '' })); }}
+                        minLength={2}
+                        maxLength={120}
+                        aria-invalid={Boolean(fieldErrors.fullName)}
+                        aria-describedby="fullName-error"
                         placeholder="Ví dụ: Nguyễn Minh Anh"
                         className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium placeholder:text-slate-400 bg-pink-50/20"
                       />
                     </div>
+                    <FieldError id="fullName-error" message={fieldErrors.fullName} />
                   </div>
                 )}
 
@@ -366,11 +385,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       type="text"
                       required
                       value={identifier}
-                      onChange={(e) => setIdentifier(e.target.value)}
+                      onChange={(e) => { setIdentifier(e.target.value); setFieldErrors((prev) => ({ ...prev, identifier: '' })); }}
+                      maxLength={254}
+                      aria-invalid={Boolean(fieldErrors.identifier)}
+                      aria-describedby="identifier-error"
                       placeholder={mode === 'login' ? '0901234567 hoặc user@example.com' : '0901234567'}
                       className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium placeholder:text-slate-400 bg-pink-50/20"
                     />
                   </div>
+                  <FieldError id="identifier-error" message={fieldErrors.identifier} />
                 </div>
 
                 {mode === 'register' && (
@@ -383,11 +406,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       <input
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => { setEmail(e.target.value); setFieldErrors((prev) => ({ ...prev, email: '' })); }}
+                        maxLength={254}
+                        aria-invalid={Boolean(fieldErrors.email)}
+                        aria-describedby="email-error"
                         placeholder="name@example.com"
                         className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium placeholder:text-slate-400 bg-pink-50/20"
                       />
                     </div>
+                    <FieldError id="email-error" message={fieldErrors.email} />
                   </div>
                 )}
 
@@ -410,7 +437,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       type={showPassword ? 'text' : 'password'}
                       required
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => { setPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, password: '' })); }}
+                      minLength={8}
+                      maxLength={72}
+                      aria-invalid={Boolean(fieldErrors.password)}
+                      aria-describedby="password-error"
                       placeholder="••••••••"
                       className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium bg-pink-50/20"
                     />
@@ -422,6 +453,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  <FieldError id="password-error" message={fieldErrors.password} />
                 </div>
 
                 {mode === 'register' && (
@@ -435,11 +467,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         type={showPassword ? 'text' : 'password'}
                         required
                         value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        onChange={(e) => { setConfirmPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, confirmPassword: '' })); }}
+                        minLength={8}
+                        maxLength={72}
+                        aria-invalid={Boolean(fieldErrors.confirmPassword)}
+                        aria-describedby="confirmPassword-error"
                         placeholder="••••••••"
                         className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium bg-pink-50/20"
                       />
                     </div>
+                    <FieldError id="confirmPassword-error" message={fieldErrors.confirmPassword} />
                   </div>
                 )}
 

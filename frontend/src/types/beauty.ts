@@ -116,6 +116,18 @@ export interface BackendBooking {
   reviewEligible?: boolean;
 }
 
+export interface PayOSPayment {
+  bookingId: number;
+  bookingCode: string;
+  orderCode: number;
+  paymentLinkId: string;
+  checkoutUrl: string;
+  amount: number;
+  remainingAmount: number;
+  paymentOption: 'DEPOSIT_50' | 'FULL_100';
+  status: 'PENDING' | 'PAID' | 'CANCELLED' | 'EXPIRED' | 'FAILED';
+}
+
 export interface BackendSupplierProfile {
   id: number;
   userId: number;

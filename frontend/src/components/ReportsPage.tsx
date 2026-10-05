@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { BackendReport } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { adminReportSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
+import { FieldError } from './FieldError';
 
 interface ReportsPageProps {
   onBack: () => void;
@@ -30,6 +32,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   useEffect(() => {
     setLoading(true);
@@ -57,6 +60,13 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack }) => {
 
   const handleSave = async () => {
     if (!selected) return;
+    const validation = adminReportSchema.safeParse({ status, note });
+    if (!validation.success) {
+      setFieldErrors(zodFieldErrors(validation.error));
+      setError('Vui lòng kiểm tra dữ liệu xử lý báo cáo.');
+      return;
+    }
+    setFieldErrors({});
     setSaving(true);
     setError('');
     try {
@@ -202,7 +212,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack }) => {
                       </span>
                       <select
                         value={status}
-                        onChange={(e) => setStatus(e.target.value)}
+                        onChange={(e) => { setStatus(e.target.value); setFieldErrors((prev) => ({ ...prev, status: '', note: '' })); }}
+                        aria-invalid={Boolean(fieldErrors.status)}
+                        aria-describedby="report-status-error"
                         className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:border-pink-400 bg-white"
                       >
                         <option value="OPEN">Mới</option>
@@ -210,6 +222,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack }) => {
                         <option value="RESOLVED">Đã giải quyết</option>
                         <option value="REJECTED">Từ chối</option>
                       </select>
+                      <FieldError id="report-status-error" message={fieldErrors.status} />
                     </label>
 
                     <label>
@@ -218,11 +231,14 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack }) => {
                       </span>
                       <textarea
                         value={note}
-                        onChange={(e) => setNote(e.target.value)}
+                        onChange={(e) => { setNote(e.target.value); setFieldErrors((prev) => ({ ...prev, note: '' })); }}
                         maxLength={1000}
+                        aria-invalid={Boolean(fieldErrors.note)}
+                        aria-describedby="report-note-error"
                         placeholder="Nội dung phản hồi hoặc phương án đã xử lý..."
                         className="min-h-28 w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-pink-400"
                       />
+                      <FieldError id="report-note-error" message={fieldErrors.note} />
                     </label>
                   </div>
 

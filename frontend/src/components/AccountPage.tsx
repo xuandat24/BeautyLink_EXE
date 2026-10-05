@@ -36,6 +36,8 @@ import { AppointmentShareModal } from './AppointmentShareModal';
 import { AvatarPickerModal } from './AvatarPickerModal';
 import { ServiceReviewModal } from './ServiceReviewModal';
 import { reviewService } from '../services/reviewService';
+import { customerProfileSchema, FieldErrors, passwordChangeSchema, zodFieldErrors } from '../lib/validation';
+import { FieldError } from './FieldError';
 
 interface AccountPageProps {
   currentUser: CurrentUser | null;
@@ -105,6 +107,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   // Personal Info State with persistence
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
+  const [profileErrors, setProfileErrors] = useState<FieldErrors>({});
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [passwordErrors, setPasswordErrors] = useState<FieldErrors>({});
 
   const [profile, setProfile] = useState<UserProfileData>(() => {
     try {
@@ -130,23 +135,45 @@ export const AccountPage: React.FC<AccountPageProps> = ({
 
   const [profileForm, setProfileForm] = useState<UserProfileData>(profile);
 
+  const handlePasswordValidation = (e: React.FormEvent) => {
+    e.preventDefault();
+    const validation = passwordChangeSchema.safeParse(passwordForm);
+    if (!validation.success) {
+      setPasswordErrors(zodFieldErrors(validation.error));
+      setProfileSuccessMsg('');
+      return;
+    }
+    setPasswordErrors({});
+    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setProfileSuccessMsg('Dữ liệu mật khẩu hợp lệ. Chức năng đổi mật khẩu trên máy chủ đang được hoàn thiện.');
+    setTimeout(() => setProfileSuccessMsg(''), 4000);
+  };
+
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    setProfile(profileForm);
+    const validation = customerProfileSchema.safeParse(profileForm);
+    if (!validation.success) {
+      setProfileErrors(zodFieldErrors(validation.error));
+      setProfileSuccessMsg('');
+      return;
+    }
+    setProfileErrors({});
+    const normalizedProfile = validation.data as UserProfileData;
+    setProfile(normalizedProfile);
     try {
-      localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profileForm));
+      localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(normalizedProfile));
     } catch {}
     if (currentUser) {
       setCurrentUser({
         ...currentUser,
-        name: profileForm.name,
-        phone: profileForm.phone,
-        email: profileForm.email,
-        address: profileForm.address,
-        citizenId: profileForm.citizenId,
-        gender: profileForm.gender,
-        dateOfBirth: profileForm.dateOfBirth,
-        avatar: profileForm.avatar,
+        name: normalizedProfile.name,
+        phone: normalizedProfile.phone,
+        email: normalizedProfile.email,
+        address: normalizedProfile.address,
+        citizenId: normalizedProfile.citizenId,
+        gender: normalizedProfile.gender,
+        dateOfBirth: normalizedProfile.dateOfBirth,
+        avatar: normalizedProfile.avatar,
       });
     }
     setIsEditingProfile(false);
@@ -534,7 +561,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       type="text"
                       required
                       value={profileForm.name}
-                      onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                      onChange={(e) => { setProfileForm({ ...profileForm, name: e.target.value }); setProfileErrors((prev) => ({ ...prev, name: '' })); }}
+                      minLength={2}
+                      maxLength={120}
+                      aria-invalid={Boolean(profileErrors.name)}
                       className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/20 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#e1146c]"
                     />
                   ) : (
@@ -545,6 +575,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       </span>
                     </div>
                   )}
+                  <FieldError message={profileErrors.name} />
                 </div>
 
                 {/* 2. Số điện thoại */}
@@ -557,7 +588,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       type="tel"
                       required
                       value={profileForm.phone}
-                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                      onChange={(e) => { setProfileForm({ ...profileForm, phone: e.target.value }); setProfileErrors((prev) => ({ ...prev, phone: '' })); }}
+                      maxLength={15}
+                      aria-invalid={Boolean(profileErrors.phone)}
                       className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/20 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#e1146c]"
                     />
                   ) : (
@@ -566,6 +599,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       <Phone className="w-3.5 h-3.5 text-slate-400" />
                     </div>
                   )}
+                  <FieldError message={profileErrors.phone} />
                 </div>
 
                 {/* 3. Email */}
@@ -578,7 +612,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       type="email"
                       required
                       value={profileForm.email}
-                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                      onChange={(e) => { setProfileForm({ ...profileForm, email: e.target.value }); setProfileErrors((prev) => ({ ...prev, email: '' })); }}
+                      maxLength={254}
+                      aria-invalid={Boolean(profileErrors.email)}
                       className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/20 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#e1146c]"
                     />
                   ) : (
@@ -587,6 +623,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                     </div>
                   )}
+                  <FieldError message={profileErrors.email} />
                 </div>
 
                 {/* 4. Giới tính */}
@@ -597,7 +634,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   {isEditingProfile ? (
                     <select
                       value={profileForm.gender}
-                      onChange={(e) => setProfileForm({ ...profileForm, gender: e.target.value })}
+                      onChange={(e) => { setProfileForm({ ...profileForm, gender: e.target.value }); setProfileErrors((prev) => ({ ...prev, gender: '' })); }}
+                      aria-invalid={Boolean(profileErrors.gender)}
                       className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/20 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#e1146c]"
                     >
                       <option value="Nam">Nam</option>
@@ -609,6 +647,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       <span>{profile.gender || 'Nam'}</span>
                     </div>
                   )}
+                  <FieldError message={profileErrors.gender} />
                 </div>
 
                 {/* 5. Ngày sinh */}
@@ -621,7 +660,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       type="text"
                       placeholder="17/10/2001"
                       value={profileForm.dateOfBirth}
-                      onChange={(e) => setProfileForm({ ...profileForm, dateOfBirth: e.target.value })}
+                      onChange={(e) => { setProfileForm({ ...profileForm, dateOfBirth: e.target.value }); setProfileErrors((prev) => ({ ...prev, dateOfBirth: '' })); }}
+                      maxLength={10}
+                      aria-invalid={Boolean(profileErrors.dateOfBirth)}
                       className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/20 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#e1146c]"
                     />
                   ) : (
@@ -630,6 +671,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
                     </div>
                   )}
+                  <FieldError message={profileErrors.dateOfBirth} />
                 </div>
 
                 {/* 6. Số CCCD / CMND */}
@@ -643,7 +685,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       maxLength={12}
                       placeholder="079201018923"
                       value={profileForm.citizenId}
-                      onChange={(e) => setProfileForm({ ...profileForm, citizenId: e.target.value })}
+                      onChange={(e) => { setProfileForm({ ...profileForm, citizenId: e.target.value.replace(/\D/g, '').slice(0, 12) }); setProfileErrors((prev) => ({ ...prev, citizenId: '' })); }}
+                      inputMode="numeric"
+                      aria-invalid={Boolean(profileErrors.citizenId)}
                       className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/20 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#e1146c]"
                     />
                   ) : (
@@ -654,6 +698,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       </span>
                     </div>
                   )}
+                  <FieldError message={profileErrors.citizenId} />
                 </div>
 
                 {/* 7. Địa chỉ cư trú (Chiếm 2 cột) */}
@@ -665,7 +710,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     <input
                       type="text"
                       value={profileForm.address}
-                      onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
+                      onChange={(e) => { setProfileForm({ ...profileForm, address: e.target.value }); setProfileErrors((prev) => ({ ...prev, address: '' })); }}
+                      minLength={5}
+                      maxLength={255}
+                      aria-invalid={Boolean(profileErrors.address)}
                       className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/20 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#e1146c]"
                     />
                   ) : (
@@ -674,6 +722,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       <span>{profile.address || '123 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh'}</span>
                     </div>
                   )}
+                  <FieldError message={profileErrors.address} />
                 </div>
               </div>
 
@@ -1055,32 +1104,50 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               </p>
             </div>
 
-            <div className="space-y-4">
+            <form className="space-y-4" onSubmit={handlePasswordValidation} noValidate>
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Mật khẩu hiện tại</label>
                 <input
                   type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => { setPasswordForm((value) => ({ ...value, currentPassword: e.target.value })); setPasswordErrors((value) => ({ ...value, currentPassword: '' })); }}
+                  maxLength={72}
+                  aria-invalid={Boolean(passwordErrors.currentPassword)}
+                  aria-describedby="current-password-error"
                   placeholder="••••••••••••"
                   className="w-full px-4 py-2.5 text-xs sm:text-sm rounded-xl border border-pink-200 bg-pink-50/20 font-semibold focus:outline-none focus:border-[#e1146c]"
                 />
+                <FieldError id="current-password-error" message={passwordErrors.currentPassword} />
               </div>
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Mật khẩu mới</label>
                 <input
                   type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => { setPasswordForm((value) => ({ ...value, newPassword: e.target.value })); setPasswordErrors((value) => ({ ...value, newPassword: '' })); }}
+                  maxLength={72}
+                  aria-invalid={Boolean(passwordErrors.newPassword)}
+                  aria-describedby="new-password-error"
                   placeholder="Nhập mật khẩu mới (tối thiểu 8 ký tự)..."
                   className="w-full px-4 py-2.5 text-xs sm:text-sm rounded-xl border border-pink-200 bg-pink-50/20 font-semibold focus:outline-none focus:border-[#e1146c]"
                 />
+                <FieldError id="new-password-error" message={passwordErrors.newPassword} />
               </div>
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Xác nhận mật khẩu mới</label>
                 <input
                   type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => { setPasswordForm((value) => ({ ...value, confirmPassword: e.target.value })); setPasswordErrors((value) => ({ ...value, confirmPassword: '' })); }}
+                  maxLength={72}
+                  aria-invalid={Boolean(passwordErrors.confirmPassword)}
+                  aria-describedby="confirm-password-error"
                   placeholder="Nhập lại mật khẩu mới..."
                   className="w-full px-4 py-2.5 text-xs sm:text-sm rounded-xl border border-pink-200 bg-pink-50/20 font-semibold focus:outline-none focus:border-[#e1146c]"
                 />
+                <FieldError id="confirm-password-error" message={passwordErrors.confirmPassword} />
               </div>
 
               {/* Security features preview */}
@@ -1104,17 +1171,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({
 
               <div className="pt-4 flex justify-end">
                 <button
-                  type="button"
-                  onClick={() => {
-                    setProfileSuccessMsg('Mật khẩu của bạn đã được cập nhật an toàn!');
-                    setTimeout(() => setProfileSuccessMsg(''), 3000);
-                  }}
+                  type="submit"
                   className="py-2.5 px-6 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs font-bold shadow-md hover:opacity-95 transition cursor-pointer"
                 >
                   Lưu mật khẩu mới
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         )}
       </main>

@@ -21,8 +21,9 @@ import {
 } from 'lucide-react';
 import { useBeautyStore } from '../store/beautyStore';
 import { CurrentUser, BackendService, CartItem } from '../types';
-import { beautyApi } from '../services/beautyApi';
+import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { OptimizedImage } from './OptimizedImage';
+import { bookingSchema } from '../lib/validation';
 
 interface CheckoutPageProps {
   currentUser: CurrentUser | null;
@@ -63,7 +64,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   preselectedDate,
   preselectedTime,
 }) => {
-  const { cartItems, updateCartQuantity, clearCart, addAppointment } = useBeautyStore();
+  const { cartItems, updateCartQuantity } = useBeautyStore();
 
   // If there's a direct service passed, create synthetic cart list, else use store cart
   const items: CartItem[] = useMemo(() => {
@@ -128,9 +129,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Payment Deposit Option: 50% deposit or 100% full
   const [depositOption, setDepositOption] = useState<'deposit50' | 'full100'>('deposit50');
-
-  // Payment Gateway method (VietQR, MoMo, VNPay)
-  const [paymentMethod, setPaymentMethod] = useState<'vietqr' | 'momo' | 'vnpay'>('vietqr');
 
   // Voucher state
   const [voucherCodeInput, setVoucherCodeInput] = useState('');
@@ -249,98 +247,57 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // Submit & Complete Booking
   const handleFinalSubmit = async () => {
     setErrorMsg('');
+    if (!currentUser) {
+      onNeedLogin();
+      return;
+    }
+    if (currentUser.role !== 'CUSTOMER') {
+      setErrorMsg('Chỉ tài khoản khách hàng có thể thực hiện thanh toán.');
+      return;
+    }
     if (items.length === 0) {
       setErrorMsg('Giỏ dịch vụ của bạn đang trống.');
+      return;
+    }
+    if (items.length > 1) {
+      setErrorMsg('Mỗi giao dịch PayOS chỉ áp dụng cho một lịch hẹn. Vui lòng thanh toán từng dịch vụ.');
+      return;
+    }
+    const validation = bookingSchema.safeParse({
+      appointmentDate: selectedDate,
+      startTime: selectedTimeSlot,
+      note: '',
+    });
+    if (!validation.success) {
+      setErrorMsg(validation.error.issues[0].message);
       return;
     }
 
     setSubmitting(true);
 
     try {
-      const orderNum = Math.floor(100000 + Math.random() * 900000);
-      const generatedOrderCode = `BP-${orderNum}`;
-      let createdBookingCode = generatedOrderCode;
-
-      const customerName = currentUser?.name || 'Khách hàng VIP';
-      const customerPhone = currentUser?.phone || '0988 888 888';
-
-      // Backend call for first service
       const firstItem = items[0];
-      if (firstItem && firstItem.deal.serviceId) {
-        try {
-          const res = await beautyApi.createBooking({
-            serviceId: firstItem.deal.serviceId,
-            practitionerId: 1,
-            appointmentDate: selectedDate,
-            startTime: selectedTimeSlot,
-            note: `Khách: ${customerName} (${customerPhone}) · Đơn: ${generatedOrderCode} · Hình thức: ${
-              depositOption === 'deposit50' ? 'Cọc 50%' : 'Thanh toán 100%'
-            }`,
-          });
-          if (res?.bookingCode) {
-            createdBookingCode = res.bookingCode;
-          }
-        } catch {
-          // graceful fallback
-        }
+      if (!firstItem?.deal.serviceId) {
+        throw new Error('Dịch vụ chưa được đồng bộ với hệ thống. Vui lòng chọn lại từ trang dịch vụ.');
       }
-
-      const now = new Date();
-      const paymentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} · ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
-
-      // Add to store appointments
-      items.forEach((it) => {
-        addAppointment({
-          id: `BK-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          serviceTitle: it.deal.title,
-          salonName: it.deal.brandName,
-          date: selectedDate,
-          timeSlot: selectedTimeSlot,
-          price: it.deal.salePrice,
-          originalPrice: it.deal.originalPrice || it.deal.salePrice,
-          customerName,
-          customerPhone,
-          status: 'confirmed',
-          bookingCode: createdBookingCode,
-          note: `Đã ${depositOption === 'deposit50' ? 'đặt cọc 50%' : 'thanh toán 100%'} qua ${
-            paymentMethod === 'vietqr' ? 'VietQR' : paymentMethod === 'momo' ? 'MoMo' : 'VNPay'
-          }`,
-          createdAt: Date.now(),
-          paymentTime: paymentTimeStr,
-          paidAmount: amountDueNow,
-          remainingAmount: remainingAtSalon,
-          depositType: depositOption,
-          paymentMethod: paymentMethod === 'vietqr' ? 'VietQR' : paymentMethod === 'momo' ? 'MoMo' : 'VNPay',
-        });
+      const booking = await beautyApi.createBooking({
+        serviceId: firstItem.deal.serviceId,
+        practitionerId: directService?.practitioners?.[0]?.id,
+        appointmentDate: selectedDate,
+        startTime: selectedTimeSlot,
+        note: `Thanh toán ${depositOption === 'deposit50' ? 'cọc 50%' : '100%'} qua PayOS`,
       });
-
-      // Clear store cart
-      if (!directService) {
-        clearCart();
+      const payment = await beautyApi.createPayOSPayment(booking.id, {
+        paymentOption: depositOption === 'deposit50' ? 'DEPOSIT_50' : 'FULL_100',
+        voucherCode: appliedVoucher?.code,
+      });
+      if (!payment.checkoutUrl) {
+        throw new Error('PayOS không trả về đường dẫn thanh toán hợp lệ.');
       }
-
-      const methodNames: Record<string, string> = {
-        vietqr: 'Chuyển khoản VietQR (Ngân hàng 24/7)',
-        momo: 'Ví điện tử MoMo',
-        vnpay: 'Cổng thanh toán VNPay-QR',
-      };
-
-      setConfirmedOrder({
-        orderId: generatedOrderCode,
-        bookingCode: createdBookingCode,
-        totalBill: totalBillAfterDiscount,
-        paidNow: amountDueNow,
-        remainingAtSalon,
-        depositType: depositOption,
-        paymentMethodLabel: methodNames[paymentMethod],
-        items: [...items],
-        date: selectedDate,
-        time: selectedTimeSlot,
-        customerName,
-        customerPhone,
-      });
+      sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
+      window.location.assign(payment.checkoutUrl);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Có lỗi xảy ra trong quá trình thanh toán. Vui lòng thử lại.');
+      setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng thử lại.'));
     } finally {
       setSubmitting(false);
     }
@@ -958,15 +915,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
 
               <div className="space-y-3">
-                {/* A. VietQR */}
-                <div
-                  onClick={() => setPaymentMethod('vietqr')}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                    paymentMethod === 'vietqr'
-                      ? 'border-[#e1146c] bg-pink-50/40 ring-1 ring-[#e1146c]'
-                      : 'border-pink-200 bg-white hover:bg-pink-50/20'
-                  }`}
-                >
+                <div className="p-4 rounded-2xl border border-[#e1146c] bg-pink-50/40 ring-1 ring-[#e1146c]">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-pink-100/70 text-[#e1146c] flex items-center justify-center shrink-0">
@@ -975,147 +924,25 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs sm:text-sm font-bold text-slate-900">
-                            Chuyển khoản VietQR (Ngân hàng 24/7)
+                            Thanh toán bảo mật qua PayOS
                           </span>
                           <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
                             Khuyên dùng
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                          Quét mã QR từ MB Bank, Vietcombank, Techcombank, VPBank, ACB...
+                          Bạn sẽ được chuyển đến trang PayOS để quét VietQR hoặc thanh toán qua ngân hàng.
                         </p>
                       </div>
                     </div>
-                    <div
-                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        paymentMethod === 'vietqr' ? 'border-[#e1146c] bg-[#e1146c]' : 'border-slate-300'
-                      }`}
-                    >
-                      {paymentMethod === 'vietqr' && <div className="w-2 h-2 rounded-full bg-white" />}
+                    <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 border-[#e1146c] bg-[#e1146c]">
+                      <div className="w-2 h-2 rounded-full bg-white" />
                     </div>
                   </div>
-
-                  {/* Expanded QR Box */}
-                  {paymentMethod === 'vietqr' && (
-                    <div className="mt-4 pt-4 border-t border-pink-200/60 bg-white rounded-xl p-4 border border-pink-100">
-                      <div className="flex flex-col sm:flex-row items-center gap-5">
-                        <div className="w-36 h-36 bg-white p-2 rounded-xl border border-pink-200 shadow-2xs flex flex-col items-center justify-center shrink-0">
-                          <div className="text-[9px] font-black text-[#be185d] mb-1">VIETQR · NAPAS 247</div>
-                          <div className="w-24 h-24 bg-slate-900 rounded-lg p-1.5 flex items-center justify-center text-white relative">
-                            <svg className="w-full h-full text-white" viewBox="0 0 100 100" fill="currentColor">
-                              <rect x="5" y="5" width="25" height="25" fill="none" stroke="currentColor" strokeWidth="6" />
-                              <rect x="12" y="12" width="11" height="11" />
-                              <rect x="70" y="5" width="25" height="25" fill="none" stroke="currentColor" strokeWidth="6" />
-                              <rect x="77" y="12" width="11" height="11" />
-                              <rect x="5" y="70" width="25" height="25" fill="none" stroke="currentColor" strokeWidth="6" />
-                              <rect x="12" y="77" width="11" height="11" />
-                              <rect x="36" y="10" width="8" height="8" />
-                              <rect x="48" y="15" width="8" height="8" />
-                              <rect x="36" y="36" width="28" height="28" fill="#e1146c" />
-                              <rect x="70" y="40" width="10" height="10" />
-                              <rect x="40" y="75" width="12" height="12" />
-                            </svg>
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                              <span className="text-[8px] font-black bg-white text-[#be185d] px-1 py-0.5 rounded shadow">
-                                MB
-                              </span>
-                            </div>
-                          </div>
-                          <span className="text-[9px] text-slate-500 font-bold mt-1">Quét mã chuyển tiền</span>
-                        </div>
-
-                        <div className="flex-1 space-y-1.5 text-xs w-full">
-                          <div className="flex items-center justify-between pb-1 border-b border-pink-50">
-                            <span className="text-slate-500">Ngân hàng:</span>
-                            <strong className="text-slate-800">MB Bank (Quân Đội)</strong>
-                          </div>
-
-                          <div className="flex items-center justify-between pb-1 border-b border-pink-50">
-                            <span className="text-slate-500">Số tài khoản:</span>
-                            <div className="flex items-center gap-1.5">
-                              <strong className="font-mono text-xs sm:text-sm text-[#be185d]">0389 288 888</strong>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleCopy('0389288888', 'acc');
-                                }}
-                                className="p-1 rounded bg-pink-100 hover:bg-pink-200 text-[#be185d] cursor-pointer"
-                              >
-                                {copiedField === 'acc' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between pb-1 border-b border-pink-50">
-                            <span className="text-slate-500">Chủ tài khoản:</span>
-                            <strong className="text-slate-800 uppercase">BEAUTYPINK TECH JSC</strong>
-                          </div>
-
-                          <div className="flex items-center justify-between pt-0.5">
-                            <span className="text-slate-500">Số tiền cần chuyển:</span>
-                            <strong className="text-sm text-[#e1146c]">{formatCurrency(amountDueNow)}</strong>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* B. MoMo */}
-                <div
-                  onClick={() => setPaymentMethod('momo')}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                    paymentMethod === 'momo'
-                      ? 'border-[#e1146c] bg-pink-50/40 ring-1 ring-[#e1146c]'
-                      : 'border-pink-200 bg-white hover:bg-pink-50/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-pink-600 text-white flex items-center justify-center font-black text-xs shrink-0">
-                        MoMo
-                      </div>
-                      <div>
-                        <span className="text-xs sm:text-sm font-bold text-slate-900">Ví điện tử MoMo</span>
-                        <p className="text-[11px] text-slate-500 mt-0.5">Thanh toán tức thì qua ví điện tử MoMo</p>
-                      </div>
-                    </div>
-                    <div
-                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        paymentMethod === 'momo' ? 'border-[#e1146c] bg-[#e1146c]' : 'border-slate-300'
-                      }`}
-                    >
-                      {paymentMethod === 'momo' && <div className="w-2 h-2 rounded-full bg-white" />}
-                    </div>
-                  </div>
-                </div>
-
-                {/* C. VNPay */}
-                <div
-                  onClick={() => setPaymentMethod('vnpay')}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                    paymentMethod === 'vnpay'
-                      ? 'border-[#e1146c] bg-pink-50/40 ring-1 ring-[#e1146c]'
-                      : 'border-pink-200 bg-white hover:bg-pink-50/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-[10px] shrink-0">
-                        VNPAY
-                      </div>
-                      <div>
-                        <span className="text-xs sm:text-sm font-bold text-slate-900">Cổng thanh toán VNPAY-QR</span>
-                        <p className="text-[11px] text-slate-500 mt-0.5">Quét bằng ứng dụng ngân hàng hoặc ví VNPAY</p>
-                      </div>
-                    </div>
-                    <div
-                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        paymentMethod === 'vnpay' ? 'border-[#e1146c] bg-[#e1146c]' : 'border-slate-300'
-                      }`}
-                    >
-                      {paymentMethod === 'vnpay' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
+                    <div className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                      <p>BeautyLink không lưu thông tin ngân hàng. Trạng thái chỉ được xác nhận sau khi webhook PayOS vượt qua kiểm tra chữ ký.</p>
                     </div>
                   </div>
                 </div>

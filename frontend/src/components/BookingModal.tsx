@@ -4,6 +4,7 @@ import { BackendService, BackendPractitioner, CurrentUser } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { BookingShareFeature } from './BookingShareFeature';
+import { bookingSchema } from '../lib/validation';
 
 interface BookingModalProps {
   service: BackendService;
@@ -118,6 +119,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       return;
     }
     if (!selectedPractitioner || !selectedSlot) {
+      setError(!selectedPractitioner ? 'Vui lòng chọn chuyên viên.' : 'Vui lòng chọn khung giờ hẹn.');
+      return;
+    }
+    const validation = bookingSchema.safeParse({ appointmentDate: date, startTime: selectedSlot, note });
+    if (!validation.success) {
+      setError(validation.error.issues[0].message);
       return;
     }
 
@@ -300,6 +307,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   max={maxDate}
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
+                  required
+                  aria-invalid={Boolean(error && !date)}
                   className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none transition focus:border-pink-400"
                 />
                 <span className="mt-1.5 block text-[11px] font-semibold text-slate-400">
@@ -353,6 +362,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   className="min-h-20 w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-400"
                   placeholder="Dị ứng, yêu cầu đặc biệt hoặc thông tin gửi tới chuyên viên..."
                 />
+                <span className="mt-1 block text-right text-[10px] text-slate-400">{note.length}/500</span>
               </label>
 
               {error && (

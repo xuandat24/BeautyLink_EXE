@@ -3,6 +3,13 @@ package com.example.backend;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.backend.repository.SupplierVerificationRepository;
+import com.example.backend.repository.BookingRepository;
+import com.example.backend.service.PayOSGateway;
+import com.example.backend.model.DomainEnums.BookingStatus;
+import com.example.backend.model.DomainEnums.PaymentStatus;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
+import vn.payos.model.webhooks.WebhookData;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -16,6 +23,9 @@ import java.time.LocalDate;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -27,6 +37,38 @@ class PlatformApiIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired SupplierVerificationRepository supplierVerifications;
+    @Autowired BookingRepository bookings;
+    @MockitoBean PayOSGateway payOSGateway;
+
+    @Test
+    void validationReturnsFieldMessagesForCustomerAndAdminInput() throws Exception {
+        mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fullName\":\"A\",\"phone\":\"123\",\"email\":\"sai\",\"password\":\"123\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code", is("VALIDATION_ERROR")))
+                .andExpect(jsonPath("$.fields.fullName", not(emptyString())))
+                .andExpect(jsonPath("$.fields.phone", not(emptyString())))
+                .andExpect(jsonPath("$.fields.email", not(emptyString())))
+                .andExpect(jsonPath("$.fields.password", not(emptyString())));
+
+        String customerToken = login("0900000001", "Demo123!");
+        String adminToken = login("0900000004", "Demo123!");
+        JsonNode service = objectMapper.readTree(mvc.perform(get("/api/v1/homepage/services"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get(0);
+        String createdReport = mvc.perform(post("/api/v1/reports")
+                        .header("Authorization", "Bearer " + customerToken).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetType\":\"SERVICE\",\"targetId\":" + service.path("id").asLong()
+                                + ",\"reason\":\"Sai thông tin\",\"details\":\"Nội dung báo cáo đủ dài để kiểm thử.\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long reportId = objectMapper.readTree(createdReport).path("id").asLong();
+
+        mvc.perform(patch("/api/v1/reports/" + reportId)
+                        .header("Authorization", "Bearer " + adminToken).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESOLVED\",\"resolutionNote\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code", is("VALIDATION_ERROR")))
+                .andExpect(jsonPath("$.fields.resolutionNoteValid", not(emptyString())));
+    }
 
     @Test
     void publicCatalogExposesSeededLocationsCategoriesAndServices() throws Exception {
@@ -124,12 +166,13 @@ class PlatformApiIntegrationTest {
                         .content("{\"serviceId\":" + serviceId + ",\"practitionerId\":" + practitionerId + ",\"appointmentDate\":\"" + date + "\",\"startTime\":\"09:00\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.bookingCode", startsWith("BL-")))
-                .andExpect(jsonPath("$.paymentStatus", is("SIMULATED")));
+                .andExpect(jsonPath("$.status", is("PENDING")))
+                .andExpect(jsonPath("$.paymentStatus", is("UNPAID")));
 
         mvc.perform(get("/api/v1/bookings/mine").header("Authorization", "Bearer " + customerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))))
-                .andExpect(jsonPath("$[*].status", hasItem("CONFIRMED")));
+                .andExpect(jsonPath("$[*].status", hasItem("PENDING")));
     }
 
     @Test
@@ -161,10 +204,14 @@ class PlatformApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"serviceId\":" + serviceId + ",\"practitionerId\":" + practitionerId + ",\"appointmentDate\":\"" + date + "\",\"startTime\":\"" + slot + "\"}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.reviewEligible", is(true)))
+                .andExpect(jsonPath("$.reviewEligible", is(false)))
                 .andExpect(jsonPath("$.serviceReview").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
         long bookingId = objectMapper.readTree(created).path("id").asLong();
+        var paidBooking = bookings.findById(bookingId).orElseThrow();
+        paidBooking.setPaymentStatus(PaymentStatus.PAID);
+        paidBooking.setStatus(BookingStatus.CONFIRMED);
+        bookings.saveAndFlush(paidBooking);
 
         String serviceReview = mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SERVICE")
                         .header("Authorization", "Bearer " + customerToken)
@@ -207,6 +254,67 @@ class PlatformApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"rating\":6}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void payOSWebhookVerifiesAndConfirmsCustomerBooking() throws Exception {
+        String customerToken = login("0900000001", "Demo123!");
+        JsonNode service = objectMapper.readTree(mvc.perform(get("/api/v1/homepage/services"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get(0);
+        long serviceId = service.path("id").asLong();
+        long practitionerId = service.path("practitioners").get(0).path("id").asLong();
+        LocalDate date = LocalDate.now().plusDays(1);
+        String slot = null;
+        for (int day = 1; day <= 30 && slot == null; day++) {
+            date = LocalDate.now().plusDays(day);
+            JsonNode availability = objectMapper.readTree(mvc.perform(get("/api/v1/services/" + serviceId + "/availability")
+                            .param("practitionerId", Long.toString(practitionerId)).param("date", date.toString()))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+            if (!availability.path("availableSlots").isEmpty()) slot = availability.path("availableSlots").get(0).asText();
+        }
+        assertNotNull(slot);
+        String created = mvc.perform(post("/api/v1/bookings")
+                        .header("Authorization", "Bearer " + customerToken).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"serviceId\":" + serviceId + ",\"practitionerId\":" + practitionerId
+                                + ",\"appointmentDate\":\"" + date + "\",\"startTime\":\"" + slot + "\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long bookingId = objectMapper.readTree(created).path("id").asLong();
+
+        when(payOSGateway.create(any())).thenAnswer(invocation -> {
+            var request = (vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest) invocation.getArgument(0);
+            var response = mock(CreatePaymentLinkResponse.class);
+            when(response.getOrderCode()).thenReturn(request.getOrderCode());
+            when(response.getAmount()).thenReturn(request.getAmount());
+            when(response.getPaymentLinkId()).thenReturn("payos-link-test");
+            when(response.getCheckoutUrl()).thenReturn("https://pay.payos.vn/web/test");
+            return response;
+        });
+        String paymentJson = mvc.perform(post("/api/v1/payments/payos/bookings/" + bookingId)
+                        .header("Authorization", "Bearer " + customerToken).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentOption\":\"FULL_100\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("PENDING")))
+                .andExpect(jsonPath("$.checkoutUrl", is("https://pay.payos.vn/web/test")))
+                .andReturn().getResponse().getContentAsString();
+        JsonNode payment = objectMapper.readTree(paymentJson);
+        long orderCode = payment.path("orderCode").asLong();
+        long amount = payment.path("amount").asLong();
+        WebhookData verifiedData = mock(WebhookData.class);
+        when(verifiedData.getOrderCode()).thenReturn(orderCode);
+        when(verifiedData.getAmount()).thenReturn(amount);
+        when(verifiedData.getPaymentLinkId()).thenReturn("payos-link-test");
+        when(verifiedData.getReference()).thenReturn("BANK-REF-001");
+        when(verifiedData.getCode()).thenReturn("00");
+        when(payOSGateway.verify(any())).thenReturn(verifiedData);
+
+        mvc.perform(post("/api/v1/payments/payos/webhook").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"00\",\"desc\":\"success\",\"success\":true,\"data\":{\"orderCode\":"
+                                + orderCode + ",\"amount\":" + amount + ",\"code\":\"00\"},\"signature\":\"signed\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success", is(true)));
+        mvc.perform(get("/api/v1/payments/payos/" + orderCode).header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status", is("PAID")));
+        mvc.perform(get("/api/v1/bookings/mine").header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.id == " + bookingId + ")].paymentStatus", hasItem("PAID")));
     }
 
     @Test

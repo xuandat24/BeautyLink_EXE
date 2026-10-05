@@ -17,6 +17,7 @@ import {
   CategoryItem,
   BookingDetails,
   BookingSchema,
+  PayOSPayment,
 } from '../types';
 import {
   HOT_DEALS,
@@ -112,7 +113,9 @@ export function getAccessToken(): string | null {
 
 export function getApiErrorMessage(err: unknown, defaultMessage = 'Đã xảy ra lỗi. Vui lòng thử lại.'): string {
   if (axios.isAxiosError(err)) {
-    const data = err.response?.data as { message?: string } | undefined;
+    const data = err.response?.data as { message?: string; fields?: Record<string, string> } | undefined;
+    const firstFieldError = data?.fields ? Object.values(data.fields)[0] : undefined;
+    if (firstFieldError) return firstFieldError;
     if (data?.message) return data.message;
     if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
       return 'Không thể kết nối đến máy chủ. Đang sử dụng chế độ dự phòng ngoại tuyến.';
@@ -640,7 +643,7 @@ export const beautyApi = {
   // ==========================================
   async createBooking(data: {
     serviceId: number;
-    practitionerId: number;
+    practitionerId?: number;
     appointmentDate: string;
     startTime: string;
     note?: string;
@@ -654,6 +657,17 @@ export const beautyApi = {
 
   async cancelBooking(id: number): Promise<BackendBooking> {
     return unwrap(apiClient.patch(`/v1/bookings/${id}/cancel`));
+  },
+
+  async createPayOSPayment(
+    bookingId: number,
+    data: { paymentOption: 'DEPOSIT_50' | 'FULL_100'; voucherCode?: string }
+  ): Promise<PayOSPayment> {
+    return unwrap(apiClient.post(`/v1/payments/payos/bookings/${bookingId}`, data));
+  },
+
+  async payOSPaymentStatus(orderCode: number): Promise<PayOSPayment> {
+    return unwrap(apiClient.get(`/v1/payments/payos/${orderCode}`));
   },
 
   // ==========================================

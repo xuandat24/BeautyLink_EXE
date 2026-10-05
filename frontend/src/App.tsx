@@ -360,6 +360,51 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 2800);
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentResult = params.get('payment');
+    if (paymentResult !== 'success' && paymentResult !== 'cancelled') return;
+
+    const orderCodeValue = params.get('orderCode') || sessionStorage.getItem('beautylink_payos_order_code');
+    window.history.replaceState(null, '', `${window.location.pathname}#bookings`);
+    setCurrentPage('bookings');
+
+    if (paymentResult === 'cancelled') {
+      showToast('Bạn đã hủy thanh toán PayOS. Lịch hẹn vẫn đang chờ thanh toán.');
+      return;
+    }
+    const orderCode = Number(orderCodeValue);
+    if (!Number.isSafeInteger(orderCode) || orderCode <= 0) {
+      showToast('Không tìm thấy mã giao dịch PayOS để xác minh.');
+      return;
+    }
+
+    let stopped = false;
+    let attempts = 0;
+    const verify = async () => {
+      attempts += 1;
+      try {
+        const payment = await beautyApi.payOSPaymentStatus(orderCode);
+        if (payment.status === 'PAID') {
+          sessionStorage.removeItem('beautylink_payos_order_code');
+          if (!stopped) showToast('Thanh toán PayOS đã được webhook xác thực thành công.');
+          return;
+        }
+      } catch {
+        // The final message below covers temporary webhook/API propagation delays.
+      }
+      if (!stopped && attempts < 10) {
+        window.setTimeout(verify, 1500);
+      } else if (!stopped) {
+        showToast('PayOS đang xác minh giao dịch. Trạng thái sẽ tự cập nhật trong lịch hẹn.');
+      }
+    };
+    void verify();
+    return () => {
+      stopped = true;
+    };
+  }, [showToast]);
+
   // Geolocation state
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationPermission, setLocationPermission] = useState<'idle' | 'loading' | 'ready' | 'denied'>('idle');

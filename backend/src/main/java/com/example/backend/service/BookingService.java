@@ -19,14 +19,24 @@ public class BookingService {
     }
     @Transactional public BookingResponse create(UserAccount customer, CreateBookingRequest request) {
         ServiceOffering service = services.findById(request.serviceId()).filter(ServiceOffering::isActive).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SERVICE_NOT_FOUND", "Không tìm thấy dịch vụ"));
-        Practitioner practitioner = practitioners.findById(request.practitionerId()).filter(Practitioner::isActive).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PRACTITIONER_NOT_FOUND", "Không tìm thấy chuyên viên"));
+        Practitioner practitioner;
+        if (request.practitionerId() != null) {
+            practitioner = practitioners.findById(request.practitionerId()).filter(Practitioner::isActive)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PRACTITIONER_NOT_FOUND", "Không tìm thấy chuyên viên"));
+        } else {
+            practitioner = practitioners.findBySupplierIdAndActiveTrue(service.getSupplier().getId()).stream()
+                    .filter(candidate -> availability.availability(service.getId(), candidate.getId(), request.appointmentDate())
+                            .availableSlots().contains(request.startTime()))
+                    .findFirst()
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Không còn chuyên viên phù hợp cho khung giờ này"));
+        }
         if (!practitioner.getSupplier().getId().equals(service.getSupplier().getId())) throw new ApiException(HttpStatus.BAD_REQUEST, "PRACTITIONER_MISMATCH", "Chuyên viên không cung cấp dịch vụ này");
         List<LocalTime> slots = availability.availability(service.getId(), practitioner.getId(), request.appointmentDate()).availableSlots();
         if (!slots.contains(request.startTime())) throw new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Khung giờ này không còn khả dụng");
         Booking booking = new Booking(); booking.setBookingCode("BL-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         booking.setCustomer(customer); booking.setSupplier(service.getSupplier()); booking.setService(service); booking.setPractitioner(practitioner);
         booking.setAppointmentDate(request.appointmentDate()); booking.setStartTime(request.startTime()); booking.setEndTime(request.startTime().plusMinutes(service.getDurationMinutes()));
-        booking.setTotalAmount(service.getPrice()); booking.setStatus(BookingStatus.CONFIRMED); booking.setPaymentStatus(PaymentStatus.SIMULATED); booking.setCustomerNote(request.note());
+        booking.setTotalAmount(service.getPrice()); booking.setStatus(BookingStatus.PENDING); booking.setPaymentStatus(PaymentStatus.UNPAID); booking.setCustomerNote(request.note());
         return response(bookings.save(booking));
     }
     @Transactional(readOnly = true) public List<BookingResponse> customerBookings(UserAccount customer) { return bookings.findByCustomerIdOrderByAppointmentDateDescStartTimeDesc(customer.getId()).stream().map(this::response).toList(); }

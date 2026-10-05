@@ -61,6 +61,7 @@ export const ServiceReviewModal: React.FC<ServiceReviewModalProps> = ({
   const [images, setImages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+  const [validationError, setValidationError] = useState<string>('');
 
   if (!isOpen) return null;
 
@@ -75,6 +76,15 @@ export const ServiceReviewModal: React.FC<ServiceReviewModalProps> = ({
     if (!files || files.length === 0) return;
 
     Array.from(files).forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        setValidationError('Chỉ chấp nhận tệp hình ảnh.');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setValidationError('Mỗi ảnh tối đa 5 MB.');
+        return;
+      }
+      setValidationError('');
       const reader = new FileReader();
       reader.onload = () => {
         if (reader.result && typeof reader.result === 'string') {
@@ -113,7 +123,19 @@ export const ServiceReviewModal: React.FC<ServiceReviewModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() && selectedTags.length === 0) return;
+    if (rating < 1 || rating > 5) {
+      setValidationError('Vui lòng chọn từ 1 đến 5 sao.');
+      return;
+    }
+    if (!content.trim() && selectedTags.length === 0) {
+      setValidationError('Vui lòng nhập nhận xét hoặc chọn ít nhất một tiêu chí.');
+      return;
+    }
+    if (content.trim().length > 1500) {
+      setValidationError('Nội dung đánh giá tối đa 1500 ký tự.');
+      return;
+    }
+    setValidationError('');
 
     setSubmitting(true);
     setTimeout(() => {
@@ -285,10 +307,15 @@ export const ServiceReviewModal: React.FC<ServiceReviewModalProps> = ({
               <textarea
                 rows={3}
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={(e) => { setContent(e.target.value); setValidationError(''); }}
+                maxLength={1500}
                 placeholder="Chia sẻ về tay nghề của kỹ thuật viên, không gian, cảm giác trong và sau khi làm đẹp..."
                 className="w-full p-3.5 rounded-2xl border border-pink-200 focus:outline-none focus:border-[#e1146c] text-xs sm:text-sm text-slate-800 bg-white placeholder:text-slate-400"
               />
+              <div className="mt-1 flex justify-between gap-3 text-[11px]">
+                <span role="alert" className="font-semibold text-rose-600">{validationError}</span>
+                <span className="ml-auto text-slate-400">{content.length}/1500</span>
+              </div>
             </div>
 
             {/* Add Photo / Evidence */}

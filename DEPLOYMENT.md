@@ -49,6 +49,11 @@ DEMO_ACCOUNT_PASSWORD=<a-new-private-demo-password>
 SUPPLIER_AUTO_VERIFY=true
 JWT_SECRET=<a-new-random-secret>
 KYC_ENCRYPTION_KEY=<a-different-random-secret>
+PAYOS_CLIENT_ID=<payos-client-id>
+PAYOS_API_KEY=<payos-api-key>
+PAYOS_CHECKSUM_KEY=<payos-checksum-key>
+PAYOS_RETURN_URL=https://YOUR-VERCEL-DOMAIN/?payment=success
+PAYOS_CANCEL_URL=https://YOUR-VERCEL-DOMAIN/?payment=cancelled
 ```
 
 Generate the secret values locally; do not reuse the local MySQL password or `Demo123!`:
@@ -117,7 +122,17 @@ CORS_ALLOWED_ORIGINS=https://YOUR-VERCEL-DOMAIN
 
 Use only the origin: no `/api`, path, or trailing slash. Multiple allowed origins must be comma-separated. Redeploy the backend after changing the variable.
 
-## 7. Smoke test the deployed application
+## 7. Configure PayOS webhook
+
+After the Railway backend has a stable public HTTPS domain, configure this webhook URL in the PayOS merchant dashboard:
+
+```text
+https://YOUR-RAILWAY-DOMAIN/api/v1/payments/payos/webhook
+```
+
+The endpoint accepts PayOS callbacks without a customer JWT, verifies their signature with `PAYOS_CHECKSUM_KEY`, checks the order code, amount, and payment-link ID, and is idempotent. Browser return/cancel query parameters do not mark a booking paid. Keep all three PayOS credentials exclusively in Railway variables, then redeploy the backend.
+
+## 8. Smoke test the deployed application
 
 Verify all of these from the Vercel website:
 
@@ -125,6 +140,7 @@ Verify all of these from the Vercel website:
 - Categories and homepage services load.
 - A customer can sign in and create a booking.
 - The booking appears in **Tổng quan & Lịch hẹn**.
+- A PayOS payment opens on the hosted checkout and the booking becomes paid only after its webhook is received.
 - A supplier can sign in, edit its profile, create a service, and update a schedule.
 - Staff can view and resolve a submitted report.
 - Browser developer tools show no CORS or failed `/api` requests.
@@ -156,4 +172,4 @@ Verify all of these from the Vercel website:
 - Never commit or rotate `KYC_ENCRYPTION_KEY` without a planned data migration; store it only in Railway's secret variables.
 - Do not expose the Railway MySQL service publicly unless external database access is specifically required.
 - Replace the demonstration password before any public deployment.
-- Payments are simulated; do not present the current payment flow as real payment processing.
+- Never expose PayOS credentials in `VITE_` variables or frontend source code.

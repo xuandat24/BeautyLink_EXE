@@ -4,7 +4,7 @@
 
 BeautyLink is a full-stack marketplace that connects customers with third-party beauty providers such as makeup artists, hair salons, nail studios, spas, massage centers, and skincare clinics.
 
-> Project status: the main discovery, authentication, scheduling, booking, supplier, and support flows are functional. The VNPAY-QR checkout is intentionally simulated and does not charge real money.
+> Project status: the main discovery, authentication, scheduling, booking, supplier, support, and PayOS checkout flows are functional. Real payment confirmation requires valid PayOS merchant credentials and a public HTTPS webhook URL.
 
 ## Latest application update (2026-10-03)
 
@@ -17,10 +17,11 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 - Added remember-login behavior, a compact partner-registration entry point, and a small logout confirmation toast.
 - Reworked the header to give search more space, made categories more compact, and moved notifications to a floating bottom-right control without continuously generated deal alerts.
 - Added browser location handling with a clearly labelled approximate network fallback when device GPS is unavailable. Suppliers can still enter exact store coordinates manually.
-- Replaced the multi-option mock payment selector with a dedicated, responsive VNPAY-QR demo checkout containing a locally generated QR image, transaction summary, instructions, expiry timer, and booking confirmation step.
+- Replaced the simulated QR checkout with a server-created PayOS hosted checkout. A booking is marked paid only after the backend verifies the signed PayOS webhook.
+- Added client- and server-side Vietnamese validation messages for customer and admin forms, including authentication, profiles, bookings, reviews, reports, and admin report resolution.
 - Improved cart dismissal, supplier registration/store forms, dashboard messaging, and responsive presentation throughout the updated flows.
 
-The current VNPAY-QR screen is a UI simulation. It is not connected to VNPAY Sandbox, does not collect banking credentials, and never confirms a real payment. A production or sandbox integration must generate signed payment requests on the backend and verify VNPAY return/IPN signatures before marking a booking paid.
+PayOS credentials are read only by the backend. The frontend never receives merchant secrets and never treats a browser return URL as proof of payment; the signed PayOS webhook is the source of truth.
 
 ## Features
 
@@ -34,7 +35,7 @@ The current VNPAY-QR screen is a UI simulation. It is not connected to VNPAY San
 - Optionally remember the signed-in session on the current browser.
 - Book an available appointment and view it in **Tổng quan & Lịch hẹn**.
 - Allow location access to sort the **Gần bạn** section by device coordinates, with an explicitly labelled approximate network fallback on devices without GPS.
-- Continue from booking details to the simulated VNPAY-QR checkout.
+- Continue from booking details to the real PayOS hosted checkout.
 - Cancel eligible appointments and submit support reports.
 - Review the purchased service and its supplier directly from **Tổng quan & Lịch hẹn** after payment.
 
@@ -66,9 +67,9 @@ The current VNPAY-QR screen is a UI simulation. It is not connected to VNPAY San
 | Layer | Technology |
 |---|---|
 | Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 4 |
-| Client state/API | React hooks, Axios, localStorage persistence, QRCode |
+| Client state/API | React hooks, Axios, Zod, localStorage persistence |
 | Backend | Java 21 LTS, Spring Boot 3.5, Spring Web |
-| Authentication | Spring Security, JWT, BCrypt |
+| Authentication and payments | Spring Security, JWT, BCrypt, PayOS Java SDK |
 | Persistence | Spring Data JPA, Hibernate |
 | Database | MySQL 8 |
 | Tests | JUnit 5, Spring MockMvc, H2 in MySQL compatibility mode |
@@ -81,9 +82,12 @@ flowchart LR
     Browser[React frontend\nlocalhost:5173]
     API[Spring Boot API\nlocalhost:8080]
     DB[(MySQL\nbeautylink)]
+    PayOS[PayOS hosted checkout\nand signed webhook]
 
     Browser -->|REST /api/v1 + JWT| API
     API -->|JPA/Hibernate| DB
+    API -->|Create payment link| PayOS
+    PayOS -->|Signed webhook| API
 ```
 
 During local development, Vite proxies `/api` requests to Spring Boot. In deployment, `VITE_API_BASE_URL` points the frontend to the public backend URL.
@@ -185,6 +189,11 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 SUPPLIER_AUTO_VERIFY=true
 DEMO_DATA_ENABLED=true
 DEMO_ACCOUNT_PASSWORD=Demo123!
+PAYOS_CLIENT_ID=your_payos_client_id
+PAYOS_API_KEY=your_payos_api_key
+PAYOS_CHECKSUM_KEY=your_payos_checksum_key
+PAYOS_RETURN_URL=http://localhost:5173/?payment=success
+PAYOS_CANCEL_URL=http://localhost:5173/?payment=cancelled
 ```
 
 `backend/.env.properties` is ignored by Git. Never commit this file or paste production secrets into source code.
@@ -248,7 +257,7 @@ Guests do not have database accounts. They can browse the catalog but must regis
 2. Open a category or service.
 3. Select a service, practitioner, date, and available time.
 4. Sign in as a customer when prompted.
-5. Continue to the VNPAY-QR demo page, inspect the transaction details, and confirm the simulated payment.
+5. Continue to PayOS, complete payment, then wait for the signed webhook to confirm the booking.
 6. Open the customer account page or `#bookings` to see the appointment.
 
 ### Review a purchase
@@ -482,7 +491,7 @@ The frontend displays a local BeautyLink placeholder when an external supplier i
 - Supplier identity uploads are restricted to decoded JPG, PNG, or WEBP images, resized/re-encoded in the browser, and size-limited before submission.
 - Location permission is requested only when a user or supplier selects the location action. If device positioning times out, the frontend may use an approximate IP-based location and labels it accordingly; suppliers should verify exact business coordinates before saving.
 - Supplier data is public only after verification. `SUPPLIER_AUTO_VERIFY=true` is intended only for local demonstrations.
-- Real payment processing is not implemented. The VNPAY-QR page generates demo QR data locally; VNPAY merchant secrets must never be stored in the frontend or committed to Git.
+- PayOS merchant secrets must be configured only in backend environment variables and must never be stored in the frontend or committed to Git.
 
 ## Contributing
 

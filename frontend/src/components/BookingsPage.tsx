@@ -15,6 +15,8 @@ import { BackendBooking } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { AppointmentShareModal } from './AppointmentShareModal';
+import { supportReportSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
+import { FieldError } from './FieldError';
 
 interface BookingsPageProps {
   onBack: () => void;
@@ -43,6 +45,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
   const [submittingReport, setSubmittingReport] = useState<boolean>(false);
   const [reportSuccess, setReportSuccess] = useState<string>('');
   const [sharingBooking, setSharingBooking] = useState<BackendBooking | null>(null);
+  const [reportErrors, setReportErrors] = useState<FieldErrors>({});
 
   // Lock body scroll when report modal is open
   useBodyScrollLock(Boolean(reportBooking));
@@ -85,9 +88,13 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
   };
 
   const handleSendReport = async () => {
-    if (!reportBooking || reportReason.trim().length < 2 || reportDetails.trim().length < 2) {
+    if (!reportBooking) return;
+    const validation = supportReportSchema.safeParse({ reason: reportReason, details: reportDetails });
+    if (!validation.success) {
+      setReportErrors(zodFieldErrors(validation.error));
       return;
     }
+    setReportErrors({});
     setSubmittingReport(true);
     setError('');
     try {
@@ -296,21 +303,27 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
               <input
                 maxLength={120}
                 value={reportReason}
-                onChange={(e) => setReportReason(e.target.value)}
+                onChange={(e) => { setReportReason(e.target.value); setReportErrors((prev) => ({ ...prev, reason: '' })); }}
+                minLength={2}
+                aria-invalid={Boolean(reportErrors.reason)}
                 className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-pink-400"
                 placeholder="Ví dụ: Cần hỗ trợ đổi lịch hẹn"
               />
+              <FieldError message={reportErrors.reason} />
             </label>
 
             <label className="mt-4 block">
               <span className="mb-2 block text-xs font-black">Nội dung chi tiết</span>
               <textarea
-                maxLength={1500}
                 value={reportDetails}
-                onChange={(e) => setReportDetails(e.target.value)}
+                onChange={(e) => { setReportDetails(e.target.value); setReportErrors((prev) => ({ ...prev, details: '' })); }}
+                minLength={10}
+                maxLength={1500}
+                aria-invalid={Boolean(reportErrors.details)}
                 className="min-h-32 w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-pink-400"
                 placeholder="Mô tả cụ thể vấn đề bạn gặp phải..."
               />
+              <FieldError message={reportErrors.details} />
             </label>
 
             <button
@@ -318,7 +331,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
               disabled={
                 submittingReport ||
                 reportReason.trim().length < 2 ||
-                reportDetails.trim().length < 2
+                reportDetails.trim().length < 10
               }
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3 text-sm font-extrabold text-white hover:bg-pink-700 disabled:opacity-40 transition"
             >

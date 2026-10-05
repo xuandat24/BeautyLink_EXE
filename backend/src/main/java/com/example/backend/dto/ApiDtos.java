@@ -11,11 +11,14 @@ public final class ApiDtos {
     private ApiDtos() {}
 
     public record RegisterRequest(
-            @NotBlank @Size(min = 2, max = 120) String fullName,
-            @NotBlank @Pattern(regexp = "^(0|\\+84)[0-9]{9,10}$") String phone,
-            @Email String email,
-            @NotBlank @Size(min = 8, max = 72) String password) {}
-    public record LoginRequest(@NotBlank String identifier, @NotBlank String password) {}
+            @NotBlank(message = "Họ tên không được để trống") @Size(min = 2, max = 120, message = "Họ tên phải có từ 2 đến 120 ký tự") String fullName,
+            @NotBlank(message = "Số điện thoại không được để trống") @Pattern(regexp = "^(0|\\+84)(3|5|7|8|9)[0-9]{8}$", message = "Số điện thoại Việt Nam không hợp lệ") String phone,
+            @Email(message = "Email không đúng định dạng") @Size(max = 254, message = "Email tối đa 254 ký tự") String email,
+            @NotBlank(message = "Mật khẩu không được để trống") @Size(min = 8, max = 72, message = "Mật khẩu phải có từ 8 đến 72 ký tự")
+            @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*[0-9]).+$", message = "Mật khẩu phải có ít nhất một chữ cái và một chữ số") String password) {}
+    public record LoginRequest(
+            @NotBlank(message = "Số điện thoại hoặc email không được để trống") @Size(max = 254, message = "Thông tin đăng nhập quá dài") String identifier,
+            @NotBlank(message = "Mật khẩu không được để trống") @Size(max = 72, message = "Mật khẩu tối đa 72 ký tự") String password) {}
     public record UserResponse(Long id, String fullName, String phone, String email, Role role, int loyaltyPoints) {}
     public record AuthResponse(String accessToken, String tokenType, long expiresInMs, UserResponse user) {}
     public record SupplierRegistrationRequest(
@@ -79,11 +82,11 @@ public final class ApiDtos {
     public record AvailabilityResponse(Long practitionerId, LocalDate date, List<LocalTime> availableSlots) {}
 
     public record CreateBookingRequest(
-            @NotNull Long serviceId,
-            @NotNull Long practitionerId,
-            @NotNull @FutureOrPresent LocalDate appointmentDate,
-            @NotNull LocalTime startTime,
-            @Size(max = 500) String note) {}
+            @NotNull(message = "Vui lòng chọn dịch vụ") @Positive(message = "Dịch vụ không hợp lệ") Long serviceId,
+            @Positive(message = "Chuyên viên không hợp lệ") Long practitionerId,
+            @NotNull(message = "Vui lòng chọn ngày hẹn") @FutureOrPresent(message = "Ngày hẹn không được ở trong quá khứ") LocalDate appointmentDate,
+            @NotNull(message = "Vui lòng chọn khung giờ") LocalTime startTime,
+            @Size(max = 500, message = "Ghi chú tối đa 500 ký tự") String note) {}
     public record BookingResponse(Long id, String bookingCode, Long serviceId, String serviceName,
                                   String serviceImageUrl, Long supplierId, String supplierName,
                                   String supplierImageUrl, String supplierAddress,
@@ -91,7 +94,9 @@ public final class ApiDtos {
                                   LocalTime endTime, BigDecimal totalAmount, BookingStatus status,
                                   PaymentStatus paymentStatus, boolean reviewEligible,
                                   BookingReviewResponse serviceReview, BookingReviewResponse supplierReview) {}
-    public record UpsertBookingReviewRequest(@NotNull @Min(0) @Max(5) Integer rating, @Size(max = 1500) String comment) {}
+    public record UpsertBookingReviewRequest(
+            @NotNull(message = "Vui lòng chọn số sao") @Min(value = 1, message = "Đánh giá tối thiểu 1 sao") @Max(value = 5, message = "Đánh giá tối đa 5 sao") Integer rating,
+            @Size(max = 1500, message = "Nội dung đánh giá tối đa 1500 ký tự") String comment) {}
     public record BookingReviewResponse(Long id, Long bookingId, ReviewTargetType targetType, int rating,
                                         String comment, Instant createdAt, Instant updatedAt) {}
     public record PublicReviewResponse(Long id, ReviewTargetType targetType, int rating, String comment,
@@ -116,10 +121,27 @@ public final class ApiDtos {
     public record ScheduleRuleResponse(Long id, DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime,
                                        LocalTime breakStart, LocalTime breakEnd, int slotMinutes, boolean active) {}
 
-    public record CreateReportRequest(@NotNull ReportTargetType targetType, @NotNull Long targetId,
-                                      @NotBlank @Size(max = 120) String reason,
-                                      @NotBlank @Size(max = 1500) String details) {}
-    public record UpdateReportRequest(@NotNull ReportStatus status, @Size(max = 1000) String resolutionNote) {}
+    public record CreateReportRequest(
+            @NotNull(message = "Vui lòng chọn loại đối tượng") ReportTargetType targetType,
+            @NotNull(message = "Đối tượng báo cáo không được để trống") @Positive(message = "Đối tượng báo cáo không hợp lệ") Long targetId,
+            @NotBlank(message = "Tiêu đề không được để trống") @Size(min = 2, max = 120, message = "Tiêu đề phải có từ 2 đến 120 ký tự") String reason,
+            @NotBlank(message = "Nội dung không được để trống") @Size(min = 10, max = 1500, message = "Nội dung phải có từ 10 đến 1500 ký tự") String details) {}
+    public record UpdateReportRequest(
+            @NotNull(message = "Vui lòng chọn trạng thái") ReportStatus status,
+            @Size(max = 1000, message = "Ghi chú xử lý tối đa 1000 ký tự") String resolutionNote) {
+        @AssertTrue(message = "Cần nhập ghi chú xử lý khi hoàn tất hoặc từ chối báo cáo")
+        public boolean isResolutionNoteValid() {
+            return status == null || (status != ReportStatus.RESOLVED && status != ReportStatus.REJECTED)
+                    || (resolutionNote != null && !resolutionNote.isBlank());
+        }
+    }
+    public record CreatePayOSPaymentRequest(
+            @NotNull(message = "Vui lòng chọn hình thức thanh toán") PaymentOption paymentOption,
+            @Pattern(regexp = "^[A-Z0-9_-]{3,40}$", message = "Mã voucher không hợp lệ") String voucherCode) {}
+    public record PayOSPaymentResponse(Long bookingId, String bookingCode, Long orderCode, String paymentLinkId,
+                                       String checkoutUrl, BigDecimal amount, BigDecimal remainingAmount,
+                                       PaymentOption paymentOption, PaymentTransactionStatus status) {}
+    public record PayOSWebhookResponse(boolean success) {}
     public record ReportResponse(Long id, ReportTargetType targetType, Long targetId, String reason, String details,
                                  ReportStatus status, String reporterName, String assignedStaffName,
                                  String resolutionNote, Instant createdAt) {}
