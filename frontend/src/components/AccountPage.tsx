@@ -59,8 +59,6 @@ interface UserProfileData {
   avatar?: string;
 }
 
-const STORAGE_PROFILE_KEY = 'beautypink_user_profile_data_v2';
-
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('vi-VN').format(val) + 'đ';
 };
@@ -112,21 +110,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const [passwordErrors, setPasswordErrors] = useState<FieldErrors>({});
 
   const [profile, setProfile] = useState<UserProfileData>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_PROFILE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch {}
-
     return {
-      name: currentUser?.name || 'Xuan Dat',
-      phone: currentUser?.phone || '0988 888 888',
-      email: currentUser?.email || 'phxuandat1710@gmail.com',
-      address: currentUser?.address || '123 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
-      citizenId: currentUser?.citizenId || '079201018923',
-      gender: currentUser?.gender || 'Nam',
-      dateOfBirth: currentUser?.dateOfBirth || '17/10/2001',
+      name: currentUser?.name || '',
+      phone: currentUser?.phone || '',
+      email: currentUser?.email || '',
+      address: currentUser?.address || '',
+      citizenId: currentUser?.citizenId || '',
+      gender: currentUser?.gender || '',
+      dateOfBirth: currentUser?.dateOfBirth || '',
       avatar:
         currentUser?.avatar ||
         'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
@@ -160,19 +151,12 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     setProfileErrors({});
     const normalizedProfile = validation.data as UserProfileData;
     setProfile(normalizedProfile);
-    try {
-      localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(normalizedProfile));
-    } catch {}
     if (currentUser) {
       setCurrentUser({
         ...currentUser,
         name: normalizedProfile.name,
         phone: normalizedProfile.phone,
         email: normalizedProfile.email,
-        address: normalizedProfile.address,
-        citizenId: normalizedProfile.citizenId,
-        gender: normalizedProfile.gender,
-        dateOfBirth: normalizedProfile.dateOfBirth,
         avatar: normalizedProfile.avatar,
       });
     }
@@ -185,9 +169,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     const updated = { ...profile, avatar: newAvatarUrl };
     setProfile(updated);
     setProfileForm({ ...profileForm, avatar: newAvatarUrl });
-    try {
-      localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(updated));
-    } catch {}
     if (currentUser) {
       setCurrentUser({
         ...currentUser,
@@ -217,8 +198,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       paidAmount: 245000,
       remainingAmount: 245000,
       depositType: 'deposit50',
-      paymentMethod: 'VietQR',
-      note: 'Đã đặt cọc 50% giữ chỗ qua VietQR · Còn lại 245.000đ thanh toán tại salon',
+      paymentMethod: 'PayOS',
+      note: 'Đã đặt cọc 50% giữ chỗ qua PayOS · Còn lại 245.000đ thanh toán tại salon',
     };
 
     const defaultHistory: BookingDetails[] = [
@@ -239,7 +220,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         paidAmount: 350000,
         remainingAmount: 0,
         depositType: 'full100',
-        paymentMethod: 'VietQR',
+        paymentMethod: 'PayOS',
         note: 'Đã hoàn thành liệu trình xuất sắc · Khách đánh giá 5 sao ⭐',
       },
       {
@@ -259,7 +240,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         paidAmount: 325000,
         remainingAmount: 325000,
         depositType: 'deposit50',
-        paymentMethod: 'MoMo',
+        paymentMethod: 'PayOS',
         note: 'Đã hoàn thành liệu trình · Đã thanh toán nốt 325.000đ tại cơ sở',
       },
     ];
@@ -277,7 +258,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       paidAmount: app.paidAmount || Math.round(app.price * 0.5),
       remainingAmount: app.remainingAmount !== undefined ? app.remainingAmount : Math.round(app.price * 0.5),
       depositType: app.depositType || 'deposit50',
-      paymentMethod: app.paymentMethod || 'VietQR',
+      paymentMethod: app.paymentMethod || 'PayOS',
     }));
 
     return [...normalizedStore, ...defaultHistory];
@@ -692,7 +673,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     />
                   ) : (
                     <div className="px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs sm:text-sm font-bold text-slate-900 flex items-center justify-between">
-                      <span className="font-mono tracking-wider">{profile.citizenId || '079201018923'}</span>
+                      <span className="font-mono tracking-wider">{profile.citizenId || 'Chưa cập nhật'}</span>
                       <span className="text-[10px] text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
                         Đã khớp CSDL
                       </span>

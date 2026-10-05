@@ -6,10 +6,15 @@ import com.example.backend.model.*;
 import com.example.backend.repository.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
+import vn.payos.model.v2.paymentRequests.PaymentLink;
+import vn.payos.model.v2.paymentRequests.PaymentLinkStatus;
 import vn.payos.model.webhooks.Webhook;
 import vn.payos.model.webhooks.WebhookData;
 
@@ -20,6 +25,7 @@ import static com.example.backend.model.DomainEnums.*;
 
 @Service
 public class PaymentService {
+    private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
     private static final BigDecimal MIN_PAYOS_AMOUNT = new BigDecimal("2000");
     private final PaymentTransactionRepository payments;
     private final BookingRepository bookings;
@@ -50,24 +56,29 @@ public class PaymentService {
 
         String voucherCode = normalizeVoucher(request.voucherCode());
         PaymentTransaction existing = payments.findByBookingId(bookingId).orElse(null);
-        if (existing != null && existing.getStatus() == PaymentTransactionStatus.PENDING) {
-            if (!isExpired(existing)) {
-                if (existing.getPaymentOption() != request.paymentOption() || !java.util.Objects.equals(existing.getVoucherCode(), voucherCode)) {
-                    throw new ApiException(HttpStatus.CONFLICT, "PAYMENT_LINK_EXISTS", "Lịch hẹn đã có link PayOS đang chờ thanh toán");
+        if (existing != null) {
+            if (existing.getStatus() == PaymentTransactionStatus.PENDING) {
+                if (isExpired(existing)) reconcile(existing);
+                if (existing.getStatus() == PaymentTransactionStatus.PAID) return response(existing);
+                if (existing.getStatus() == PaymentTransactionStatus.PENDING) {
+                    if (existing.getPaymentOption() != request.paymentOption() || !java.util.Objects.equals(existing.getVoucherCode(), voucherCode)) {
+                        throw new ApiException(HttpStatus.CONFLICT, "PAYMENT_LINK_EXISTS", "Lịch hẹn đã có link PayOS đang chờ thanh toán");
+                    }
+                    return response(existing);
                 }
-                return response(existing);
             }
-            existing.setStatus(PaymentTransactionStatus.EXPIRED);
+            if (existing.getStatus() == PaymentTransactionStatus.PAID) return response(existing);
+            throw new ApiException(HttpStatus.CONFLICT, "PAYMENT_ATTEMPT_CLOSED", "Giao dịch PayOS đã kết thúc. Vui lòng tạo lịch hẹn mới để tránh giữ lại khung giờ đã được giải phóng");
         }
 
         BigDecimal total = booking.getTotalAmount().setScale(0, RoundingMode.HALF_UP);
         BigDecimal discount = calculateDiscount(total, voucherCode);
-        BigDecimal baseDue = request.paymentOption() == PaymentOption.DEPOSIT_50
-                ? total.multiply(new BigDecimal("0.5")).setScale(0, RoundingMode.HALF_UP)
-                : total;
-        BigDecimal amount = baseDue.subtract(discount).max(BigDecimal.ZERO);
+        BigDecimal discountedTotal = total.subtract(discount).max(BigDecimal.ZERO);
+        BigDecimal amount = request.paymentOption() == PaymentOption.DEPOSIT_50
+                ? discountedTotal.multiply(new BigDecimal("0.50")).setScale(0, RoundingMode.HALF_UP)
+                : discountedTotal;
         BigDecimal remaining = request.paymentOption() == PaymentOption.DEPOSIT_50
-                ? total.subtract(total.multiply(new BigDecimal("0.5")).setScale(0, RoundingMode.HALF_UP))
+                ? discountedTotal.subtract(amount)
                 : BigDecimal.ZERO;
         if (amount.compareTo(MIN_PAYOS_AMOUNT) < 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMENT_AMOUNT_TOO_LOW", "Số tiền thanh toán PayOS tối thiểu là 2.000đ");
@@ -87,7 +98,7 @@ public class PaymentService {
         CreatePaymentLinkRequest paymentRequest = CreatePaymentLinkRequest.builder()
                 .orderCode(transaction.getOrderCode())
                 .amount(amount.longValueExact())
-                .description(("BL " + booking.getBookingCode()).substring(0, Math.min(25, ("BL " + booking.getBookingCode()).length())))
+                .description(payOSDescription(transaction.getOrderCode()))
                 .buyerName(customer.getFullName())
                 .buyerEmail(customer.getEmail())
                 .buyerPhone(customer.getPhone())
@@ -111,10 +122,24 @@ public class PaymentService {
         if (!payment.getBooking().getCustomer().getId().equals(customer.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "PAYMENT_FORBIDDEN", "Bạn không có quyền xem giao dịch này");
         }
-        if (payment.getStatus() == PaymentTransactionStatus.PENDING && isExpired(payment)) {
-            payment.setStatus(PaymentTransactionStatus.EXPIRED);
+        if (payment.getStatus() == PaymentTransactionStatus.PENDING) {
+            reconcile(payment);
         }
         return response(payment);
+    }
+
+    @Scheduled(
+            fixedDelayString = "${app.payos.reconciliation-ms:60000}",
+            initialDelayString = "${app.payos.reconciliation-initial-delay-ms:60000}")
+    @Transactional
+    public void reconcileExpiredPayments() {
+        for (PaymentTransaction payment : payments.findByStatusAndExpiresAtBefore(PaymentTransactionStatus.PENDING, Instant.now())) {
+            try {
+                reconcile(payment);
+            } catch (ApiException ex) {
+                log.error("PayOS scheduled reconciliation failed orderCode={} code={}", payment.getOrderCode(), ex.getCode());
+            }
+        }
     }
 
     @Transactional
@@ -124,9 +149,18 @@ public class PaymentService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PAYOS_INVALID_WEBHOOK", "Webhook PayOS thiếu dữ liệu giao dịch");
         }
         PaymentTransaction payment = payments.findByOrderCode(data.getOrderCode()).orElse(null);
-        if (payment == null) return true; // Allows payOS's signed webhook verification sample.
-        if (payment.getStatus() == PaymentTransactionStatus.PAID) return true;
-        if (!Boolean.TRUE.equals(webhook.getSuccess()) || !"00".equals(data.getCode())) return true;
+        if (payment == null) {
+            log.info("PayOS signed webhook accepted for unknown orderCode={} (channel verification sample)", data.getOrderCode());
+            return true;
+        }
+        if (payment.getStatus() == PaymentTransactionStatus.PAID) {
+            log.info("PayOS duplicate paid webhook ignored orderCode={}", data.getOrderCode());
+            return true;
+        }
+        if (!Boolean.TRUE.equals(webhook.getSuccess()) || !"00".equals(data.getCode())) {
+            log.info("PayOS non-success webhook orderCode={} code={}", data.getOrderCode(), data.getCode());
+            return true;
+        }
         if (data.getAmount() == null || payment.getAmount().longValueExact() != data.getAmount()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PAYOS_AMOUNT_MISMATCH", "Số tiền webhook không khớp với giao dịch");
         }
@@ -134,13 +168,84 @@ public class PaymentService {
                 && !payment.getPaymentLinkId().equals(data.getPaymentLinkId())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PAYOS_LINK_MISMATCH", "Mã link PayOS không khớp");
         }
+        if (payment.getStatus() == PaymentTransactionStatus.EXPIRED
+                || payment.getStatus() == PaymentTransactionStatus.CANCELLED
+                || payment.getStatus() == PaymentTransactionStatus.FAILED
+                || payment.getBooking().getStatus() == BookingStatus.CANCELLED) {
+            recordLatePaymentWithoutRebooking(payment, data.getReference());
+        } else {
+            markPaid(payment, data.getReference(), "webhook");
+        }
+        return true;
+    }
+
+    private void reconcile(PaymentTransaction payment) {
+        PaymentLink provider = gateway.get(payment.getOrderCode());
+        if (provider == null || provider.getOrderCode() == null || !payment.getOrderCode().equals(provider.getOrderCode())) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYOS_ORDER_MISMATCH", "PayOS trả về sai mã giao dịch");
+        }
+        if (payment.getPaymentLinkId() != null && provider.getId() != null
+                && !payment.getPaymentLinkId().equals(provider.getId())) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYOS_LINK_MISMATCH", "PayOS trả về sai mã link thanh toán");
+        }
+        long expectedAmount = payment.getAmount().longValueExact();
+        if (provider.getAmount() == null || provider.getAmount() != expectedAmount) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYOS_AMOUNT_MISMATCH", "Số tiền đối soát PayOS không khớp");
+        }
+
+        PaymentLinkStatus providerStatus = provider.getStatus();
+        if (providerStatus == null) return;
+        switch (providerStatus) {
+            case PAID -> {
+                if (provider.getAmountPaid() == null || provider.getAmountPaid() != expectedAmount) {
+                    throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYOS_PAID_AMOUNT_MISMATCH", "Số tiền đã trả trên PayOS không khớp");
+                }
+                markPaid(payment, null, "server-reconciliation");
+            }
+            case EXPIRED -> expireAndRelease(payment, "payos-reconciliation");
+            case CANCELLED -> closeAndRelease(payment, PaymentTransactionStatus.CANCELLED, providerStatus);
+            case FAILED -> closeAndRelease(payment, PaymentTransactionStatus.FAILED, providerStatus);
+            default -> log.debug("PayOS reconciliation pending orderCode={} providerStatus={}", payment.getOrderCode(), providerStatus);
+        }
+    }
+
+    private void markPaid(PaymentTransaction payment, String reference, String source) {
         payment.setStatus(PaymentTransactionStatus.PAID);
-        payment.setPaymentReference(data.getReference());
+        if (reference != null) payment.setPaymentReference(reference);
         payment.setPaidAt(Instant.now());
         Booking booking = payment.getBooking();
         booking.setPaymentStatus(PaymentStatus.PAID);
         booking.setStatus(BookingStatus.CONFIRMED);
-        return true;
+        log.info("PayOS payment verified orderCode={} paymentLinkId={} source={}", payment.getOrderCode(), payment.getPaymentLinkId(), source);
+    }
+
+    private void expireAndRelease(PaymentTransaction payment, String source) {
+        payment.setStatus(PaymentTransactionStatus.EXPIRED);
+        Booking booking = payment.getBooking();
+        if (booking.getPaymentStatus() != PaymentStatus.PAID && booking.getStatus() == BookingStatus.PENDING) {
+            booking.setStatus(BookingStatus.CANCELLED);
+            booking.setPaymentStatus(PaymentStatus.UNPAID);
+        }
+        log.info("PayOS payment expired and booking slot released orderCode={} bookingId={} source={}", payment.getOrderCode(), booking.getId(), source);
+    }
+
+    private void closeAndRelease(PaymentTransaction payment, PaymentTransactionStatus status, PaymentLinkStatus providerStatus) {
+        payment.setStatus(status);
+        Booking booking = payment.getBooking();
+        if (booking.getPaymentStatus() != PaymentStatus.PAID && booking.getStatus() == BookingStatus.PENDING) {
+            booking.setStatus(BookingStatus.CANCELLED);
+            booking.setPaymentStatus(PaymentStatus.UNPAID);
+        }
+        log.info("PayOS payment status reconciled orderCode={} providerStatus={}", payment.getOrderCode(), providerStatus);
+    }
+
+    private void recordLatePaymentWithoutRebooking(PaymentTransaction payment, String reference) {
+        payment.setStatus(PaymentTransactionStatus.PAID);
+        payment.setPaymentReference(reference);
+        payment.setPaidAt(Instant.now());
+        payment.getBooking().setPaymentStatus(PaymentStatus.PAID);
+        log.error("PayOS payment arrived after slot release; manual resolution required orderCode={} bookingId={}",
+                payment.getOrderCode(), payment.getBooking().getId());
     }
 
     private Booking ownedBooking(UserAccount customer, Long bookingId) {
@@ -156,6 +261,10 @@ public class PaymentService {
         long candidate = System.currentTimeMillis() * 1000L + Math.floorMod(bookingId, 1000L);
         while (payments.existsByOrderCode(candidate)) candidate++;
         return candidate;
+    }
+
+    private String payOSDescription(Long orderCode) {
+        return "BL" + String.format("%07d", Math.floorMod(orderCode, 10_000_000L));
     }
 
     private String normalizeVoucher(String voucherCode) {

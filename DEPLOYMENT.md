@@ -42,21 +42,27 @@ MYSQLPORT=${{MySQL.MYSQLPORT}}
 MYSQLDATABASE=${{MySQL.MYSQLDATABASE}}
 MYSQLUSER=${{MySQL.MYSQLUSER}}
 MYSQLPASSWORD=${{MySQL.MYSQLPASSWORD}}
-JWT_EXPIRATION_MS=86400000
+JWT_EXPIRATION_MS=3600000
 CORS_ALLOWED_ORIGINS=https://temporary.invalid
 DEMO_DATA_ENABLED=true
 DEMO_ACCOUNT_PASSWORD=<a-new-private-demo-password>
 SUPPLIER_AUTO_VERIFY=true
 JWT_SECRET=<a-new-random-secret>
 KYC_ENCRYPTION_KEY=<a-different-random-secret>
+LOGIN_MAX_PER_IDENTIFIER=8
+LOGIN_MAX_PER_IP=20
+LOGIN_RATE_WINDOW_SECONDS=900
+REGISTRATION_MAX_PER_IP=5
+REGISTRATION_RATE_WINDOW_SECONDS=3600
 PAYOS_CLIENT_ID=<payos-client-id>
 PAYOS_API_KEY=<payos-api-key>
 PAYOS_CHECKSUM_KEY=<payos-checksum-key>
 PAYOS_RETURN_URL=https://YOUR-VERCEL-DOMAIN/?payment=success
 PAYOS_CANCEL_URL=https://YOUR-VERCEL-DOMAIN/?payment=cancelled
+PAYOS_WEBHOOK_URL=https://YOUR-RAILWAY-DOMAIN/api/v1/payments/payos/webhook
 ```
 
-Generate the secret values locally; do not reuse the local MySQL password or `Demo123!`:
+Generate the secret values locally; do not reuse any development or database password:
 
 ```powershell
 node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
@@ -81,6 +87,8 @@ For a real public launch, use:
 DEMO_DATA_ENABLED=false
 SUPPLIER_AUTO_VERIFY=false
 ```
+
+The application rate limiter is process-local. If Railway runs more than one backend replica, add a shared limiter at the edge or backed by Redis. Real production registration also requires an OTP/email provider so accounts are activated only after the user proves control of the claimed contact channel.
 
 Turning demo seeding off does not delete existing demo records. Review `backend/src/main/resources/db/demo-data-cleanup.sql` before removing them.
 

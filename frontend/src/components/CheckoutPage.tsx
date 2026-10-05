@@ -8,7 +8,6 @@ import {
   QrCode,
   Wallet,
   Tag,
-  Copy,
   Check,
   Sparkles,
   Lock,
@@ -141,32 +140,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   } | null>(null);
   const [voucherError, setVoucherError] = useState('');
 
-  // Copy helper
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-  const handleCopy = (text: string, field: string) => {
-    navigator.clipboard?.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
-  };
-
   // Submission state
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [confirmedOrder, setConfirmedOrder] = useState<{
-    orderId: string;
-    bookingCode: string;
-    totalBill: number;
-    paidNow: number;
-    remainingAtSalon: number;
-    depositType: 'deposit50' | 'full100';
-    paymentMethodLabel: string;
-    items: CartItem[];
-    date: string;
-    time: string;
-    customerName: string;
-    customerPhone: string;
-  } | null>(null);
-
   // Calculations
   const subtotal = useMemo(() => {
     return items.reduce((sum, item) => sum + item.deal.salePrice * item.quantity, 0);
@@ -177,33 +153,28 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return appliedVoucher.discountAmount;
   }, [appliedVoucher]);
 
-  // Base 50% deposit calculation
-  const baseDeposit50 = useMemo(() => {
-    return Math.round(subtotal * 0.5);
-  }, [subtotal]);
+  const discountedTotal = useMemo(
+    () => Math.max(0, subtotal - discountAmount),
+    [subtotal, discountAmount]
+  );
 
-  // If 50% deposit:
-  // - The discount ONLY reduces the amount paid TODAY (chỉ giảm giá trong ngay hôm nay)!
-  // - The remaining amount at salon MUST be the original base (50% số tiền gốc, không được giảm giá nữa)!
-  // If 100% full:
-  // - 100% due now (subtotal - discountAmount), 0đ at salon
+  // The deposit option is calculated from the discounted business total:
+  // exactly 50% now + 50% at the salon, or 100% now.
   const amountDueNow = useMemo(() => {
     if (depositOption === 'deposit50') {
-      return Math.max(0, baseDeposit50 - discountAmount);
+      return Math.round(discountedTotal * 0.5);
     }
-    return Math.max(0, subtotal - discountAmount);
-  }, [depositOption, baseDeposit50, subtotal, discountAmount]);
+    return discountedTotal;
+  }, [depositOption, discountedTotal]);
 
   const remainingAtSalon = useMemo(() => {
     if (depositOption === 'deposit50') {
-      return subtotal - baseDeposit50; // Original 50% base, untouched by discount
+      return discountedTotal - amountDueNow;
     }
     return 0;
-  }, [depositOption, subtotal, baseDeposit50]);
+  }, [depositOption, discountedTotal, amountDueNow]);
 
-  const totalBillAfterDiscount = useMemo(() => {
-    return amountDueNow + remainingAtSalon;
-  }, [amountDueNow, remainingAtSalon]);
+  const totalBillAfterDiscount = discountedTotal;
 
   // Apply Voucher
   const handleApplyVoucher = (codeToApply?: string) => {
@@ -315,171 +286,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setSubmitting(false);
     }
   };
-
-  // =========================================================================
-  // VIEW: CONFIRMED PAYMENT SCREEN
-  // =========================================================================
-  if (confirmedOrder) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-pink-50/80 via-white to-pink-50/40 py-8 px-4 sm:px-6">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-[2rem] border border-pink-100 shadow-xl overflow-hidden p-6 sm:p-8 animate-in zoom-in-95 duration-200">
-            {/* Top Celebration */}
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4 shadow-sm shadow-emerald-500/20">
-                <CheckCircle2 className="w-10 h-10" />
-              </div>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-100 text-[#be185d] text-xs font-bold uppercase tracking-wider mb-2">
-                <Sparkles className="w-3.5 h-3.5 text-[#e1146c]" />
-                {confirmedOrder.depositType === 'deposit50'
-                  ? 'Đặt cọc 50% thành công'
-                  : 'Thanh toán 100% thành công'}
-              </span>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                Lịch hẹn đã được xác nhận!
-              </h1>
-              <p className="mt-1.5 text-xs sm:text-sm text-slate-600 max-w-md mx-auto">
-                Cảm ơn quý khách <strong>{confirmedOrder.customerName}</strong>. Chỗ của bạn đã được khóa thành công trên hệ thống.
-              </p>
-            </div>
-
-            {/* Pass / Receipt Card */}
-            <div className="mt-6 rounded-2xl bg-gradient-to-br from-pink-500 via-[#db2777] to-[#be185d] text-white p-5 sm:p-6 shadow-lg shadow-pink-600/25 relative overflow-hidden">
-              <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/20 pb-4">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-pink-200 block">
-                    Mã đặt chỗ (BeautyPass)
-                  </span>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <span className="text-2xl sm:text-3xl font-black font-mono tracking-wider">
-                      {confirmedOrder.bookingCode}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(confirmedOrder.bookingCode, 'receipt-code')}
-                      className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition cursor-pointer"
-                      title="Sao chép mã"
-                    >
-                      {copiedField === 'receipt-code' ? (
-                        <Check className="w-4 h-4 text-emerald-300" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="text-left sm:text-right">
-                  <span className="text-[11px] font-medium text-pink-200 block">Đã thanh toán hôm nay</span>
-                  <span className="text-2xl font-black text-white">
-                    {formatCurrency(confirmedOrder.paidNow)}
-                  </span>
-                  {confirmedOrder.remainingAtSalon > 0 && (
-                    <span className="text-[11px] text-pink-100 block">
-                      (Còn lại {formatCurrency(confirmedOrder.remainingAtSalon)} tại salon)
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Details grid */}
-              <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 gap-3 pt-4 text-xs">
-                <div>
-                  <span className="text-[10px] text-pink-200 block uppercase font-bold">Ngày hẹn</span>
-                  <span className="font-bold flex items-center gap-1 mt-0.5">
-                    <Calendar className="w-3.5 h-3.5 text-pink-200" />
-                    {confirmedOrder.date}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-pink-200 block uppercase font-bold">Khung giờ</span>
-                  <span className="font-bold flex items-center gap-1 mt-0.5">
-                    <Clock className="w-3.5 h-3.5 text-pink-200" />
-                    {confirmedOrder.time}
-                  </span>
-                </div>
-                <div className="col-span-2 sm:col-span-1">
-                  <span className="text-[10px] text-pink-200 block uppercase font-bold">Phương thức</span>
-                  <span className="font-bold truncate block mt-0.5">
-                    {confirmedOrder.paymentMethodLabel}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Booked Services Summary */}
-            <div className="mt-6 border-t border-pink-100 pt-5">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-                Dịch vụ đã đặt ({confirmedOrder.items.length})
-              </h3>
-              <div className="space-y-3">
-                {confirmedOrder.items.map((it, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-pink-50/50 border border-pink-100/70"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-white border border-pink-100">
-                        <OptimizedImage
-                          src={it.deal.image}
-                          alt={it.deal.title}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                          {it.deal.title}
-                        </h4>
-                        <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                          <span>{it.deal.brandName}</span>
-                          <span>·</span>
-                          <span>{it.deal.duration}</span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-xs sm:text-sm font-bold text-[#e1146c] shrink-0">
-                      {formatCurrency(it.deal.salePrice * it.quantity)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Arrival Notice */}
-            <div className="mt-6 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 p-4 text-xs text-emerald-800 space-y-1">
-              <div className="flex items-center gap-1.5 font-bold text-emerald-900">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Hướng dẫn tiếp đón</span>
-              </div>
-              <p className="leading-relaxed text-[11px]">
-                Quý khách vui lòng đến trước <strong>10 phút</strong> và đọc <strong>Mã {confirmedOrder.bookingCode}</strong> tại quầy lễ tân để được ưu tiên đón tiếp vào phòng chăm sóc ngay.
-              </p>
-            </div>
-
-            {/* Bottom Actions */}
-            <div className="mt-6 pt-5 border-t border-pink-100 flex flex-col sm:flex-row items-center gap-3">
-              <button
-                type="button"
-                onClick={onViewBookings}
-                className="w-full sm:flex-1 py-3 px-5 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs font-black shadow-md hover:opacity-95 transition flex items-center justify-center gap-2 uppercase tracking-wide cursor-pointer"
-              >
-                <Calendar className="w-4 h-4" />
-                <span>Xem danh sách lịch hẹn</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={onBack}
-                className="w-full sm:w-auto py-3 px-5 rounded-full bg-white border border-pink-200 hover:bg-pink-50 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Về trang chủ</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // =========================================================================
   // VIEW: EMPTY CART
@@ -869,12 +675,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <div className="mt-4 pt-3 border-t border-pink-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500">Cần trả hôm nay:</span>
                     <strong className="text-base font-black text-[#e1146c]">
-                      {formatCurrency(Math.max(0, baseDeposit50 - discountAmount))}
+                      {formatCurrency(amountDueNow)}
                     </strong>
                   </div>
                   <div className="mt-1 text-[11px] text-slate-500 flex justify-between">
                     <span>Còn lại tại salon:</span>
-                    <span className="font-bold text-slate-700">{formatCurrency(subtotal - baseDeposit50)} (50% gốc)</span>
+                    <span className="font-bold text-slate-700">{formatCurrency(remainingAtSalon)} (50% sau giảm giá)</span>
                   </div>
                 </div>
 
@@ -1140,26 +946,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <span className="font-bold text-slate-800">{formatCurrency(subtotal)}</span>
                 </div>
 
-                {depositOption === 'deposit50' && (
-                  <div className="flex justify-between text-slate-600">
-                    <span>Mức cọc 50% gốc (chuẩn):</span>
-                    <span>{formatCurrency(baseDeposit50)}</span>
-                  </div>
-                )}
-
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-[#e1146c] font-semibold">
-                    <span>
-                      Voucher giảm giá ({appliedVoucher?.code}):
-                      {depositOption === 'deposit50' && (
-                        <span className="text-[10px] text-emerald-600 block font-normal">
-                          (chỉ áp dụng giảm khoản cọc hôm nay, không trừ vào tiền tại salon)
-                        </span>
-                      )}
-                    </span>
+                    <span>Voucher giảm giá ({appliedVoucher?.code}):</span>
                     <span className="font-bold">-{formatCurrency(discountAmount)}</span>
                   </div>
                 )}
+
+                <div className="flex justify-between text-slate-600">
+                  <span>Tổng sau giảm giá:</span>
+                  <span className="font-bold text-slate-800">{formatCurrency(discountedTotal)}</span>
+                </div>
 
                 <div className="flex justify-between pb-2 border-b border-pink-50">
                   <span>Hình thức đã chọn:</span>
@@ -1201,7 +998,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span>Hoàn tiền 100% nếu không hài lòng dịch vụ</span>
+                  <span>Trạng thái thanh toán được xác thực trực tiếp với PayOS</span>
                 </div>
               </div>
 

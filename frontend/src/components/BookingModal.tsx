@@ -382,7 +382,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             <div className="shrink-0 flex items-center justify-between gap-4 border-t border-slate-100 p-4 sm:p-6 bg-slate-50/90">
               <div>
                 <p className="text-[10px] font-bold uppercase text-slate-400">
-                  Thanh toán mô phỏng
+                  Thanh toán an toàn qua PayOS
                 </p>
                 <p className="text-xl font-black text-pink-700">
                   {formatCurrency(service.price)}

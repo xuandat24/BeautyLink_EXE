@@ -37,9 +37,9 @@ export const WhyChooseUs: React.FC<WhyChooseUsProps> = React.memo(({ onBookServi
     },
     {
       id: 4,
-      title: 'Thanh toán đa kênh',
+      title: 'Thanh toán PayOS',
       description:
-        'Thanh toán online tiện lợi, bảo mật cao qua MoMo, VNPay, thẻ tín dụng hoặc thanh toán tại quầy.',
+        'Thanh toán trực tuyến qua trang PayOS; trạng thái được backend xác thực bằng webhook và đối soát máy chủ.',
       icon: CreditCard,
       bg: 'from-pink-100 to-purple-50',
       iconColor: 'text-[#e1146c]',

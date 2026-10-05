@@ -33,13 +33,14 @@ public class SupplierAccountService {
     private final ServiceOfferingRepository services;
     private final SupplierVerificationRepository verifications;
     private final SensitiveDataCipher sensitiveData;
+    private final ImageDataValidator imageDataValidator;
     private final boolean autoVerify;
 
     public SupplierAccountService(UserAccountRepository users, SupplierRepository suppliers, LocationRepository locations,
                                   PractitionerRepository practitioners, AvailabilityRuleRepository rules,
                                   PasswordEncoder encoder, AuthService auth, ServiceCategoryRepository categories,
                                   ServiceOfferingRepository services, SupplierVerificationRepository verifications,
-                                  SensitiveDataCipher sensitiveData,
+                                  SensitiveDataCipher sensitiveData, ImageDataValidator imageDataValidator,
                                   @Value("${app.supplier.auto-verify:false}") boolean autoVerify) {
         this.users = users;
         this.suppliers = suppliers;
@@ -52,6 +53,7 @@ public class SupplierAccountService {
         this.services = services;
         this.verifications = verifications;
         this.sensitiveData = sensitiveData;
+        this.imageDataValidator = imageDataValidator;
         this.autoVerify = autoVerify;
     }
 
@@ -59,11 +61,11 @@ public class SupplierAccountService {
     public SupplierRegistrationResponse register(SupplierRegistrationRequest request) {
         String phone = AuthService.normalizePhone(request.phone());
         String email = request.email().trim().toLowerCase(Locale.ROOT);
-        if (users.existsByPhone(phone)) throw new ApiException(HttpStatus.CONFLICT, "PHONE_EXISTS", "Số điện thoại đã được đăng ký");
-        if (users.existsByEmailIgnoreCase(email)) throw new ApiException(HttpStatus.CONFLICT, "EMAIL_EXISTS", "Email đã được đăng ký");
+        if (users.existsByPhone(phone)) throw AuthService.registrationConflict();
+        if (users.existsByEmailIgnoreCase(email)) throw AuthService.registrationConflict();
         String normalizedCccd = request.cccdNumber().replaceAll("\\s", "");
         String cccdHash = sensitiveData.hash(normalizedCccd);
-        if (verifications.existsByCccdHash(cccdHash)) throw new ApiException(HttpStatus.CONFLICT, "CCCD_EXISTS", "CCCD này đã được dùng cho một hồ sơ đối tác");
+        if (verifications.existsByCccdHash(cccdHash)) throw AuthService.registrationConflict();
 
         Location city = locations.findById(request.locationId())
                 .filter(location -> location.isActive() && location.getType() == LocationType.PROVINCE_CITY && SUPPORTED_CITIES.contains(location.getSlug()))
@@ -277,7 +279,9 @@ public class SupplierAccountService {
     private String normalizeImageSource(String value) {
         String source = blankToNull(value);
         if (source == null) return null;
-        if (source.startsWith("data:image/jpeg;base64,") || source.startsWith("data:image/png;base64,") || source.startsWith("data:image/webp;base64,")) return source;
+        if (source.startsWith("data:image/")) {
+            return imageDataValidator.requireValidDataImage(source, 1_100_000, "INVALID_IMAGE", "Ảnh phải là tệp JPG, PNG hoặc WEBP hợp lệ");
+        }
         try {
             URI uri = URI.create(source);
             if (("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) && uri.getHost() != null) return source;
@@ -289,9 +293,6 @@ public class SupplierAccountService {
 
     private String requireIdentityImage(String value) {
         String source = blankToNull(value);
-        if (source != null && (source.startsWith("data:image/jpeg;base64,") || source.startsWith("data:image/png;base64,") || source.startsWith("data:image/webp;base64,"))) {
-            return source;
-        }
-        throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IDENTITY_IMAGE", "Ảnh CCCD phải là tệp JPG, PNG hoặc WEBP hợp lệ");
+        return imageDataValidator.requireValidDataImage(source, 900_000, "INVALID_IDENTITY_IMAGE", "Ảnh CCCD phải là tệp JPG, PNG hoặc WEBP hợp lệ");
     }
 }

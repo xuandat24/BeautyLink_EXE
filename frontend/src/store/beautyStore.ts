@@ -23,6 +23,18 @@ const STORAGE_KEYS = {
 };
 
 const CART_STORAGE_KEY = 'beautypink_cart_items_v2';
+const SESSION_USER_KEY = 'beautylink_session_user';
+const LEGACY_PROFILE_KEY = 'beautypink_user_profile_data_v2';
+
+const loadSessionUser = (): CurrentUser | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(SESSION_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
 
 const loadCartFromStorage = (): CartItem[] => {
   if (typeof window === 'undefined') return [];
@@ -72,8 +84,8 @@ let memoryState: MemoryState = {
   selectedIntentCategory: cache.get<string | null>(STORAGE_KEYS.INTENT_CATEGORY) ?? null,
   onboardingCompleted: cache.get<boolean>(STORAGE_KEYS.ONBOARDING_COMPLETED) ?? false,
   cartItems: loadCartFromStorage(),
-  appointments: cache.get<BookingDetails[]>(STORAGE_KEYS.APPOINTMENTS) || [],
-  currentUser: cache.get<CurrentUser | null>(STORAGE_KEYS.USER) ?? null,
+  appointments: [],
+  currentUser: loadSessionUser(),
   favorites: cache.get<string[]>(STORAGE_KEYS.FAVORITES) || [],
   notifications: notificationService.getStoredNotifications(),
   soundEnabled: notificationService.isSoundEnabled(),
@@ -202,27 +214,37 @@ export function useBeautyStore() {
   const addAppointment = useCallback((appointment: BookingDetails) => {
     const updated = [appointment, ...memoryState.appointments];
     memoryState.appointments = updated;
-    cache.set(STORAGE_KEYS.APPOINTMENTS, updated);
     notify();
   }, []);
 
   const cancelAppointment = useCallback((index: number) => {
     const updated = memoryState.appointments.filter((_, idx) => idx !== index);
     memoryState.appointments = updated;
-    cache.set(STORAGE_KEYS.APPOINTMENTS, updated);
     notify();
   }, []);
 
   // 4. User authentication
   const setCurrentUser = useCallback((user: CurrentUser | null) => {
     memoryState.currentUser = user;
-    cache.set(STORAGE_KEYS.USER, user);
+    cache.delete(STORAGE_KEYS.USER);
+    if (typeof window !== 'undefined') {
+      if (user) sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+      else sessionStorage.removeItem(SESSION_USER_KEY);
+    }
     notify();
   }, []);
 
   const logout = useCallback(() => {
     memoryState.currentUser = null;
-    cache.set(STORAGE_KEYS.USER, null);
+    memoryState.appointments = [];
+    memoryState.notifications = [];
+    cache.delete(STORAGE_KEYS.USER);
+    cache.delete(STORAGE_KEYS.APPOINTMENTS);
+    notificationService.clearUserData();
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(SESSION_USER_KEY);
+      localStorage.removeItem(LEGACY_PROFILE_KEY);
+    }
     clearAccessToken();
     notify();
   }, []);

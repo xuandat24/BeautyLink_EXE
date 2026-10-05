@@ -143,7 +143,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
         </p>
         <h1 className="mt-2 text-3xl font-black">Lịch hẹn của tôi</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Theo dõi trạng thái, mã đặt lịch và thanh toán mô phỏng.
+          Theo dõi trạng thái, mã đặt lịch và giao dịch PayOS.
         </p>
 
         {loading && (
@@ -199,7 +199,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
                       {statusMap[item.status] || item.status}
                     </span>
                     <span className="rounded-full bg-pink-50 px-2.5 py-1 text-[10px] font-black text-pink-700">
-                      Thanh toán mô phỏng
+                      {item.paymentStatus === 'PAID' ? 'Đã thanh toán PayOS' : 'Chờ thanh toán'}
                     </span>
                   </div>
 

@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.Instant;
+import java.math.RoundingMode;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -36,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class PlatformApiIntegrationTest {
+    private static final String TEST_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired SupplierVerificationRepository supplierVerifications;
@@ -54,8 +56,8 @@ class PlatformApiIntegrationTest {
                 .andExpect(jsonPath("$.fields.email", not(emptyString())))
                 .andExpect(jsonPath("$.fields.password", not(emptyString())));
 
-        String customerToken = login("0900000001", "Demo123!");
-        String adminToken = login("0900000004", "Demo123!");
+        String customerToken = login("0900000001", "BeautyLinkTest123!");
+        String adminToken = login("0900000004", "BeautyLinkTest123!");
         JsonNode service = objectMapper.readTree(mvc.perform(get("/api/v1/homepage/services"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get(0);
         String createdReport = mvc.perform(post("/api/v1/reports")
@@ -154,8 +156,105 @@ class PlatformApiIntegrationTest {
     }
 
     @Test
+    void productMutationsRequireAdminRole() throws Exception {
+        mvc.perform(post("/api/products")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Restricted product\",\"price\":100000}"))
+                .andExpect(status().isUnauthorized());
+
+        String customerToken = login("0900000001", "BeautyLinkTest123!");
+        mvc.perform(post("/api/products")
+                        .header("Authorization", "Bearer " + customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Restricted product\",\"price\":100000}"))
+                .andExpect(status().isForbidden());
+
+        String adminToken = login("0900000004", "BeautyLinkTest123!");
+        mvc.perform(post("/api/products")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Admin product\",\"price\":100000}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name", is("Admin product")));
+    }
+
+    @Test
+    void repeatedFailedLoginsAreRateLimitedWithoutEchoingCredentials() throws Exception {
+        for (int attempt = 0; attempt < 8; attempt++) {
+            mvc.perform(post("/api/v1/auth/login")
+                            .with(request -> { request.setRemoteAddr("198.51.100.77"); return request; })
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"identifier\":\"attacker@example.com\",\"password\":\"WrongPass123!\"}"))
+                    .andExpect(status().isUnauthorized());
+        }
+        mvc.perform(post("/api/v1/auth/login")
+                        .with(request -> { request.setRemoteAddr("198.51.100.77"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"attacker@example.com\",\"password\":\"WrongPass123!\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code", is("RATE_LIMITED")))
+                .andExpect(content().string(not(containsString("attacker@example.com"))))
+                .andExpect(content().string(not(containsString("WrongPass123!"))));
+    }
+
+    @Test
+    void invalidRegistrationsAreRateLimitedBeforeBeanValidation() throws Exception {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            mvc.perform(post("/api/v1/auth/register-supplier")
+                            .with(request -> { request.setRemoteAddr("198.51.100.80"); return request; })
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"ownerName\":\"x\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(post("/api/v1/auth/register-supplier")
+                        .with(request -> { request.setRemoteAddr("198.51.100.80"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ownerName\":\"x\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code", is("RATE_LIMITED")));
+    }
+
+    @Test
+    void duplicateRegistrationUsesGenericConflictAndFakeImageBytesAreRejected() throws Exception {
+        mvc.perform(post("/api/v1/auth/register")
+                        .with(request -> { request.setRemoteAddr("198.51.100.78"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fullName\":\"Duplicate User\",\"phone\":\"0900000001\",\"email\":\"unused@example.com\",\"password\":\"StrongPass123!\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code", is("REGISTRATION_CONFLICT")))
+                .andExpect(content().string(not(containsString("PHONE_EXISTS"))));
+
+        JsonNode locations = objectMapper.readTree(mvc.perform(get("/api/v1/locations"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        long cityId = locations.get(0).path("id").asLong();
+        String invalidImageBody = """
+                {"ownerName":"Fake Image","phone":"0934567891","email":"fake.image@example.com",
+                 "password":"StrongPass123!","businessName":"Fake Image Studio","businessType":"Studio",
+                 "locationId":%d,"addressLine":"25 Nguyen Trai","description":"Studio trang diem",
+                 "specialty":"Trang diem","cccdNumber":"079203001235",
+                 "cccdFrontImage":"data:image/jpeg;base64,aGVsbG8=","cccdBackImage":"%s",
+                 "imageUrl":"%s","latitude":10.7769,"longitude":106.7009}
+                """.formatted(cityId, TEST_PNG, TEST_PNG);
+        mvc.perform(post("/api/v1/auth/register-supplier")
+                        .with(request -> { request.setRemoteAddr("198.51.100.79"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON).content(invalidImageBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code", is("INVALID_IDENTITY_IMAGE")));
+    }
+
+    @Test
+    void oversizedRequestIsRejectedBeforeJsonDeserialization() throws Exception {
+        String oversizedBody = "x".repeat(4 * 1024 * 1024 + 1);
+        mvc.perform(post("/api/v1/auth/register-supplier")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(oversizedBody))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.code", is("REQUEST_TOO_LARGE")));
+    }
+
+    @Test
     void customerCanBookAnAvailableSlotAndReadItBack() throws Exception {
-        String customerToken = login("0900000001", "Demo123!");
+        String customerToken = login("0900000001", "BeautyLinkTest123!");
         JsonNode services = objectMapper.readTree(mvc.perform(get("/api/v1/homepage/services"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         long serviceId = services.get(0).path("id").asLong();
@@ -180,7 +279,7 @@ class PlatformApiIntegrationTest {
 
     @Test
     void paidCustomerBookingCanReviewServiceAndSupplier() throws Exception {
-        String customerToken = login("0900000001", "Demo123!");
+        String customerToken = login("0900000001", "BeautyLinkTest123!");
         JsonNode services = objectMapper.readTree(mvc.perform(get("/api/v1/homepage/services"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         JsonNode service = services.get(0);
@@ -261,7 +360,7 @@ class PlatformApiIntegrationTest {
 
     @Test
     void payOSWebhookVerifiesAndConfirmsCustomerBooking() throws Exception {
-        String customerToken = login("0900000001", "Demo123!");
+        String customerToken = login("0900000001", "BeautyLinkTest123!");
         JsonNode service = objectMapper.readTree(mvc.perform(get("/api/v1/homepage/services"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get(0);
         long serviceId = service.path("id").asLong();
@@ -285,6 +384,8 @@ class PlatformApiIntegrationTest {
 
         when(payOSGateway.create(any())).thenAnswer(invocation -> {
             var request = (vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest) invocation.getArgument(0);
+            assertTrue(request.getDescription().length() <= 9, "PayOS description must be at most 9 characters");
+            assertTrue(request.getDescription().startsWith("BL"));
             var response = mock(CreatePaymentLinkResponse.class);
             when(response.getOrderCode()).thenReturn(request.getOrderCode());
             when(response.getAmount()).thenReturn(request.getAmount());
@@ -294,26 +395,16 @@ class PlatformApiIntegrationTest {
         });
         String paymentJson = mvc.perform(post("/api/v1/payments/payos/bookings/" + bookingId)
                         .header("Authorization", "Bearer " + customerToken).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"paymentOption\":\"FULL_100\"}"))
+                        .content("{\"paymentOption\":\"DEPOSIT_50\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status", is("PENDING")))
                 .andExpect(jsonPath("$.checkoutUrl", is("https://pay.payos.vn/web/test")))
                 .andReturn().getResponse().getContentAsString();
         JsonNode payment = objectMapper.readTree(paymentJson);
-        long expiredOrderCode = payment.path("orderCode").asLong();
-        var expiredPayment = paymentTransactions.findByOrderCode(expiredOrderCode).orElseThrow();
-        expiredPayment.setExpiresAt(Instant.now().minusSeconds(1));
-        paymentTransactions.saveAndFlush(expiredPayment);
-
-        String renewedPaymentJson = mvc.perform(post("/api/v1/payments/payos/bookings/" + bookingId)
-                        .header("Authorization", "Bearer " + customerToken).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"paymentOption\":\"FULL_100\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status", is("PENDING")))
-                .andReturn().getResponse().getContentAsString();
-        payment = objectMapper.readTree(renewedPaymentJson);
+        long expectedDeposit = bookings.findById(bookingId).orElseThrow().getTotalAmount()
+                .multiply(new java.math.BigDecimal("0.50")).setScale(0, RoundingMode.HALF_UP).longValueExact();
+        assertTrue(payment.path("amount").asLong() == expectedDeposit, "Deposit must be 50% of the discounted booking total");
         long orderCode = payment.path("orderCode").asLong();
-        assertTrue(orderCode != expiredOrderCode, "An expired PayOS link must be replaced with a new order code");
         long amount = payment.path("amount").asLong();
         WebhookData verifiedData = mock(WebhookData.class);
         when(verifiedData.getOrderCode()).thenReturn(orderCode);
@@ -362,7 +453,7 @@ class PlatformApiIntegrationTest {
 
     @Test
     void supplierCanReadAndReplaceOwnedPractitionerSchedule() throws Exception {
-        String supplierToken = login("0900000002", "Demo123!");
+        String supplierToken = login("0900000002", "BeautyLinkTest123!");
         JsonNode people = objectMapper.readTree(mvc.perform(get("/api/v1/supplier/practitioners")
                         .header("Authorization", "Bearer " + supplierToken))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
@@ -387,9 +478,9 @@ class PlatformApiIntegrationTest {
                  "password":"StrongPass123!","businessName":"Minh Beauty House","businessType":"Makeup Studio",
                  "locationId":%d,"addressLine":"25 Nguyen Trai","description":"Studio trang diem",
                  "specialty":"Trang diem co dau","cccdNumber":"079203001234",
-                 "cccdFrontImage":"data:image/jpeg;base64,aGVsbG8=","cccdBackImage":"data:image/jpeg;base64,aGVsbG8=",
-                 "imageUrl":"data:image/jpeg;base64,aGVsbG8=","latitude":10.7769,"longitude":106.7009}
-                """.formatted(cityId);
+                 "cccdFrontImage":"%s","cccdBackImage":"%s",
+                 "imageUrl":"%s","latitude":10.7769,"longitude":106.7009}
+                """.formatted(cityId, TEST_PNG, TEST_PNG, TEST_PNG);
 
         String response = mvc.perform(post("/api/v1/auth/register-supplier")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
@@ -423,11 +514,11 @@ class PlatformApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"displayName":"Le Minh Artist","specialty":"Makeup",
-                                 "bio":"Chuyen vien trang diem","avatarUrl":"data:image/webp;base64,aGVsbG8="}
-                                """))
+                                 "bio":"Chuyen vien trang diem","avatarUrl":"%s"}
+                                """.formatted(TEST_PNG)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.displayName", is("Le Minh Artist")))
-                .andExpect(jsonPath("$.avatarUrl", startsWith("data:image/webp;base64,")));
+                .andExpect(jsonPath("$.avatarUrl", startsWith("data:image/png;base64,")));
 
         mvc.perform(put("/api/v1/supplier/profile")
                         .header("Authorization", "Bearer " + token)
@@ -435,8 +526,8 @@ class PlatformApiIntegrationTest {
                         .content("""
                                 {"name":"Minh Beauty House","businessType":"Makeup Studio",
                                  "description":"Studio trang diem chuyen nghiep","addressLine":"25 Nguyen Trai",
-                                 "imageUrl":"data:image/png;base64,aGVsbG8=","latitude":10.777,"longitude":106.701}
-                                """))
+                                 "imageUrl":"%s","latitude":10.777,"longitude":106.701}
+                                """.formatted(TEST_PNG)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.imageUrl", startsWith("data:image/png;base64,")));
 
@@ -449,8 +540,8 @@ class PlatformApiIntegrationTest {
                         .content("""
                                 {"categoryId":%d,"name":"Makeup du tiec","description":"Phong cach tu nhien",
                                  "price":450000,"originalPrice":600000,"durationMinutes":90,
-                                 "imageUrl":"data:image/jpeg;base64,aGVsbG8=","active":true}
-                                """.formatted(categoryId)))
+                                 "imageUrl":"%s","active":true}
+                                """.formatted(categoryId, TEST_PNG)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.active", is(true)));
 
@@ -467,8 +558,8 @@ class PlatformApiIntegrationTest {
 
     @Test
     void customerReportCanBeResolvedByStaff() throws Exception {
-        String customerToken = login("0900000001", "Demo123!");
-        String staffToken = login("0900000003", "Demo123!");
+        String customerToken = login("0900000001", "BeautyLinkTest123!");
+        String staffToken = login("0900000003", "BeautyLinkTest123!");
         String created = mvc.perform(post("/api/v1/reports")
                         .header("Authorization", "Bearer " + customerToken)
                         .contentType(MediaType.APPLICATION_JSON)

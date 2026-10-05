@@ -17,7 +17,7 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 - Added remember-login behavior, a compact partner-registration entry point, and a small logout confirmation toast.
 - Reworked the header to give search more space, made categories more compact, and moved notifications to a floating bottom-right control without continuously generated deal alerts.
 - Added browser location handling with a clearly labelled approximate network fallback when device GPS is unavailable. Suppliers can still enter exact store coordinates manually.
-- Replaced the simulated QR checkout with a server-created PayOS hosted checkout. A booking is marked paid only after the backend verifies the signed PayOS webhook.
+- Uses a server-created PayOS hosted checkout. A booking is marked paid only after the backend verifies the signed PayOS webhook or reconciles it directly with PayOS.
 - PayOS links expire after 15 minutes; expired pending links are marked `EXPIRED` and can be safely regenerated with a new order code.
 - Added client- and server-side Vietnamese validation messages for customer and admin forms, including authentication, profiles, bookings, reviews, reports, and admin report resolution.
 - Improved cart dismissal, supplier registration/store forms, dashboard messaging, and responsive presentation throughout the updated flows.
@@ -48,7 +48,7 @@ PayOS credentials are read only by the backend. The frontend never receives merc
 - Create, edit, publish, hide, and categorize store services.
 - Manage practitioners and their weekly working hours, breaks, and slot duration.
 - View appointments made with that supplier.
-- See booking totals, upcoming work, completion rate, simulated order value, and status distribution on the dashboard.
+- See booking totals, upcoming work, completion rate, order value, and status distribution on the dashboard.
 
 ### Staff and admin
 
@@ -185,20 +185,32 @@ MYSQL_USERNAME=your_mysql_username
 MYSQL_PASSWORD=your_mysql_password
 JWT_SECRET=replace-with-a-long-random-secret-of-at-least-32-characters
 KYC_ENCRYPTION_KEY=replace-with-a-different-random-secret-of-at-least-32-characters
-JWT_EXPIRATION_MS=86400000
+JWT_EXPIRATION_MS=3600000
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 SUPPLIER_AUTO_VERIFY=true
-DEMO_DATA_ENABLED=true
-DEMO_ACCOUNT_PASSWORD=Demo123!
+DEMO_DATA_ENABLED=false
+DEMO_ACCOUNT_PASSWORD=
+LOGIN_MAX_PER_IDENTIFIER=8
+LOGIN_MAX_PER_IP=20
+LOGIN_RATE_WINDOW_SECONDS=900
+REGISTRATION_MAX_PER_IP=5
+REGISTRATION_RATE_WINDOW_SECONDS=3600
 PAYOS_CLIENT_ID=your_payos_client_id
 PAYOS_API_KEY=your_payos_api_key
 PAYOS_CHECKSUM_KEY=your_payos_checksum_key
 PAYOS_RETURN_URL=http://localhost:5173/?payment=success
 PAYOS_CANCEL_URL=http://localhost:5173/?payment=cancelled
+PAYOS_WEBHOOK_URL=https://your-api.example.com/api/v1/payments/payos/webhook
+PAYOS_RECONCILIATION_MS=60000
+PAYOS_RECONCILIATION_INITIAL_DELAY_MS=60000
 ```
 
 `backend/.env.properties` is ignored by Git. Never commit this file or paste production secrets into source code.
 `KYC_ENCRYPTION_KEY` protects supplier identity documents and must be different from `JWT_SECRET` in every deployment. Keep it stable when redeploying; changing or losing it makes existing encrypted CCCD records unreadable.
+
+For production PayOS, create and verify a Payment Channel at `my.payos.vn`, connect the receiving bank account, then place that channel's `Client ID`, `API Key`, and `Checksum Key` in the deployment secret store. Set `PAYOS_WEBHOOK_URL` to the public HTTPS backend endpoint shown above. On startup, the backend confirms that webhook URL with PayOS; it never logs credentials, signatures, or the bank account number. Pending transactions are also reconciled directly with PayOS every 60 seconds so webhook delivery is not the only source of truth.
+
+The built-in login and registration limits protect a single backend instance. A public multi-instance deployment must also enforce shared IP/account throttling at the edge or through Redis. Before activating real customer accounts, connect an OTP/email provider and require contact ownership verification; syntax validation alone does not prove that the registrant owns a phone number or email address.
 
 ### 5. Install the frontend dependencies
 
@@ -239,7 +251,7 @@ Stop either server with `Ctrl+C` in its terminal.
 
 ## Demo accounts
 
-Local built-in demo accounts use the password `Demo123!`. A deployment must set a private `DEMO_ACCOUNT_PASSWORD` instead of publishing this default.
+Demo accounts are disabled by default. To enable them deliberately, set `DEMO_DATA_ENABLED=true` and choose a private `DEMO_ACCOUNT_PASSWORD` of at least 12 characters; no shared default password is provided.
 
 | Role | Phone | Email |
 |---|---|---|
@@ -344,7 +356,7 @@ Authorization: Bearer <access-token>
 
 ## Seed data
 
-The two supported cities and five service categories are idempotently inserted in every environment because supplier registration depends on them. Demo startup seeders run only when `DEMO_DATA_ENABLED=true` (the local default). Production defaults this setting to `false`, so a deployment must opt in deliberately:
+The two supported cities and five service categories are idempotently inserted in every environment because supplier registration depends on them. Demo startup seeders run only when `DEMO_DATA_ENABLED=true` (an explicit opt-in), so every deployment must opt in deliberately:
 
 - Core demo accounts and the first supplier are inserted into an empty catalog.
 - The presentation catalog is idempotently inserted or updated on later starts.

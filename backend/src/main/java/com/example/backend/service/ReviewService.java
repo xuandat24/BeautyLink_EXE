@@ -27,7 +27,7 @@ public class ReviewService {
             throw new ApiException(HttpStatus.FORBIDDEN, "REVIEW_FORBIDDEN", "Bạn chỉ có thể đánh giá đơn hàng của chính mình");
         }
         if (!isEligible(booking)) {
-            throw new ApiException(HttpStatus.CONFLICT, "REVIEW_NOT_ELIGIBLE", "Chỉ đơn hàng đã thanh toán và chưa bị hủy hoặc hoàn tiền mới có thể đánh giá");
+            throw new ApiException(HttpStatus.CONFLICT, "REVIEW_NOT_ELIGIBLE", "Chỉ đơn hàng đã thanh toán và chưa bị hủy mới có thể đánh giá");
         }
 
         BookingReview review = reviews.findByBookingIdAndTargetType(bookingId, targetType).orElseGet(BookingReview::new);
@@ -44,8 +44,8 @@ public class ReviewService {
     }
 
     public static boolean isEligible(Booking booking) {
-        boolean paid = booking.getPaymentStatus() == PaymentStatus.PAID || booking.getPaymentStatus() == PaymentStatus.SIMULATED;
-        return paid && booking.getStatus() != BookingStatus.CANCELLED && booking.getPaymentStatus() != PaymentStatus.REFUNDED;
+        boolean paid = booking.getPaymentStatus() == PaymentStatus.PAID;
+        return paid && booking.getStatus() != BookingStatus.CANCELLED;
     }
 
     public BookingReviewResponse response(BookingReview review) {

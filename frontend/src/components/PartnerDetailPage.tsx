@@ -118,7 +118,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
       { icon: Car, label: 'Bãi đỗ xe ô tô & xe máy rộng rãi' },
       { icon: Coffee, label: 'Trà thảo mộc & bánh ngọt dưỡng nhan miễn phí' },
       { icon: ShieldCheck, label: 'Phòng VIP vô khuẩn riêng tư 1:1' },
-      { icon: CreditCard, label: 'Hỗ trợ thanh toán VietQR, Visa, Master, MoMo' },
+      { icon: CreditCard, label: 'Hỗ trợ thanh toán trực tuyến qua PayOS' },
       { icon: Award, label: '100% Kỹ thuật viên có chứng chỉ hành nghề' },
     ],
     founder: {

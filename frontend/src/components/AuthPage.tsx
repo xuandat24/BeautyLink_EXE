@@ -14,7 +14,6 @@ import {
   ArrowRight,
   CheckCircle2,
   Award,
-  Zap,
   Check,
   Gift,
   HeartHandshake,
@@ -71,7 +70,7 @@ const LIVE_BOOKINGS = [
     salon: 'Viện Thẩm Mỹ Quốc Tế',
     time: '6 phút trước',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80',
-    badge: 'Thanh toán VietQR 0đ phí',
+    badge: 'Thanh toán trực tuyến qua PayOS',
   },
 ];
 
@@ -161,52 +160,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       }
     } catch (err) {
       setError(getApiErrorMessage(err, 'Không thể xác thực tài khoản. Vui lòng kiểm tra lại thông tin.'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async (roleType: 'customer' | 'supplier') => {
-    setLoading(true);
-    setError('');
-    try {
-      if (roleType === 'supplier') {
-        const res = await beautyApi.login('0900000002', 'Demo123!');
-        const mappedUser: CurrentUser = {
-          id: res.user.id,
-          name: res.user.fullName || res.user.name || 'Chủ Thẩm Mỹ Viện Demo',
-          phone: res.user.phone,
-          email: res.user.email,
-          role: 'SUPPLIER',
-          memberTier: 'VIP Partner',
-          loyaltyPoints: 1200,
-          points: 1200,
-        };
-        onSuccess(mappedUser);
-      } else {
-        const res = await beautyApi.login('0900000001', 'Demo123!');
-        const mappedUser: CurrentUser = {
-          id: res.user.id,
-          name: res.user.fullName || res.user.name || 'Nguyễn Minh Anh (VIP)',
-          phone: res.user.phone,
-          email: res.user.email,
-          role: 'CUSTOMER',
-          memberTier: 'VIP Gold',
-          loyaltyPoints: 500,
-          points: 500,
-        };
-        onSuccess(mappedUser);
-      }
-    } catch (err) {
-      const mockUser: CurrentUser = {
-        name: roleType === 'supplier' ? 'Chủ Thẩm Mỹ Viện Demo' : 'Nguyễn Minh Anh (VIP)',
-        phone: roleType === 'supplier' ? '0900000002' : '0900000001',
-        email: roleType === 'supplier' ? 'partner@beautylink.vn' : 'demo@beautylink.vn',
-        role: roleType === 'supplier' ? 'SUPPLIER' : 'CUSTOMER',
-        memberTier: 'VIP',
-        points: 500,
-      };
-      onSuccess(mockUser);
     } finally {
       setLoading(false);
     }
@@ -521,52 +474,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 </button>
               </form>
 
-              {/* QUICK DEMO CREDENTIALS SHORTCUTS */}
-              <div className="mt-6 pt-5 border-t border-pink-100 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                    <Zap className="w-3.5 h-3.5 text-amber-500" />
-                    <span>Đăng nhập thử nghiệm nhanh (1-chạm):</span>
-                  </span>
-                  <span className="text-[10px] text-pink-600 font-bold bg-pink-50 px-2 py-0.5 rounded-full">
-                    Demo sẵn dữ liệu
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => handleDemoLogin('customer')}
-                    className="p-2.5 rounded-xl border border-pink-200 bg-pink-50/50 hover:bg-pink-100/70 hover:border-pink-300 text-left transition cursor-pointer group flex items-center gap-2"
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-pink-200 text-[#be185d] flex items-center justify-center text-xs font-black shrink-0">
-                      👤
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-black text-slate-800 group-hover:text-[#be185d] truncate">
-                        Khách Hàng VIP
-                      </div>
-                      <div className="text-[9px] text-slate-500 truncate">Minh Anh · 500 điểm</div>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDemoLogin('supplier')}
-                    className="p-2.5 rounded-xl border border-purple-200 bg-purple-50/50 hover:bg-purple-100/70 hover:border-purple-300 text-left transition cursor-pointer group flex items-center gap-2"
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-purple-200 text-purple-800 flex items-center justify-center text-xs font-black shrink-0">
-                      🏪
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-black text-slate-800 group-hover:text-purple-800 truncate">
-                        Chủ Spa / Đối Tác
-                      </div>
-                      <div className="text-[9px] text-slate-500 truncate">Quản lý lịch & doanh thu</div>
-                    </div>
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
 

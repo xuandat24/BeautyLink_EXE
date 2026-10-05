@@ -24,7 +24,10 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, exception) -> response.sendError(HttpServletResponse.SC_FORBIDDEN)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/payos/webhook").permitAll()
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/locations/**", "/api/v1/categories/**", "/api/v1/services/**", "/api/v1/suppliers/**", "/api/v1/homepage/**", "/api/products/**", "/error").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/register-supplier").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/locations/**", "/api/v1/categories/**", "/api/v1/services/**", "/api/v1/suppliers/**", "/api/v1/homepage/**", "/api/products/**").permitAll()
+                        .requestMatchers("/api/products/**").hasRole("ADMIN")
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class).build();
     }

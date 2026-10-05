@@ -22,7 +22,7 @@ public class Booking {
     @Column(nullable = false) private LocalTime endTime;
     @Column(nullable = false, precision = 12, scale = 2) private BigDecimal totalAmount;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private BookingStatus status = BookingStatus.CONFIRMED;
-    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private PaymentStatus paymentStatus = PaymentStatus.SIMULATED;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private PaymentStatus paymentStatus = PaymentStatus.UNPAID;
     @Column(length = 500) private String customerNote;
     @Column(nullable = false, updatable = false) private Instant createdAt = Instant.now();
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }

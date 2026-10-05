@@ -30,6 +30,10 @@ export const notificationService = {
     cache.set(NOTIFICATIONS_CACHE_KEY, notifs);
   },
 
+  clearUserData(): void {
+    cache.delete(NOTIFICATIONS_CACHE_KEY);
+  },
+
   /**
    * Sound preferences
    */

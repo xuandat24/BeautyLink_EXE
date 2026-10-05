@@ -26,7 +26,7 @@ import static com.example.backend.model.DomainEnums.*;
  * records can be identified and removed without confusing them with real partners.
  */
 @Component
-@ConditionalOnProperty(name = "app.demo-data.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "app.demo-data.enabled", havingValue = "true", matchIfMissing = false)
 @Order(3)
 public class DemoCatalogSeeder implements CommandLineRunner {
     private final UserAccountRepository users;
@@ -59,6 +59,9 @@ public class DemoCatalogSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
+        if (demoPassword == null || demoPassword.length() < 12 || "Demo123!".equalsIgnoreCase(demoPassword)) {
+            throw new IllegalStateException("DEMO_ACCOUNT_PASSWORD must be a private value of at least 12 characters when demo data is enabled");
+        }
         Location hcm = locations.findBySlug("ho-chi-minh").orElse(null);
         Location hanoi = locations.findBySlug("ha-noi").orElse(null);
         if (hcm == null && hanoi == null) return;

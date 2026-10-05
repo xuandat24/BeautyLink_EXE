@@ -357,7 +357,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
                     <Sparkles className="h-5 w-5" />
                   </div>
                   <p className="mt-5 text-2xl font-black">{formatCurrency(totalRevenue)}</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">Giá trị đơn (mô phỏng)</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">Tổng giá trị đơn</p>
                 </div>
               </div>
 

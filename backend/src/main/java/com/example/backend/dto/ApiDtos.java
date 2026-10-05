@@ -35,7 +35,7 @@ public final class ApiDtos {
             @NotBlank @Pattern(regexp = "^[0-9]{12}$", message = "CCCD phải gồm đúng 12 chữ số") String cccdNumber,
             @NotBlank @Size(max = 1_200_000) String cccdFrontImage,
             @NotBlank @Size(max = 1_200_000) String cccdBackImage,
-            @NotBlank @Size(max = 2_000_000) String imageUrl,
+            @NotBlank @Size(max = 1_500_000) String imageUrl,
             @NotNull @DecimalMin("-90.0") @DecimalMax("90.0") Double latitude,
             @NotNull @DecimalMin("-180.0") @DecimalMax("180.0") Double longitude) {}
     public record SupplierResponse(Long id, String name, String slug, String businessType, String description,
@@ -48,7 +48,7 @@ public final class ApiDtos {
             @NotBlank @Size(max = 120) String businessType,
             @Size(max = 1500) String description,
             @NotBlank @Size(max = 255) String addressLine,
-            @NotBlank @Size(max = 2_000_000) String imageUrl,
+            @NotBlank @Size(max = 1_500_000) String imageUrl,
             @NotNull @DecimalMin("-90.0") @DecimalMax("90.0") Double latitude,
             @NotNull @DecimalMin("-180.0") @DecimalMax("180.0") Double longitude) {}
 
@@ -58,7 +58,7 @@ public final class ApiDtos {
     public record CreatePractitionerRequest(@NotBlank @Size(max = 120) String displayName,
                                             @Size(max = 160) String specialty,
                                             @Size(max = 500) String bio,
-                                            @Size(max = 2_000_000) String avatarUrl) {}
+                                            @Size(max = 1_500_000) String avatarUrl) {}
     public record UpsertSupplierServiceRequest(
             @NotNull Long categoryId,
             @NotBlank @Size(max = 160) String name,
@@ -66,7 +66,7 @@ public final class ApiDtos {
             @NotNull @DecimalMin("1000") @Digits(integer = 10, fraction = 2) BigDecimal price,
             @DecimalMin("1000") @Digits(integer = 10, fraction = 2) BigDecimal originalPrice,
             @Min(15) @Max(480) int durationMinutes,
-            @Size(max = 2_000_000) String imageUrl,
+            @Size(max = 1_500_000) String imageUrl,
             boolean active) {}
     public record SupplierServiceResponse(Long id, Long categoryId, String categorySlug, String categoryName,
                                           String name, String description, BigDecimal price, BigDecimal originalPrice,

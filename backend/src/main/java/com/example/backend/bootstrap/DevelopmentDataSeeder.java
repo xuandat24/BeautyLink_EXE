@@ -15,7 +15,7 @@ import java.util.*;
 import static com.example.backend.model.DomainEnums.*;
 
 @Component
-@ConditionalOnProperty(name = "app.demo-data.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "app.demo-data.enabled", havingValue = "true", matchIfMissing = false)
 @Order(2)
 public class DevelopmentDataSeeder implements CommandLineRunner {
     private final UserAccountRepository users; private final LocationRepository locations; private final ServiceCategoryRepository categories;
@@ -26,8 +26,8 @@ public class DevelopmentDataSeeder implements CommandLineRunner {
         this.users = users; this.locations = locations; this.categories = categories; this.suppliers = suppliers; this.practitioners = practitioners; this.services = services; this.rules = rules; this.encoder = encoder; this.demoPassword = demoPassword;
     }
     @Override @Transactional public void run(String... args) {
-        if (demoPassword == null || demoPassword.length() < 8) {
-            throw new IllegalStateException("DEMO_ACCOUNT_PASSWORD must contain at least 8 characters when demo data is enabled");
+        if (demoPassword == null || demoPassword.length() < 12 || "Demo123!".equalsIgnoreCase(demoPassword)) {
+            throw new IllegalStateException("DEMO_ACCOUNT_PASSWORD must be a private value of at least 12 characters when demo data is enabled");
         }
         seedAccounts(); if (suppliers.count() > 0) return;
         Location hcm = location("Thành phố Hồ Chí Minh", "ho-chi-minh", LocationType.PROVINCE_CITY, null);

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { BackendLocation, CurrentUser } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { prepareImageUpload } from '../lib/imageUpload';
 
 interface SupplierRegisterPageProps {
   onBack: () => void;
@@ -59,17 +60,20 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setLoading(true);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      onChange(reader.result as string);
+    try {
+      const optimized = await prepareImageUpload(file, { maxStoredCharacters: 1_100_000, maxEdge: 1600, quality: 0.86 });
+      onChange(optimized);
+    } catch (err) {
+      onChange('');
+      window.alert(err instanceof Error ? err.message : 'Không thể xử lý ảnh này.');
+    } finally {
       setLoading(false);
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   return (
@@ -96,7 +100,7 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         <label className="flex h-32 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-pink-200 bg-pink-50/30 p-4 text-center transition hover:border-[#e1146c] hover:bg-pink-50/70">
           <input
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             onChange={handleFileChange}
             className="hidden"
           />
@@ -106,7 +110,7 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
             <>
               <UploadCloud className="h-6 w-6 text-[#e1146c]" />
               <span className="mt-1.5 text-xs font-bold text-slate-700">{placeholderText}</span>
-              <span className="mt-0.5 text-[10px] text-slate-400">Tối đa 10 MB</span>
+              <span className="mt-0.5 text-[10px] text-slate-400">Ảnh được tối ưu và kiểm tra trước khi gửi</span>
             </>
           )}
         </label>

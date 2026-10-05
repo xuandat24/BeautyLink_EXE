@@ -21,8 +21,8 @@ public class AuthService {
     }
     @Transactional public AuthResponse register(RegisterRequest request) {
         String phone = normalizePhone(request.phone());
-        if (users.existsByPhone(phone)) throw new ApiException(HttpStatus.CONFLICT, "PHONE_EXISTS", "Số điện thoại đã được đăng ký");
-        if (request.email() != null && !request.email().isBlank() && users.existsByEmailIgnoreCase(request.email().trim())) throw new ApiException(HttpStatus.CONFLICT, "EMAIL_EXISTS", "Email đã được đăng ký");
+        if (users.existsByPhone(phone)) throw registrationConflict();
+        if (request.email() != null && !request.email().isBlank() && users.existsByEmailIgnoreCase(request.email().trim())) throw registrationConflict();
         UserAccount user = new UserAccount(); user.setFullName(request.fullName().trim()); user.setPhone(phone);
         user.setEmail(request.email() == null || request.email().isBlank() ? null : request.email().trim().toLowerCase());
         user.setPasswordHash(encoder.encode(request.password())); user.setRole(Role.CUSTOMER); user.setStatus(AccountStatus.ACTIVE);
@@ -39,4 +39,5 @@ public class AuthService {
     public AuthResponse response(UserAccount user) { return new AuthResponse(jwt.createToken(user), "Bearer", jwt.getExpirationMs(), toUser(user)); }
     public UserResponse toUser(UserAccount u) { return new UserResponse(u.getId(), u.getFullName(), u.getPhone(), u.getEmail(), u.getRole(), u.getLoyaltyPoints()); }
     public static String normalizePhone(String value) { return value == null ? "" : value.replaceAll("[\\s.-]", ""); }
+    public static ApiException registrationConflict() { return new ApiException(HttpStatus.CONFLICT, "REGISTRATION_CONFLICT", "Không thể đăng ký với thông tin đã cung cấp. Hãy đăng nhập hoặc sử dụng quy trình khôi phục tài khoản"); }
 }
