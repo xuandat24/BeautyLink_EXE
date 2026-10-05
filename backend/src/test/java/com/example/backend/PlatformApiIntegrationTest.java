@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.backend.repository.SupplierVerificationRepository;
 import com.example.backend.repository.BookingRepository;
+import com.example.backend.repository.PaymentTransactionRepository;
 import com.example.backend.service.PayOSGateway;
 import com.example.backend.model.DomainEnums.BookingStatus;
 import com.example.backend.model.DomainEnums.PaymentStatus;
@@ -19,6 +20,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -38,6 +40,7 @@ class PlatformApiIntegrationTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired SupplierVerificationRepository supplierVerifications;
     @Autowired BookingRepository bookings;
+    @Autowired PaymentTransactionRepository paymentTransactions;
     @MockitoBean PayOSGateway payOSGateway;
 
     @Test
@@ -297,7 +300,20 @@ class PlatformApiIntegrationTest {
                 .andExpect(jsonPath("$.checkoutUrl", is("https://pay.payos.vn/web/test")))
                 .andReturn().getResponse().getContentAsString();
         JsonNode payment = objectMapper.readTree(paymentJson);
+        long expiredOrderCode = payment.path("orderCode").asLong();
+        var expiredPayment = paymentTransactions.findByOrderCode(expiredOrderCode).orElseThrow();
+        expiredPayment.setExpiresAt(Instant.now().minusSeconds(1));
+        paymentTransactions.saveAndFlush(expiredPayment);
+
+        String renewedPaymentJson = mvc.perform(post("/api/v1/payments/payos/bookings/" + bookingId)
+                        .header("Authorization", "Bearer " + customerToken).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentOption\":\"FULL_100\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("PENDING")))
+                .andReturn().getResponse().getContentAsString();
+        payment = objectMapper.readTree(renewedPaymentJson);
         long orderCode = payment.path("orderCode").asLong();
+        assertTrue(orderCode != expiredOrderCode, "An expired PayOS link must be replaced with a new order code");
         long amount = payment.path("amount").asLong();
         WebhookData verifiedData = mock(WebhookData.class);
         when(verifiedData.getOrderCode()).thenReturn(orderCode);

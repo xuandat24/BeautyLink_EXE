@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { useScrollReveal } from '../hooks/useScrollReveal';
+import { FieldErrors, homepageReviewSchema, zodFieldErrors } from '../lib/validation';
+import { FieldError } from './FieldError';
 
 export interface CustomerReview {
   id: string;
@@ -174,6 +176,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
   const [newRating, setNewRating] = useState(5);
   const [newContent, setNewContent] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [reviewErrors, setReviewErrors] = useState<FieldErrors>({});
 
   // Lock body scroll when review modal or preview image is open
   useBodyScrollLock(Boolean(previewImage || isWriteModalOpen));
@@ -207,19 +210,30 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
   // Submit review
   const handleAddReview = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAuthor.trim() || !newContent.trim()) return;
+    const validation = homepageReviewSchema.safeParse({
+      author: newAuthor,
+      salon: newSalon,
+      service: newService,
+      rating: newRating,
+      content: newContent,
+    });
+    if (!validation.success) {
+      setReviewErrors(zodFieldErrors(validation.error));
+      return;
+    }
+    setReviewErrors({});
 
     const newRevItem: CustomerReview = {
       id: `rev-${Date.now()}`,
-      authorName: newAuthor.trim(),
+      authorName: validation.data.author,
       authorAvatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80`,
       verifiedBooking: true,
-      salonName: newSalon,
+      salonName: validation.data.salon,
       salonCategory: 'spa',
-      serviceTitle: newService,
-      rating: newRating,
+      serviceTitle: validation.data.service,
+      rating: validation.data.rating,
       date: 'Vừa xong',
-      content: newContent.trim(),
+      content: validation.data.content,
       likesCount: 1,
     };
 
@@ -651,9 +665,12 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                     required
                     placeholder="Ví dụ: Hoàng Thảo"
                     value={newAuthor}
-                    onChange={(e) => setNewAuthor(e.target.value)}
+                    onChange={(e) => { setNewAuthor(e.target.value); setReviewErrors((value) => ({ ...value, author: '' })); }}
+                    maxLength={120}
+                    aria-invalid={Boolean(reviewErrors.author)}
                     className="w-full px-3.5 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#e1146c]"
                   />
+                  <FieldError message={reviewErrors.author} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -663,7 +680,8 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                     </label>
                     <select
                       value={newSalon}
-                      onChange={(e) => setNewSalon(e.target.value)}
+                      onChange={(e) => { setNewSalon(e.target.value); setReviewErrors((value) => ({ ...value, salon: '' })); }}
+                      aria-invalid={Boolean(reviewErrors.salon)}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#e1146c] bg-white"
                     >
                       <option value="An Miên Spa Dưỡng Sinh">An Miên Spa Dưỡng Sinh</option>
@@ -673,6 +691,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                       <option value="Paradise Skin Clinic">Paradise Skin Clinic</option>
                       <option value="De Paris Nail & Eyelash">De Paris Nail & Eyelash</option>
                     </select>
+                    <FieldError message={reviewErrors.salon} />
                   </div>
 
                   <div>
@@ -684,9 +703,12 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                       required
                       placeholder="Gội đầu, Cấy HA..."
                       value={newService}
-                      onChange={(e) => setNewService(e.target.value)}
+                      onChange={(e) => { setNewService(e.target.value); setReviewErrors((value) => ({ ...value, service: '' })); }}
+                      maxLength={160}
+                      aria-invalid={Boolean(reviewErrors.service)}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#e1146c]"
                     />
+                    <FieldError message={reviewErrors.service} />
                   </div>
                 </div>
 
@@ -700,7 +722,8 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                       <button
                         key={star}
                         type="button"
-                        onClick={() => setNewRating(star)}
+                        onClick={() => { setNewRating(star); setReviewErrors((value) => ({ ...value, rating: '' })); }}
+                        aria-label={`${star} sao`}
                         className="cursor-pointer p-1 hover:scale-110 transition-transform"
                       >
                         <Star
@@ -720,6 +743,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                         : 'Bình thường'}
                     </span>
                   </div>
+                  <FieldError message={reviewErrors.rating} />
                 </div>
 
                 {/* Comment Text */}
@@ -732,9 +756,12 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                     required
                     placeholder="Cảm nhận về tay nghề chuyên viên, không gian, mức độ sạch sẽ và hiệu quả dịch vụ..."
                     value={newContent}
-                    onChange={(e) => setNewContent(e.target.value)}
+                    onChange={(e) => { setNewContent(e.target.value); setReviewErrors((value) => ({ ...value, content: '' })); }}
+                    maxLength={1500}
+                    aria-invalid={Boolean(reviewErrors.content)}
                     className="w-full px-3.5 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:border-[#e1146c] resize-none"
                   />
+                  <FieldError message={reviewErrors.content} />
                 </div>
 
                 <button

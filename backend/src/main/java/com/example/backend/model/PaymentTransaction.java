@@ -23,6 +23,7 @@ public class PaymentTransaction {
     @Column(length = 40) private String voucherCode;
     @Column(length = 120) private String paymentReference;
     private Instant paidAt;
+    private Instant expiresAt;
     @Column(nullable = false, updatable = false) private Instant createdAt = Instant.now();
     @Column(nullable = false) private Instant updatedAt = Instant.now();
     @Version private long version;
@@ -40,6 +41,7 @@ public class PaymentTransaction {
     public String getVoucherCode() { return voucherCode; } public void setVoucherCode(String voucherCode) { this.voucherCode = voucherCode; }
     public String getPaymentReference() { return paymentReference; } public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
     public Instant getPaidAt() { return paidAt; } public void setPaidAt(Instant paidAt) { this.paidAt = paidAt; }
+    public Instant getExpiresAt() { return expiresAt; } public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

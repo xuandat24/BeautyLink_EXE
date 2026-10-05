@@ -126,6 +126,7 @@ export interface PayOSPayment {
   remainingAmount: number;
   paymentOption: 'DEPOSIT_50' | 'FULL_100';
   status: 'PENDING' | 'PAID' | 'CANCELLED' | 'EXPIRED' | 'FAILED';
+  expiresAt: string;
 }
 
 export interface BackendSupplierProfile {

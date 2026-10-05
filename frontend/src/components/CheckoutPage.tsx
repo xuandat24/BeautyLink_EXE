@@ -23,7 +23,8 @@ import { useBeautyStore } from '../store/beautyStore';
 import { CurrentUser, BackendService, CartItem } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { OptimizedImage } from './OptimizedImage';
-import { bookingSchema } from '../lib/validation';
+import { bookingSchema, FieldErrors, voucherCodeSchema, zodFieldErrors } from '../lib/validation';
+import { FieldError } from './FieldError';
 
 interface CheckoutPageProps {
   currentUser: CurrentUser | null;
@@ -117,6 +118,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>(
     preselectedTime || '10:00'
   );
+  const [scheduleErrors, setScheduleErrors] = useState<FieldErrors>({});
 
   // If preselected props change, sync state
   useEffect(() => {
@@ -205,11 +207,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Apply Voucher
   const handleApplyVoucher = (codeToApply?: string) => {
-    const code = (codeToApply || voucherCodeInput).trim().toUpperCase();
-    if (!code) {
-      setVoucherError('Vui lòng nhập mã giảm giá.');
+    const validation = voucherCodeSchema.safeParse(codeToApply || voucherCodeInput);
+    if (!validation.success) {
+      setVoucherError(validation.error.issues[0].message);
       return;
     }
+    const code = validation.data;
     const found = AVAILABLE_VOUCHERS.find((v) => v.code === code);
     if (!found) {
       setVoucherError('Mã voucher không hợp lệ hoặc đã hết hạn.');
@@ -242,6 +245,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const handleRemoveVoucher = () => {
     setAppliedVoucher(null);
     setVoucherError('');
+  };
+
+  const handleContinueFromSchedule = () => {
+    const validation = bookingSchema.safeParse({ appointmentDate: selectedDate, startTime: selectedTimeSlot, note: '' });
+    if (!validation.success) {
+      setScheduleErrors(zodFieldErrors(validation.error));
+      return;
+    }
+    setScheduleErrors({});
+    setCurrentStep(2);
   };
 
   // Submit & Complete Booking
@@ -734,7 +747,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         <button
                           key={item.label}
                           type="button"
-                          onClick={() => setSelectedDate(item.val)}
+                          onClick={() => { setSelectedDate(item.val); setScheduleErrors((value) => ({ ...value, appointmentDate: '' })); }}
                           className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
                             selectedDate === item.val
                               ? 'bg-[#e1146c] text-white border-[#e1146c] shadow-xs'
@@ -750,9 +763,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       type="date"
                       min={new Date().toISOString().split('T')[0]}
                       value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
+                      onChange={(e) => { setSelectedDate(e.target.value); setScheduleErrors((value) => ({ ...value, appointmentDate: '' })); }}
+                      aria-invalid={Boolean(scheduleErrors.appointmentDate)}
                       className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-pink-200 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:border-[#e1146c]"
                     />
+                    <FieldError message={scheduleErrors.appointmentDate} />
                   </div>
 
                   <div>
@@ -767,7 +782,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                             <button
                               key={slot}
                               type="button"
-                              onClick={() => setSelectedTimeSlot(slot)}
+                              onClick={() => { setSelectedTimeSlot(slot); setScheduleErrors((value) => ({ ...value, startTime: '' })); }}
                               className={`py-2 px-1 rounded-xl text-xs font-bold border transition text-center cursor-pointer ${
                                 isSelected
                                   ? 'bg-[#e1146c] text-white border-[#e1146c] shadow-xs'
@@ -780,6 +795,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         }
                       )}
                     </div>
+                    <FieldError message={scheduleErrors.startTime} />
                   </div>
                 </div>
               )}
@@ -789,7 +805,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => setCurrentStep(2)}
+                onClick={handleContinueFromSchedule}
                 className="py-3.5 px-6 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs sm:text-sm font-black shadow-md hover:opacity-95 transition flex items-center gap-2 cursor-pointer uppercase tracking-wider"
               >
                 <span>Tiếp tục: Chọn hình thức thanh toán</span>
@@ -1051,7 +1067,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <input
                   type="text"
                   value={voucherCodeInput}
-                  onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                  onChange={(e) => { setVoucherCodeInput(e.target.value.toUpperCase()); setVoucherError(''); }}
+                  maxLength={40}
+                  aria-invalid={Boolean(voucherError)}
+                  aria-describedby="checkout-voucher-error"
                   placeholder="Nhập mã voucher (VD: BEAUTY50)"
                   className="flex-1 px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/20 text-xs sm:text-sm uppercase font-black text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#e1146c]"
                 />
@@ -1065,7 +1084,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
 
               {voucherError && (
-                <p className="text-[11px] font-semibold text-rose-500 mt-2">{voucherError}</p>
+                <p id="checkout-voucher-error" role="alert" className="text-[11px] font-semibold text-rose-500 mt-2">{voucherError}</p>
               )}
 
               {/* Applied Voucher banner */}

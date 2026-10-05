@@ -51,10 +51,13 @@ public class PaymentService {
         String voucherCode = normalizeVoucher(request.voucherCode());
         PaymentTransaction existing = payments.findByBookingId(bookingId).orElse(null);
         if (existing != null && existing.getStatus() == PaymentTransactionStatus.PENDING) {
-            if (existing.getPaymentOption() != request.paymentOption() || !java.util.Objects.equals(existing.getVoucherCode(), voucherCode)) {
-                throw new ApiException(HttpStatus.CONFLICT, "PAYMENT_LINK_EXISTS", "Lịch hẹn đã có link PayOS đang chờ thanh toán");
+            if (!isExpired(existing)) {
+                if (existing.getPaymentOption() != request.paymentOption() || !java.util.Objects.equals(existing.getVoucherCode(), voucherCode)) {
+                    throw new ApiException(HttpStatus.CONFLICT, "PAYMENT_LINK_EXISTS", "Lịch hẹn đã có link PayOS đang chờ thanh toán");
+                }
+                return response(existing);
             }
-            return response(existing);
+            existing.setStatus(PaymentTransactionStatus.EXPIRED);
         }
 
         BigDecimal total = booking.getTotalAmount().setScale(0, RoundingMode.HALF_UP);
@@ -78,6 +81,8 @@ public class PaymentService {
         transaction.setPaymentOption(request.paymentOption());
         transaction.setVoucherCode(voucherCode);
         transaction.setStatus(PaymentTransactionStatus.PENDING);
+        Instant expiresAt = Instant.now().plusSeconds(15 * 60);
+        transaction.setExpiresAt(expiresAt);
 
         CreatePaymentLinkRequest paymentRequest = CreatePaymentLinkRequest.builder()
                 .orderCode(transaction.getOrderCode())
@@ -88,7 +93,7 @@ public class PaymentService {
                 .buyerPhone(customer.getPhone())
                 .returnUrl(returnUrl)
                 .cancelUrl(cancelUrl)
-                .expiredAt(Instant.now().plusSeconds(15 * 60).getEpochSecond())
+                .expiredAt(expiresAt.getEpochSecond())
                 .build();
         CreatePaymentLinkResponse payOS = gateway.create(paymentRequest);
         transaction.setPaymentLinkId(payOS.getPaymentLinkId());
@@ -99,12 +104,15 @@ public class PaymentService {
         return response(transaction);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public PayOSPaymentResponse status(UserAccount customer, Long orderCode) {
         PaymentTransaction payment = payments.findByOrderCode(orderCode)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "Không tìm thấy giao dịch PayOS"));
         if (!payment.getBooking().getCustomer().getId().equals(customer.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "PAYMENT_FORBIDDEN", "Bạn không có quyền xem giao dịch này");
+        }
+        if (payment.getStatus() == PaymentTransactionStatus.PENDING && isExpired(payment)) {
+            payment.setStatus(PaymentTransactionStatus.EXPIRED);
         }
         return response(payment);
     }
@@ -168,10 +176,14 @@ public class PaymentService {
         throw new ApiException(HttpStatus.BAD_REQUEST, "VOUCHER_MINIMUM_NOT_MET", "Đơn hàng chưa đạt giá trị tối thiểu của voucher");
     }
 
+    private boolean isExpired(PaymentTransaction payment) {
+        return payment.getExpiresAt() != null && !payment.getExpiresAt().isAfter(Instant.now());
+    }
+
     private PayOSPaymentResponse response(PaymentTransaction payment) {
         Booking booking = payment.getBooking();
         return new PayOSPaymentResponse(booking.getId(), booking.getBookingCode(), payment.getOrderCode(),
                 payment.getPaymentLinkId(), payment.getCheckoutUrl(), payment.getAmount(), payment.getRemainingAmount(),
-                payment.getPaymentOption(), payment.getStatus());
+                payment.getPaymentOption(), payment.getStatus(), payment.getExpiresAt());
     }
 }

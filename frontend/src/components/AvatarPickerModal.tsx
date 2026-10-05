@@ -9,6 +9,8 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
+import { avatarUrlSchema } from '../lib/validation';
+import { FieldError } from './FieldError';
 
 interface AvatarPickerModalProps {
   isOpen: boolean;
@@ -69,12 +71,22 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   const [selectedAvatar, setSelectedAvatar] = useState<string>(currentAvatar || '');
   const [customUrl, setCustomUrl] = useState<string>('');
   const [tab, setTab] = useState<'upload' | 'curated' | 'link'>('curated');
+  const [validationError, setValidationError] = useState('');
 
   if (!isOpen) return null;
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+      setValidationError('Chỉ chấp nhận ảnh JPG, PNG, WEBP hoặc GIF.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setValidationError('Ảnh đại diện không được vượt quá 5 MB.');
+      return;
+    }
+    setValidationError('');
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -86,13 +98,22 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   };
 
   const handleApplyLink = () => {
-    if (customUrl.trim()) {
-      setSelectedAvatar(customUrl.trim());
-      setCustomUrl('');
+    const validation = avatarUrlSchema.safeParse(customUrl);
+    if (!validation.success) {
+      setValidationError(validation.error.issues[0].message);
+      return;
     }
+    setValidationError('');
+    setSelectedAvatar(validation.data);
+    setCustomUrl('');
   };
 
   const handleSave = () => {
+    if (!selectedAvatar) {
+      setValidationError('Vui lòng chọn hoặc tải lên một ảnh đại diện.');
+      return;
+    }
+    setValidationError('');
     onSaveAvatar(selectedAvatar);
     onClose();
   };
@@ -210,7 +231,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => setSelectedAvatar(item.url)}
+                      onClick={() => { setSelectedAvatar(item.url); setValidationError(''); }}
                       className={`relative aspect-square rounded-2xl overflow-hidden border-2 transition hover:scale-105 cursor-pointer ${
                         isSelected
                           ? 'border-[#be185d] ring-2 ring-pink-400'
@@ -267,7 +288,10 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
                   <input
                     type="url"
                     value={customUrl}
-                    onChange={(e) => setCustomUrl(e.target.value)}
+                    onChange={(e) => { setCustomUrl(e.target.value); setValidationError(''); }}
+                    maxLength={2048}
+                    aria-invalid={Boolean(validationError)}
+                    aria-describedby="avatar-error"
                     placeholder="https://example.com/avatar.jpg"
                     className="w-full px-3.5 py-2.5 pl-9 rounded-xl border border-pink-200 text-xs text-slate-800 focus:outline-none focus:border-[#e1146c]"
                   />
@@ -283,6 +307,8 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
               </div>
             </div>
           )}
+
+          <FieldError id="avatar-error" message={validationError} />
 
           {/* Action buttons */}
           <div className="pt-3 border-t border-pink-100 flex items-center justify-end gap-2.5">

@@ -140,7 +140,7 @@ public final class ApiDtos {
             @Pattern(regexp = "^[A-Z0-9_-]{3,40}$", message = "Mã voucher không hợp lệ") String voucherCode) {}
     public record PayOSPaymentResponse(Long bookingId, String bookingCode, Long orderCode, String paymentLinkId,
                                        String checkoutUrl, BigDecimal amount, BigDecimal remainingAmount,
-                                       PaymentOption paymentOption, PaymentTransactionStatus status) {}
+                                       PaymentOption paymentOption, PaymentTransactionStatus status, Instant expiresAt) {}
     public record PayOSWebhookResponse(boolean success) {}
     public record ReportResponse(Long id, ReportTargetType targetType, Long targetId, String reason, String details,
                                  ReportStatus status, String reporterName, String assignedStaffName,

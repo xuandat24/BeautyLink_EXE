@@ -18,6 +18,7 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 - Reworked the header to give search more space, made categories more compact, and moved notifications to a floating bottom-right control without continuously generated deal alerts.
 - Added browser location handling with a clearly labelled approximate network fallback when device GPS is unavailable. Suppliers can still enter exact store coordinates manually.
 - Replaced the simulated QR checkout with a server-created PayOS hosted checkout. A booking is marked paid only after the backend verifies the signed PayOS webhook.
+- PayOS links expire after 15 minutes; expired pending links are marked `EXPIRED` and can be safely regenerated with a new order code.
 - Added client- and server-side Vietnamese validation messages for customer and admin forms, including authentication, profiles, bookings, reviews, reports, and admin report resolution.
 - Improved cart dismissal, supplier registration/store forms, dashboard messaging, and responsive presentation throughout the updated flows.
 

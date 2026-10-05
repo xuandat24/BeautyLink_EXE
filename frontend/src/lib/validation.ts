@@ -71,6 +71,35 @@ export const supportReportSchema = z.object({
   details: z.string().trim().min(10, 'Nội dung phải có ít nhất 10 ký tự').max(1500, 'Nội dung tối đa 1500 ký tự'),
 });
 
+export const voucherCodeSchema = z
+  .string()
+  .trim()
+  .min(3, 'Mã voucher phải có ít nhất 3 ký tự')
+  .max(40, 'Mã voucher tối đa 40 ký tự')
+  .regex(/^[A-Za-z0-9_-]+$/, 'Mã voucher chỉ được chứa chữ, số, dấu gạch ngang hoặc gạch dưới')
+  .transform((value) => value.toUpperCase());
+
+export const avatarUrlSchema = z
+  .string()
+  .trim()
+  .max(2048, 'Đường dẫn ảnh tối đa 2048 ký tự')
+  .url('Đường dẫn ảnh không hợp lệ')
+  .refine((value) => /^https?:\/\//i.test(value), 'Ảnh phải dùng đường dẫn HTTP hoặc HTTPS');
+
+export const communityCommentSchema = z
+  .string()
+  .trim()
+  .min(3, 'Nội dung phải có ít nhất 3 ký tự')
+  .max(500, 'Nội dung tối đa 500 ký tự');
+
+export const homepageReviewSchema = z.object({
+  author: z.string().trim().min(2, 'Họ tên phải có ít nhất 2 ký tự').max(120, 'Họ tên tối đa 120 ký tự'),
+  salon: z.string().trim().min(2, 'Vui lòng chọn cơ sở làm đẹp').max(160, 'Tên cơ sở tối đa 160 ký tự'),
+  service: z.string().trim().min(2, 'Tên dịch vụ phải có ít nhất 2 ký tự').max(160, 'Tên dịch vụ tối đa 160 ký tự'),
+  rating: z.number().int().min(1, 'Vui lòng chọn số sao').max(5, 'Đánh giá tối đa 5 sao'),
+  content: z.string().trim().min(10, 'Cảm nhận phải có ít nhất 10 ký tự').max(1500, 'Cảm nhận tối đa 1500 ký tự'),
+});
+
 export const passwordChangeSchema = z
   .object({
     currentPassword: z.string().min(1, 'Vui lòng nhập mật khẩu hiện tại').max(72, 'Mật khẩu tối đa 72 ký tự'),

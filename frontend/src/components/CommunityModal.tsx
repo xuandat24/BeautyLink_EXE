@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Users, Heart, MessageCircle, Star, Sparkles, Send, CheckCircle2 } from 'lucide-react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { communityCommentSchema } from '../lib/validation';
+import { FieldError } from './FieldError';
 
 interface CommunityModalProps {
   isOpen: boolean;
@@ -12,6 +14,7 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
   const [hasLiked, setHasLiked] = useState<Record<number, boolean>>({});
   const [newComment, setNewComment] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [commentError, setCommentError] = useState('');
 
   // Lock body scroll when open
   useBodyScrollLock(isOpen);
@@ -37,7 +40,12 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
   };
 
   const handlePostComment = () => {
-    if (!newComment.trim()) return;
+    const validation = communityCommentSchema.safeParse(newComment);
+    if (!validation.success) {
+      setCommentError(validation.error.issues[0].message);
+      return;
+    }
+    setCommentError('');
     setSubmitSuccess(true);
     setNewComment('');
     setTimeout(() => setSubmitSuccess(false), 3500);
@@ -194,7 +202,10 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
               type="text"
               placeholder="Chia sẻ cảm nhận làm đẹp của bạn..."
               value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
+              onChange={(e) => { setNewComment(e.target.value); setCommentError(''); }}
+              maxLength={500}
+              aria-invalid={Boolean(commentError)}
+              aria-describedby="community-comment-error"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handlePostComment();
               }}
@@ -209,6 +220,7 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({ isOpen, onClose 
               <span>Đăng</span>
             </button>
           </div>
+          <FieldError id="community-comment-error" message={commentError} />
 
           <div className="flex justify-end pt-1">
             <button

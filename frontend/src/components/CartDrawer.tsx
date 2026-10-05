@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Trash2, ShoppingBag, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
 import { HotDeal } from '../data/mockData';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { voucherCodeSchema } from '../lib/validation';
 
 export interface CartItem {
   deal: HotDeal;
@@ -50,12 +51,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   );
 
   const applyVoucher = () => {
-    if (voucherCode.trim().toUpperCase() === 'BEAUTYPINK50') {
+    const validation = voucherCodeSchema.safeParse(voucherCode);
+    if (!validation.success) {
+      setDiscountApplied(0);
+      setVoucherMessage(validation.error.issues[0].message);
+      return;
+    }
+    if (validation.data === 'BEAUTY50' && subtotal >= 200000) {
       setDiscountApplied(50000);
       setVoucherMessage('Áp dụng thành công: Giảm 50.000đ!');
-    } else if (voucherCode.trim().toUpperCase() === 'SPASEN100') {
+    } else if (validation.data === 'BEAUTY100' && subtotal >= 500000) {
       setDiscountApplied(100000);
       setVoucherMessage('Áp dụng thành công: Giảm 100.000đ!');
+    } else if (validation.data === 'PINK15') {
+      setDiscountApplied(Math.min(Math.round(subtotal * 0.15), 150000));
+      setVoucherMessage('Áp dụng thành công: Giảm 15%, tối đa 150.000đ!');
     } else {
       setDiscountApplied(0);
       setVoucherMessage('Mã voucher không hợp lệ hoặc đã hết hạn.');
@@ -161,9 +171,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Nhập mã voucher (vd: BEAUTYPINK50)"
+                  placeholder="Nhập mã voucher (vd: BEAUTY50)"
                   value={voucherCode}
-                  onChange={(e) => setVoucherCode(e.target.value)}
+                  onChange={(e) => { setVoucherCode(e.target.value.toUpperCase()); setVoucherMessage(''); }}
+                  maxLength={40}
+                  aria-invalid={Boolean(voucherMessage && discountApplied === 0)}
                   className="flex-1 px-3 py-2 text-xs rounded-xl border border-pink-200 uppercase focus:outline-none focus:border-[#e1146c]"
                 />
                 <button
