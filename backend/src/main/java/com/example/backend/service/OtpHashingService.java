@@ -1,8 +1,9 @@
 package com.example.backend.service;
 
-import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import com.example.backend.exception.ApiException;
+import org.springframework.http.HttpStatus;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -18,12 +19,11 @@ public class OtpHashingService {
         this.pepper = pepper.getBytes(StandardCharsets.UTF_8);
     }
 
-    @PostConstruct
-    void validateKey() {
-        if (pepper.length < 32) throw new IllegalStateException("OTP_PEPPER must contain at least 32 UTF-8 bytes");
-    }
-
     public String hash(String purpose, String value) {
+        if (pepper.length < 32) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "OTP_NOT_CONFIGURED",
+                    "Xác minh liên hệ chưa được cấu hình trên máy chủ");
+        }
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(pepper, "HmacSHA256"));

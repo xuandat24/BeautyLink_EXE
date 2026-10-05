@@ -67,4 +67,17 @@ class RegistrationVerificationServiceTest {
         assertEquals(1, saved.getValue().getAttempts());
         assertNull(saved.getValue().getRegistrationTokenHash());
     }
+
+    @Test
+    void missingPepperFailsClosedInsteadOfIssuingAnOtp() {
+        OtpHashingService hashing = new OtpHashingService("");
+        RegistrationVerificationService service = new RegistrationVerificationService(
+                challenges, hashing, delivery, abuseGuard, 600, 900, 5);
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> service.start(new StartRegistrationVerificationRequest("0912345678", null)));
+
+        assertEquals("OTP_NOT_CONFIGURED", exception.getCode());
+        verifyNoInteractions(delivery);
+    }
 }
