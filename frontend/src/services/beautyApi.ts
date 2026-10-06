@@ -35,7 +35,10 @@ const TOKEN_KEY = 'beautylink_access_token';
 // Local development uses Vite's /api proxy. Production supplies the Railway
 // backend URL at build time through VITE_API_BASE_URL.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-const DEMO_FALLBACK_ENABLED = import.meta.env.VITE_ENABLE_DEMO_FALLBACK === 'true';
+// Offline sample data is useful only while developing locally. A production
+// bundle must always reflect the API and real database, even if an environment
+// variable was accidentally left enabled on the hosting provider.
+const DEMO_FALLBACK_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_FALLBACK === 'true';
 
 type BackendDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
 type BackendScheduleRule = {

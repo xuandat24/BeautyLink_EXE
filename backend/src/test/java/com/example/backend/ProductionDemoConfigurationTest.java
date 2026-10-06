@@ -6,11 +6,9 @@ import com.example.backend.repository.UserAccountRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:beautylink-prod-demo;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
@@ -32,13 +30,11 @@ class ProductionDemoConfigurationTest {
     @Autowired ServiceCategoryRepository categories;
     @Autowired SupplierRepository suppliers;
     @Autowired UserAccountRepository users;
-    @Autowired PasswordEncoder passwordEncoder;
 
     @Test
-    void productionProfileCanExplicitlySeedTheClassroomCatalog() {
+    void productionProfileNeverSeedsDemoAccountsWhenAFlagIsAccidentallyEnabled() {
         assertEquals(5, categories.count());
-        assertTrue(suppliers.count() > 1);
-        assertTrue(passwordEncoder.matches("PrivateDeployDemo123!",
-                users.findByPhone("0900000001").orElseThrow().getPasswordHash()));
+        assertEquals(0, suppliers.count());
+        assertEquals(0, users.count());
     }
 }

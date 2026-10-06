@@ -8,6 +8,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Profile;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -26,6 +27,7 @@ import static com.example.backend.model.DomainEnums.*;
  * records can be identified and removed without confusing them with real partners.
  */
 @Component
+@Profile("!prod")
 @ConditionalOnProperty(name = "app.demo-data.enabled", havingValue = "true", matchIfMissing = false)
 @Order(3)
 public class DemoCatalogSeeder implements CommandLineRunner {

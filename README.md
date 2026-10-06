@@ -265,17 +265,6 @@ Open these URLs:
 
 Stop either server with `Ctrl+C` in its terminal.
 
-## Demo accounts
-
-Demo accounts are disabled by default. To enable them deliberately, set `DEMO_DATA_ENABLED=true` and choose a private `DEMO_ACCOUNT_PASSWORD` of at least 12 characters; no shared default password is provided.
-
-| Role | Phone | Email |
-|---|---|---|
-| Customer | `0900000001` | `customer@beautylink.vn` |
-| Supplier | `0900000002` | `supplier@beautylink.vn` |
-| Staff | `0900000003` | `staff@beautylink.vn` |
-| Admin | `0900000004` | `admin@beautylink.vn` |
-
 Guests do not have database accounts. They can browse the catalog but must register or sign in before booking.
 
 ## Main user flows
@@ -372,12 +361,12 @@ Authorization: Bearer <access-token>
 
 ## Seed data
 
-The two supported cities and five service categories are idempotently inserted in every environment because supplier registration depends on them. Demo startup seeders run only when `DEMO_DATA_ENABLED=true` (an explicit opt-in), so every deployment must opt in deliberately:
+The two supported cities and five service categories are idempotently inserted in every environment because supplier registration depends on them. Demo startup seeders can be enabled only in a non-production local profile with `DEMO_DATA_ENABLED=true`; production always uses accounts and supplier data that users registered in the database:
 
-- Core demo accounts and the first supplier are inserted into an empty catalog.
-- The presentation catalog is idempotently inserted or updated on later starts.
-- Demo suppliers are marked with `demo_data = TRUE`.
-- Both supported cities have services in every category.
+- When enabled locally, core demo accounts and the first supplier are inserted into an empty catalog.
+- The local presentation catalog is idempotently inserted or updated on later starts.
+- Local demo suppliers are marked with `demo_data = TRUE`.
+- Both supported cities have services in every category when the local catalog is enabled.
 
 Inspect demo suppliers:
 
@@ -470,8 +459,7 @@ The complete peer handoff, exact Railway reference variables, secret generation,
 3. Reference Railway's `MYSQLHOST`, `MYSQLPORT`, `MYSQLDATABASE`, `MYSQLUSER`, and `MYSQLPASSWORD` variables from the backend service.
 4. Set a new production `JWT_SECRET`.
 5. Set `CORS_ALLOWED_ORIGINS` to the exact Vercel website origin.
-6. For the classroom catalog, set `DEMO_DATA_ENABLED=true` and provide a private `DEMO_ACCOUNT_PASSWORD`.
-7. For a real launch, set `DEMO_DATA_ENABLED=false` and `SUPPLIER_AUTO_VERIFY=false`.
+6. For a real launch, set `SUPPLIER_AUTO_VERIFY=false`; demo seeders are disabled by the production profile even if a legacy `DEMO_DATA_ENABLED` variable remains on Railway.
 
 Do not use the demo passwords or development JWT secret in production.
 
