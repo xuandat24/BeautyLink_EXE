@@ -25,7 +25,7 @@ export function computeHash(obj: unknown): string {
 
 class CacheManager {
   private memoryCache: Map<string, CacheEntry<any>> = new Map();
-  private prefix = 'beautypink_v2_';
+  private prefix = 'beautylink_v2_';
 
   constructor() {
     // Warm up memory cache from persistent storage on startup

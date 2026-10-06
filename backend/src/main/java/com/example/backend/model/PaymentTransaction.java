@@ -10,20 +10,14 @@ import static com.example.backend.model.DomainEnums.*;
         @Index(name = "idx_payment_booking_attempts_v2", columnList = "booking_id,created_at"),
         @Index(name = "idx_payment_status", columnList = "status"),
         @Index(name = "idx_payment_reconciliation", columnList = "status,created_at,last_reconciled_at"),
-        @Index(name = "idx_payment_provider_reference", columnList = "provider,merchant_reference")
+        @Index(name = "idx_payment_merchant_reference", columnList = "merchant_reference")
 })
 public class PaymentTransaction {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "booking_id", nullable = false) private Booking booking;
     @Column(nullable = false, unique = true) private Long orderCode;
-    @Enumerated(EnumType.STRING) @Column(length = 20) private PaymentProvider provider = PaymentProvider.PAYOS;
     @Column(name = "merchant_reference", unique = true, length = 64) private String merchantReference;
     @Column(unique = true, length = 80) private String paymentLinkId;
-    @Column(length = 120) private String providerTransactionId;
-    @Column(length = 30) private String bankCode;
-    @Column(length = 30) private String cardType;
-    @Column(length = 20) private String providerResponseCode;
-    @Column(length = 20) private String providerTransactionStatus;
     @Column(length = 1000) private String checkoutUrl;
     @Column(nullable = false, precision = 12, scale = 2) private BigDecimal amount;
     @Column(nullable = false, precision = 12, scale = 2) private BigDecimal remainingAmount = BigDecimal.ZERO;
@@ -44,14 +38,8 @@ public class PaymentTransaction {
     public Long getId() { return id; }
     public Booking getBooking() { return booking; } public void setBooking(Booking booking) { this.booking = booking; }
     public Long getOrderCode() { return orderCode; } public void setOrderCode(Long orderCode) { this.orderCode = orderCode; }
-    public PaymentProvider getProvider() { return provider; } public void setProvider(PaymentProvider provider) { this.provider = provider; }
     public String getMerchantReference() { return merchantReference; } public void setMerchantReference(String merchantReference) { this.merchantReference = merchantReference; }
     public String getPaymentLinkId() { return paymentLinkId; } public void setPaymentLinkId(String paymentLinkId) { this.paymentLinkId = paymentLinkId; }
-    public String getProviderTransactionId() { return providerTransactionId; } public void setProviderTransactionId(String providerTransactionId) { this.providerTransactionId = providerTransactionId; }
-    public String getBankCode() { return bankCode; } public void setBankCode(String bankCode) { this.bankCode = bankCode; }
-    public String getCardType() { return cardType; } public void setCardType(String cardType) { this.cardType = cardType; }
-    public String getProviderResponseCode() { return providerResponseCode; } public void setProviderResponseCode(String providerResponseCode) { this.providerResponseCode = providerResponseCode; }
-    public String getProviderTransactionStatus() { return providerTransactionStatus; } public void setProviderTransactionStatus(String providerTransactionStatus) { this.providerTransactionStatus = providerTransactionStatus; }
     public String getCheckoutUrl() { return checkoutUrl; } public void setCheckoutUrl(String checkoutUrl) { this.checkoutUrl = checkoutUrl; }
     public BigDecimal getAmount() { return amount; } public void setAmount(BigDecimal amount) { this.amount = amount; }
     public BigDecimal getRemainingAmount() { return remainingAmount; } public void setRemainingAmount(BigDecimal remainingAmount) { this.remainingAmount = remainingAmount; }

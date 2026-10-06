@@ -65,7 +65,7 @@ export const PartnerRegisterModal: React.FC<PartnerRegisterModalProps> = ({
           <div className="flex items-center gap-2">
             <Store className="w-5 h-5 text-white" />
             <div>
-              <h3 className="text-base font-extrabold tracking-tight">Đăng Ký Đối Tác BeautyPink</h3>
+              <h3 className="text-base font-extrabold tracking-tight">Đăng Ký Đối Tác BeautyLink</h3>
               <p className="text-[11px] text-pink-100/90 font-medium">Đồng hành phát triển cùng hệ sinh thái làm đẹp</p>
             </div>
           </div>

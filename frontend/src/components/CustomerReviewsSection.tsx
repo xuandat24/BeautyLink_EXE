@@ -51,7 +51,7 @@ const INITIAL_REVIEWS: CustomerReview[] = [
     rating: 5,
     date: '2 ngày trước',
     content:
-      'Mình làm văn phòng ngồi máy tính nhiều nên cổ vai gáy cứng đơ. Đặt lịch qua BeautyPink áp mã giảm 50K siêu hời. Đến nơi được bạn lễ tân đón tiếp chu đáo, trà gừng thảo dược ấm nóng thơm nức. Kỹ thuật viên tay nghề cực kỳ vững, bấm huyệt nào đã huyệt đó, gội đầu xong nhẹ bẫng cả người. Chắc chắn sẽ quay lại hàng tuần!',
+      'Mình làm văn phòng ngồi máy tính nhiều nên cổ vai gáy cứng đơ. Đặt lịch qua BeautyLink áp mã giảm 50K siêu hời. Đến nơi được bạn lễ tân đón tiếp chu đáo, trà gừng thảo dược ấm nóng thơm nức. Kỹ thuật viên tay nghề cực kỳ vững, bấm huyệt nào đã huyệt đó, gội đầu xong nhẹ bẫng cả người. Chắc chắn sẽ quay lại hàng tuần!',
     images: [
       'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=600&q=80',
       'https://images.unsplash.com/photo-1519735777090-ec97162dc266?auto=format&fit=crop&w=600&q=80',
@@ -117,7 +117,7 @@ const INITIAL_REVIEWS: CustomerReview[] = [
     rating: 5,
     date: '1 tuần trước',
     content:
-      'Đặt lịch hẹn trước trên BeautyPink tiện thật sự, đến nơi là nhân viên dẫn vào phòng làm ngay, không phải ngồi chờ 1 phút nào. Dụng cụ ở đây tiệt trùng nguyên gói mở niêm phong trước mặt khách. Lấy mụn rất kỹ mà không để lại vết thâm hay sưng đỏ. Cho 10/10 điểm về chất lượng và độ an toàn!',
+      'Đặt lịch hẹn trước trên BeautyLink tiện thật sự, đến nơi là nhân viên dẫn vào phòng làm ngay, không phải ngồi chờ 1 phút nào. Dụng cụ ở đây tiệt trùng nguyên gói mở niêm phong trước mặt khách. Lấy mụn rất kỹ mà không để lại vết thâm hay sưng đỏ. Cho 10/10 điểm về chất lượng và độ an toàn!',
     images: [
       'https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=600&q=80',
     ],
@@ -148,7 +148,7 @@ const INITIAL_REVIEWS: CustomerReview[] = [
     rating: 5,
     date: '2 tuần trước',
     content:
-      'Sơn gel thạch bóng mướt giữ được hơn 3 tuần không hề sứt mẻ, thợ vẽ móng tỉ mỉ từng chi tiết hoa nhũ. Nối mi sợi tơ siêu nhẹ không hề bị cộm cay mắt hay rụng mi thật. Lại được áp voucher đi 2 người giảm 20% trên BeautyPink quá rẻ!',
+      'Sơn gel thạch bóng mướt giữ được hơn 3 tuần không hề sứt mẻ, thợ vẽ móng tỉ mỉ từng chi tiết hoa nhũ. Nối mi sợi tơ siêu nhẹ không hề bị cộm cay mắt hay rụng mi thật. Lại được áp voucher đi 2 người giảm 20% trên BeautyLink quá rẻ!',
     images: [
       'https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&w=600&q=80',
     ],
@@ -279,7 +279,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">
-              Khách Hàng Nói Gì Về <span className="text-[#e1146c]">BeautyPink</span>?
+              Khách Hàng Nói Gì Về <span className="text-[#e1146c]">BeautyLink</span>?
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-xl">
               Hơn 12.850+ khách hàng đã tin tưởng đặt lịch và trải nghiệm dịch vụ tại các cơ sở Spa, Thẩm mỹ viện & Clinic liên kết trên toàn quốc.

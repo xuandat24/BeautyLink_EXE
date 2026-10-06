@@ -466,12 +466,12 @@ export const CITIES: CityDestination[] = [
 
 export const VOUCHERS: Voucher[] = [
   {
-    code: 'BEAUTYPINK50',
+    code: 'BEAUTYLINK50',
     title: 'Giảm 50.000đ cho đơn đầu tiên',
     discount: '50.000đ',
     minOrder: 'Từ 200.000đ',
     expiry: 'HSD: 30/10/2026',
-    tag: 'Độc quyền BeautyPink',
+    tag: 'Độc quyền BeautyLink',
   },
   {
     code: 'SPASEN100',

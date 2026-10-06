@@ -750,7 +750,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
       {/* Footer copyright */}
       <footer className="relative z-20 py-4 text-center text-slate-400 text-xs border-t border-pink-100 bg-white/50 backdrop-blur-xs">
-        © 2026 BeautyPink Vietnam · Nền tảng Đặt lịch Thẩm mỹ & Làm đẹp Chuẩn Y Khoa Toàn Quốc
+        © 2026 BeautyLink Vietnam · Nền tảng Đặt lịch Thẩm mỹ & Làm đẹp Chuẩn Y Khoa Toàn Quốc
       </footer>
     </main>
   );

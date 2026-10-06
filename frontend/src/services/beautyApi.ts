@@ -17,8 +17,7 @@ import {
   CategoryItem,
   BookingDetails,
   BookingSchema,
-  PaymentAttempt,
-  PaymentProvider,
+  PayOSPayment,
 } from '../types';
 import {
   HOT_DEALS,
@@ -673,15 +672,15 @@ export const beautyApi = {
     return unwrap(apiClient.patch(`/v1/bookings/${id}/cancel`));
   },
 
-  async createPayment(
+  async createPayOSPayment(
     bookingId: number,
-    data: { provider: PaymentProvider; paymentOption: 'DEPOSIT_50' | 'FULL_100'; voucherCode?: string }
-  ): Promise<PaymentAttempt> {
-    return unwrap(apiClient.post(`/v1/payments/bookings/${bookingId}`, data));
+    data: { paymentOption: 'DEPOSIT_50' | 'FULL_100'; voucherCode?: string }
+  ): Promise<PayOSPayment> {
+    return unwrap(apiClient.post(`/v1/payments/payos/bookings/${bookingId}`, data));
   },
 
-  async paymentStatus(merchantReference: string): Promise<PaymentAttempt> {
-    return unwrap(apiClient.get(`/v1/payments/${encodeURIComponent(merchantReference)}`));
+  async payOSPaymentStatus(orderCode: string): Promise<PayOSPayment> {
+    return unwrap(apiClient.get(`/v1/payments/payos/${encodeURIComponent(orderCode)}`));
   },
 
   // ==========================================

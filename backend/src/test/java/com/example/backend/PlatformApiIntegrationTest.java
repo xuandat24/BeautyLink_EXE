@@ -427,6 +427,26 @@ class PlatformApiIntegrationTest {
     }
 
     @Test
+    void payOSWebhookIsPublicButCreateAndStatusRequireAuthentication() throws Exception {
+        WebhookData verificationSample = mock(WebhookData.class);
+        when(verificationSample.getOrderCode()).thenReturn(999_999_999L);
+        when(verificationSample.getAmount()).thenReturn(2_000L);
+        when(verificationSample.getCode()).thenReturn("00");
+        when(payOSGateway.verify(any())).thenReturn(verificationSample);
+
+        mvc.perform(post("/api/v1/payments/payos/webhook").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"00\",\"desc\":\"verification\",\"success\":true,"
+                                + "\"data\":{\"orderCode\":999999999,\"amount\":2000,\"code\":\"00\"},\"signature\":\"signed\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success", is(true)));
+
+        mvc.perform(post("/api/v1/payments/payos/bookings/1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentOption\":\"FULL_100\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/payments/payos/999999999"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void demoSupplierScheduleRemainsAvailableThroughTheNextMonth() throws Exception {
         JsonNode services = objectMapper.readTree(mvc.perform(get("/api/v1/homepage/services"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());

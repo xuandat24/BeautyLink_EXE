@@ -378,7 +378,7 @@ export const NotificationCenterDropdown: React.FC<NotificationCenterDropdownProp
             <span>Tự động nhận thông báo giả lập (~45s)</span>
           </label>
 
-          <span className="font-semibold text-[#be185d]">BeautyPink Push v2.4</span>
+          <span className="font-semibold text-[#be185d]">BeautyLink Push v2.4</span>
         </div>
       </div>
     </>

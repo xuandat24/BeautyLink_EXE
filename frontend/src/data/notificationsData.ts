@@ -71,7 +71,7 @@ export const INITIAL_NOTIFICATIONS: PushNotification[] = [
   {
     id: 'notif-4',
     type: 'deal_expiring',
-    title: '⏳ SẮP HẾT HẠN: Voucher Giảm 50K "BEAUTYPINK50" của bạn',
+    title: '⏳ SẮP HẾT HẠN: Voucher Giảm 50K "BEAUTYLINK50" của bạn',
     message: 'Mã giảm giá chào mừng tân thủ trị giá 50.000đ áp dụng cho mọi hóa đơn sẽ hết hạn vào 23:59 đêm nay.',
     timestamp: '1 giờ trước',
     createdAt: Date.now() - 60 * 60 * 1000,

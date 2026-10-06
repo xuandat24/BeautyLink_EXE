@@ -31,7 +31,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const slides = [
     {
       id: 1,
-      badge: 'DEAL ĐỘC QUYỀN BEAUTYPINK',
+      badge: 'DEAL ĐỘC QUYỀN BEAUTYLINK',
       title: 'MASSAGE BODY TINH DẦU',
       subtitle: 'THƯ GIÃN TOÀN THÂN & ĐẢ THÔNG KINH LẠC',
       price: '225K',

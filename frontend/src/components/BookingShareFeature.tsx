@@ -78,7 +78,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
   const formattedDate = formatAppointmentDate(data.appointmentDate);
   const shareUrl = typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname}#bookings`
-    : 'https://beautypink.vn#bookings';
+    : 'https://beautylink.vn#bookings';
 
   // Generate customized messages based on user's tone
   const getShareMessage = (type: MessageTone) => {
@@ -104,11 +104,11 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
         `💅 Dịch vụ: ${data.serviceName}\n` +
         `⏰ Thời gian: ${timeFormatted} · ${formattedDate}${specialistText}${addressText}\n` +
         `🔖 Mã lịch hẹn: ${data.bookingCode}\n\n` +
-        `Cùng đặt lịch làm đẹp và thư giãn tại BeautyPink nhé: ${shareUrl}`;
+        `Cùng đặt lịch làm đẹp và thư giãn tại BeautyLink nhé: ${shareUrl}`;
     }
 
     if (type === 'excited') {
-      return `✨ Vừa săn được lịch làm đẹp cực ưng ý tại BeautyPink! 💖\n` +
+      return `✨ Vừa săn được lịch làm đẹp cực ưng ý tại BeautyLink! 💖\n` +
         `Dịch vụ: ${data.serviceName}\n` +
         `Cơ sở: ${data.supplierName}\n` +
         `Lịch hẹn: ${timeFormatted} · ${formattedDate}${specialistText}\n` +
@@ -117,7 +117,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
     }
 
     // Default: 'details'
-    return `📋 Thông tin lịch hẹn làm đẹp tại BeautyPink:\n` +
+    return `📋 Thông tin lịch hẹn làm đẹp tại BeautyLink:\n` +
       `• Mã lịch hẹn: ${data.bookingCode}\n` +
       `• Dịch vụ: ${data.serviceName}\n` +
       `• Cơ sở: ${data.supplierName}${addressText}\n` +
@@ -172,7 +172,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({
-          title: `Lịch hẹn: ${data.serviceName} - BeautyPink`,
+          title: `Lịch hẹn: ${data.serviceName} - BeautyLink`,
           text: currentMessage,
           url: shareUrl,
         });
@@ -233,7 +233,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
   };
 
   const handleShareTwitter = () => {
-    const text = `🌸 Mình vừa đặt lịch làm đẹp tại BeautyPink: ${data.serviceName} ở ${data.supplierName} (${data.startTime} · ${formattedDate})! ✨`;
+    const text = `🌸 Mình vừa đặt lịch làm đẹp tại BeautyLink: ${data.serviceName} ở ${data.supplierName} (${data.startTime} · ${formattedDate})! ✨`;
     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
       text
     )}&url=${encodeURIComponent(shareUrl)}`;
@@ -255,8 +255,8 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
         endCleanTime = `${endH}${endM}00`;
       }
       const dates = `${cleanDate}T${cleanTime}/${cleanDate}T${endCleanTime}`;
-      const title = `Lịch làm đẹp: ${data.serviceName} - BeautyPink`;
-      const details = `Dịch vụ: ${data.serviceName}\nCơ sở: ${data.supplierName}\nĐịa chỉ: ${data.supplierAddress || 'Theo lịch hẹn BeautyPink'}\nChuyên viên: ${data.practitionerName || 'Chuyên viên chỉ định'}\nMã đặt lịch: ${data.bookingCode}\n\nĐặt qua BeautyPink.`;
+      const title = `Lịch làm đẹp: ${data.serviceName} - BeautyLink`;
+      const details = `Dịch vụ: ${data.serviceName}\nCơ sở: ${data.supplierName}\nĐịa chỉ: ${data.supplierAddress || 'Theo lịch hẹn BeautyLink'}\nChuyên viên: ${data.practitionerName || 'Chuyên viên chỉ định'}\nMã đặt lịch: ${data.bookingCode}\n\nĐặt qua BeautyLink.`;
       const location = `${data.supplierName}, ${data.supplierAddress || 'Việt Nam'}`;
 
       return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
@@ -288,7 +288,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
                   Đã xác nhận đặt lịch
                 </span>
                 <span className="text-[11px] text-slate-500 font-medium">
-                  BeautyPink Booking Pass
+                  BeautyLink Booking Pass
                 </span>
               </div>
             </div>

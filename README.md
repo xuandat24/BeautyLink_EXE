@@ -217,35 +217,22 @@ PAYOS_CANCEL_URL=http://localhost:5173/?payment=cancelled
 PAYOS_WEBHOOK_URL=https://your-api.example.com/api/v1/payments/payos/webhook
 PAYOS_RECONCILIATION_MS=60000
 PAYOS_RECONCILIATION_INITIAL_DELAY_MS=60000
-FRONTEND_URL=http://localhost:5173
-PAYMENT_RECONCILIATION_MS=60000
-PAYMENT_RECONCILIATION_INITIAL_DELAY_MS=60000
-PAYMENT_RECONCILIATION_MIN_AGE_SECONDS=60
-PAYMENT_RECONCILIATION_MIN_INTERVAL_SECONDS=120
-VNPAY_TMN_CODE=your_vnpay_tmn_code
-VNPAY_HASH_SECRET=your_vnpay_hash_secret
-VNPAY_PAY_URL=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-VNPAY_RETURN_URL=https://your-api.example.com/api/v1/payments/vnpay/return
-VNPAY_QUERY_URL=https://sandbox.vnpayment.vn/merchant_webapi/api/transaction
-VNPAY_SERVER_IP=your_backend_public_ip
+PAYOS_RECONCILIATION_MIN_AGE_SECONDS=60
+PAYOS_RECONCILIATION_MIN_INTERVAL_SECONDS=120
 ```
 
 `backend/.env.properties` is ignored by Git. Never commit this file or paste production secrets into source code.
 `KYC_ENCRYPTION_KEY` protects supplier identity documents and must be different from `JWT_SECRET` in every deployment. Keep it stable when redeploying; changing or losing it makes existing encrypted CCCD records unreadable.
 
-For production PayOS, create and verify a Payment Channel at `my.payos.vn`, connect the receiving bank account, then place that channel's `Client ID`, `API Key`, and `Checksum Key` in the deployment secret store. Set `PAYOS_WEBHOOK_URL` to the public HTTPS backend endpoint shown above. On startup, the backend confirms that webhook URL with PayOS; it never logs credentials, signatures, or the bank account number. Pending transactions are also reconciled directly with PayOS every 60 seconds so webhook delivery is not the only source of truth.
+BeautyLink production uses PayOS as its only payment gateway. Create and verify a Payment Channel at `my.payos.vn`, connect the receiving bank account, then place that channel's `Client ID`, `API Key`, and `Checksum Key` only in Railway. Set `PAYOS_RETURN_URL=https://<vercel-domain>/?payment=success`, `PAYOS_CANCEL_URL=https://<vercel-domain>/?payment=cancelled`, and `PAYOS_WEBHOOK_URL=https://<railway-domain>/api/v1/payments/payos/webhook`. Production refuses partial credentials or non-HTTPS callback URLs. Startup confirms the webhook without logging secrets; a transient registration failure is logged and does not crash the application.
 
-For VNPAY, obtain production `TMN Code`, `Hash Secret`, PAY URL and QueryDr URL from VNPAY and store them only as deployment secrets. Register `https://your-api.example.com/api/v1/payments/vnpay/ipn` as the IPN URL and set `VNPAY_RETURN_URL` to the backend return endpoint shown above. The IPN is the only browser-independent callback allowed to update a transaction; it verifies HMAC-SHA512, checks merchant/reference/amount, and locks the database row before applying an idempotent transition. The browser return endpoint is display-only. If IPN delivery is delayed, QueryDr starts after 60 seconds and is rate-limited to one attempt per transaction every 120 seconds; a slot is released only after the provider reports a terminal failure/expiry. Use the production endpoints supplied by VNPAY when going live; the checked-in defaults are sandbox endpoints.
-
-The `prod` profile permits VNPAY to remain fully disabled when neither merchant credential is present, so staged deployments stay healthy. Once either production credential is supplied, startup becomes fail-closed: both credentials, non-sandbox HTTPS Pay/Query/Return/Frontend URLs, and a public `VNPAY_SERVER_IP` are required. This prevents production credentials from silently being paired with sandbox defaults. Railway production trusts its edge-provided `X-Real-IP` for the customer payment IP; other profiles ignore proxy headers unless `TRUST_PROXY_CLIENT_IP=true` is explicitly set.
-
-VNPAY and PayOS are independent, equal payment providers. The customer chooses one provider for an attempt and the backend never silently falls back to the other. A booking can keep multiple immutable attempts, while only one pending attempt is allowed at a time. A verified 50% payment sets `PARTIALLY_PAID`; only a verified 100% payment sets `PAID`.
+The signed PayOS webhook is primary and server-to-server reconciliation is the fallback. Browser return parameters never confirm payment. A booking retains immutable payment attempts, only one attempt may remain pending, and retry creates a new row after the released practitioner slot is locked and checked. A verified 50% payment sets `PARTIALLY_PAID`; a verified 100% payment sets `PAID`. Late or mismatched payments enter `REVIEW_REQUIRED` without silently reclaiming a slot.
 
 For one production replica, the bounded in-memory login limiter is the default so an unavailable Redis service never blocks valid database-account login. Before scaling to multiple replicas, set `RATE_LIMIT_BACKEND=redis` and point `REDIS_URL` at a private Redis service shared by every backend replica. If Redis becomes unavailable later, the backend logs the outage and retains the same bounded limiter locally rather than rejecting every login.
 
 For Railway registration, create an independent random `OTP_PEPPER` of at least 32 characters and configure at least one real delivery channel. Email OTP requires `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true`, `SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true`, and `OTP_MAIL_FROM`. SMS OTP requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER`. Gmail accounts must use an App Password after enabling 2-Step Verification; never use or commit the normal Gmail password. After changing Railway variables, redeploy the backend. Missing/short `OTP_PEPPER` returns `OTP_NOT_CONFIGURED`; an unavailable selected provider returns `OTP_CHANNEL_UNAVAILABLE`. OTP values, provider secrets, and raw contact identifiers are never stored or logged.
 
-On the first MySQL startup after this upgrade, an idempotent compatibility migration removes only the legacy unique indexes on `payment_transactions.booking_id` and the practitioner/date/time booking slot, then adds non-unique lookup indexes. It also backfills existing payment rows as PayOS attempts with their original order code as the merchant reference. Back up the database before deployment and treat the change as roll-forward once a booking has multiple attempts. Existing transaction rows are retained.
+On the first MySQL startup after this upgrade, an idempotent compatibility migration removes only the legacy unique indexes on `payment_transactions.booking_id` and the practitioner/date/time booking slot, then adds non-unique lookup indexes. It backfills missing merchant references from the original PayOS order code. Back up the database before deployment and treat the change as roll-forward once a booking has multiple attempts. Existing transaction rows and legacy columns are retained.
 
 ### 5. Install the frontend dependencies
 

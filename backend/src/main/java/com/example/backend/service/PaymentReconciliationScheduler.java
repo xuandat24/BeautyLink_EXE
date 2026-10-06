@@ -9,12 +9,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class PaymentReconciliationScheduler {
     private static final Logger log = LoggerFactory.getLogger(PaymentReconciliationScheduler.class);
-    private final PaymentAttemptService payments;
+    private final PaymentService payments;
 
-    public PaymentReconciliationScheduler(PaymentAttemptService payments) { this.payments = payments; }
+    public PaymentReconciliationScheduler(PaymentService payments) { this.payments = payments; }
 
-    @Scheduled(fixedDelayString = "${app.payment.reconciliation-ms:60000}",
-            initialDelayString = "${app.payment.reconciliation-initial-delay-ms:60000}")
+    @Scheduled(fixedDelayString = "${app.payos.reconciliation-ms:60000}",
+            initialDelayString = "${app.payos.reconciliation-initial-delay-ms:60000}")
     public void reconcilePendingAttempts() {
         for (Long id : payments.reconciliationCandidates()) {
             try { payments.reconcileById(id); }

@@ -107,7 +107,7 @@ const BANNER_SLIDES: BannerSlide[] = [
     id: 'autumn-deal',
     type: 'ad',
     category: 'ad',
-    headerTitle: 'Hot Deal Làm Đẹp & Voucher Spa Ưu Đãi 77% | BeautyPink',
+    headerTitle: 'Hot Deal Làm Đẹp & Voucher Spa Ưu Đãi 77% | BeautyLink',
     tag: 'SIÊU DEAL MÙA THU',
     title: 'RẠNG RỠ MÙA THU\nSĂN DEAL Vi Vu',
     subtitle: 'Đại tiệc làm đẹp đón mùa lá rụng - Giảm đến 77% hàng trăm dịch vụ Spa & Clinic',
@@ -119,7 +119,7 @@ const BANNER_SLIDES: BannerSlide[] = [
     hotline: '0343 131 008',
     dealDetails: {
       serviceTitle: 'Combo Rạng Rỡ Mùa Thu: Tắm Trắng Phi Thuyền & Trẻ Hóa Da',
-      salonName: 'Hệ Thống Spa Đối Tác BeautyPink',
+      salonName: 'Hệ Thống Spa Đối Tác BeautyLink',
       price: 389000,
       originalPrice: 1690000,
       voucherCode: 'MUATHU77',

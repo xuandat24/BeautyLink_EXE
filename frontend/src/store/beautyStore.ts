@@ -22,9 +22,9 @@ const STORAGE_KEYS = {
   FAVORITES: 'user_favorites',
 };
 
-const CART_STORAGE_KEY = 'beautypink_cart_items_v2';
+const CART_STORAGE_KEY = 'beautylink_cart_items_v2';
 const SESSION_USER_KEY = 'beautylink_session_user';
-const LEGACY_PROFILE_KEY = 'beautypink_user_profile_data_v2';
+const LEGACY_PROFILE_KEY = 'beautylink_user_profile_data_v2';
 
 const loadSessionUser = (): CurrentUser | null => {
   if (typeof window === 'undefined') return null;

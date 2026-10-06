@@ -57,7 +57,7 @@ export const WhyChooseUs: React.FC<WhyChooseUsProps> = React.memo(({ onBookServi
     >
       <div className="text-center max-w-xl mx-auto mb-8">
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-          Vì sao nên chọn <span className="bg-gradient-to-r from-[#be185d] to-[#e1146c] bg-clip-text text-transparent">BeautyPink</span> ?
+          Vì sao nên chọn <span className="bg-gradient-to-r from-[#be185d] to-[#e1146c] bg-clip-text text-transparent">BeautyLink</span> ?
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
           Hệ sinh thái công nghệ giúp phái đẹp an tâm trải nghiệm dịch vụ chất lượng cao nhất

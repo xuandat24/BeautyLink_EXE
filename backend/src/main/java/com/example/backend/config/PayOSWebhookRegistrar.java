@@ -37,6 +37,8 @@ public class PayOSWebhookRegistrar implements ApplicationRunner {
             log.info("PayOS webhook registered url={} bank={} shortName={}", response.getWebhookUrl(), response.getName(), response.getShortName());
         } catch (ApiException ex) {
             log.error("PayOS webhook registration failed code={} message={}", ex.getCode(), ex.getMessage());
+        } catch (RuntimeException ex) {
+            log.error("PayOS webhook registration failed unexpectedly; registration will be retried on the next deployment");
         }
     }
 }

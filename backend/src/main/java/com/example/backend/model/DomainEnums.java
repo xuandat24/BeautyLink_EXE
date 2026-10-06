@@ -9,8 +9,7 @@ public final class DomainEnums {
     public enum LocationType { PROVINCE_CITY, DISTRICT, WARD_COMMUNE }
     public enum VerificationStatus { PENDING, VERIFIED, REJECTED, SUSPENDED }
     public enum BookingStatus { PENDING, CONFIRMED, COMPLETED, CANCELLED }
-    public enum PaymentStatus { SIMULATED, UNPAID, PARTIALLY_PAID, PAID, REFUNDED }
-    public enum PaymentProvider { PAYOS, VNPAY }
+    public enum PaymentStatus { UNPAID, PARTIALLY_PAID, PAID, REFUNDED }
     public enum PaymentOption { DEPOSIT_50, FULL_100 }
     public enum PaymentTransactionStatus { PENDING, PAID, CANCELLED, EXPIRED, FAILED, REVIEW_REQUIRED }
     public enum ReviewTargetType { SERVICE, SUPPLIER }

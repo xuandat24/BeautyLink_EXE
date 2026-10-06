@@ -19,7 +19,7 @@ import {
   Percent,
 } from 'lucide-react';
 import { useBeautyStore } from '../store/beautyStore';
-import { CurrentUser, BackendService, CartItem, PaymentProvider } from '../types';
+import { CurrentUser, BackendService, CartItem } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { OptimizedImage } from './OptimizedImage';
 import { bookingSchema, FieldErrors, voucherCodeSchema, zodFieldErrors } from '../lib/validation';
@@ -130,7 +130,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Payment Deposit Option: 50% deposit or 100% full
   const [depositOption, setDepositOption] = useState<'deposit50' | 'full100'>('deposit50');
-  const [paymentProvider, setPaymentProvider] = useState<PaymentProvider>('VNPAY');
 
   // Voucher state
   const [voucherCodeInput, setVoucherCodeInput] = useState('');
@@ -270,21 +269,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         practitionerId: directService?.practitioners?.[0]?.id,
         appointmentDate: selectedDate,
         startTime: selectedTimeSlot,
-        note: `Thanh toán ${depositOption === 'deposit50' ? 'cọc 50%' : '100%'} qua ${paymentProvider}`,
+        note: `Thanh toán ${depositOption === 'deposit50' ? 'cọc 50%' : '100%'} qua PayOS`,
       });
-      const payment = await beautyApi.createPayment(booking.id, {
-        provider: paymentProvider,
+      const payment = await beautyApi.createPayOSPayment(booking.id, {
         paymentOption: depositOption === 'deposit50' ? 'DEPOSIT_50' : 'FULL_100',
         voucherCode: appliedVoucher?.code,
       });
       if (!payment.checkoutUrl) {
-        throw new Error(`${paymentProvider} không trả về đường dẫn thanh toán hợp lệ.`);
+        throw new Error('PayOS không trả về đường dẫn thanh toán hợp lệ.');
       }
-      sessionStorage.setItem('beautylink_payment_reference', payment.merchantReference);
-      sessionStorage.setItem('beautylink_payment_provider', payment.provider);
+      sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
       window.location.assign(payment.checkoutUrl);
     } catch (err: any) {
-      setErrorMsg(getApiErrorMessage(err, `Có lỗi xảy ra khi tạo giao dịch ${paymentProvider}. Vui lòng thử lại.`));
+      setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng thử lại.'));
     } finally {
       setSubmitting(false);
     }
@@ -448,7 +445,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3.5">
                   <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#e1146c] to-[#be185d] text-white flex items-center justify-center font-black text-base shadow-sm shrink-0">
-                    {currentUser?.name ? getInitials(currentUser.name) : 'BP'}
+                    {currentUser?.name ? getInitials(currentUser.name) : 'BL'}
                   </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -463,7 +460,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
                       <span>SĐT: <strong className="text-slate-700">{currentUser?.phone || '0988 888 888'}</strong></span>
                       <span>·</span>
-                      <span>Email: <strong className="text-slate-700">{currentUser?.email || 'verified.member@beautypink.vn'}</strong></span>
+                      <span>Email: <strong className="text-slate-700">{currentUser?.email || 'verified.member@beautylink.vn'}</strong></span>
                     </p>
                   </div>
                 </div>
@@ -735,67 +732,38 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   Kênh thanh toán trực tuyến
                 </span>
                 <h2 className="text-base font-bold text-slate-900 mt-0.5">
-                  Chọn kênh chuyển tiền / thanh toán
+                  Phương thức thanh toán
                 </h2>
               </div>
 
               <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => setPaymentProvider('VNPAY')}
-                  className={`w-full p-4 rounded-2xl border text-left transition ${paymentProvider === 'VNPAY' ? 'border-[#e1146c] bg-pink-50/40 ring-1 ring-[#e1146c]' : 'border-slate-200 hover:border-pink-200'}`}
-                >
+                <div className="w-full p-4 rounded-2xl border border-[#e1146c] bg-pink-50/40 ring-1 ring-[#e1146c] text-left">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-pink-100/70 text-[#e1146c] flex items-center justify-center shrink-0">
-                        <QrCode className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs sm:text-sm font-bold text-slate-900">
-                            Thanh toán qua VNPAY
-                          </span>
-                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                            Khuyên dùng
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Thẻ ATM nội địa, tài khoản ngân hàng, VietQR và các phương thức do VNPAY hỗ trợ.
-                        </p>
-                      </div>
-                    </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentProvider === 'VNPAY' ? 'border-[#e1146c] bg-[#e1146c]' : 'border-slate-300'}`}>
-                      {paymentProvider === 'VNPAY' && <div className="w-2 h-2 rounded-full bg-white" />}
-                    </div>
-                  </div>
-                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
-                    <div className="flex items-start gap-2">
-                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                      <p>BeautyLink không lưu thông tin ngân hàng. Backend chỉ xác nhận sau IPN đã kiểm tra HMAC và đối soát máy chủ.</p>
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentProvider('PAYOS')}
-                  className={`w-full p-4 rounded-2xl border text-left transition ${paymentProvider === 'PAYOS' ? 'border-[#e1146c] bg-pink-50/40 ring-1 ring-[#e1146c]' : 'border-slate-200 hover:border-pink-200'}`}
-                >
-                  <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
                         <QrCode className="w-5 h-5" />
                       </div>
                       <div>
-                        <span className="text-xs sm:text-sm font-bold text-slate-900">Thanh toán qua PayOS</span>
-                        <p className="text-[11px] text-slate-500 mt-0.5">Quét VietQR hoặc thanh toán từ ứng dụng ngân hàng hỗ trợ.</p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs sm:text-sm font-bold text-slate-900">Thanh toán qua PayOS</span>
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                            Khuyên dùng
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">VietQR / chuyển khoản ngân hàng trên trang thanh toán PayOS.</p>
                       </div>
                     </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentProvider === 'PAYOS' ? 'border-[#e1146c] bg-[#e1146c]' : 'border-slate-300'}`}>
-                      {paymentProvider === 'PAYOS' && <div className="w-2 h-2 rounded-full bg-white" />}
+                    <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 border-[#e1146c] bg-[#e1146c]">
+                      <div className="w-2 h-2 rounded-full bg-white" />
                     </div>
                   </div>
-                </button>
+                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
+                    <div className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                      <p>BeautyLink không lưu thông tin ngân hàng. Trạng thái được xác thực tự động bằng webhook có chữ ký và đối soát trực tiếp với PayOS.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1026,7 +994,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span>Trạng thái được xác thực trực tiếp với {paymentProvider === 'VNPAY' ? 'VNPAY' : 'PayOS'}</span>
+                  <span>Trạng thái được xác thực trực tiếp với PayOS</span>
                 </div>
               </div>
 

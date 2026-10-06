@@ -24,7 +24,6 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, exception) -> response.sendError(HttpServletResponse.SC_FORBIDDEN)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/payos/webhook").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/payments/vnpay/ipn", "/api/v1/payments/vnpay/return").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/register-supplier",
                                 "/api/v1/auth/registration-verification/start", "/api/v1/auth/registration-verification/confirm").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/locations/**", "/api/v1/categories/**", "/api/v1/services/**", "/api/v1/suppliers/**", "/api/v1/homepage/**", "/api/products/**").permitAll()

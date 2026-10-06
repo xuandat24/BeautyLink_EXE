@@ -331,7 +331,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                     Hồ sơ Chuyên gia & Danh mục Chứng chỉ Hành nghề Y Tế Đã Thẩm Định
                   </h2>
                   <span className="text-[11px] text-pink-600 font-bold block">
-                    Được bảo chứng tính pháp lý & y tế bởi BeautyPink
+                    Được bảo chứng tính pháp lý & y tế bởi BeautyLink
                   </span>
                 </div>
               </div>
@@ -619,7 +619,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
             <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center gap-3 text-xs text-emerald-900 font-bold">
               <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
               <span>
-                Toàn bộ chứng chỉ chuyên môn và giấy phép khám chữa bệnh của {partnerProfile.name} đã được đội ngũ thẩm định BeautyPink kiểm tra tính pháp lý nghiêm ngặt.
+                Toàn bộ chứng chỉ chuyên môn và giấy phép khám chữa bệnh của {partnerProfile.name} đã được đội ngũ thẩm định BeautyLink kiểm tra tính pháp lý nghiêm ngặt.
               </span>
             </div>
 
@@ -695,7 +695,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                     Điểm đánh giá trải nghiệm thực tế
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {reviews.length} đánh giá từ khách hàng đã đặt lịch thành công qua BeautyPink
+                    {reviews.length} đánh giá từ khách hàng đã đặt lịch thành công qua BeautyLink
                   </p>
                 </div>
               </div>

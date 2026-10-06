@@ -13,7 +13,7 @@ export const PartnerBlogCTA: React.FC<PartnerBlogCTAProps> = ({
   return (
     <section className="py-8 max-w-7xl mx-auto px-4 sm:px-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left: Trở thành Đối tác BeautyPink */}
+        {/* Left: Trở thành Đối tác BeautyLink */}
         <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-pink-50 via-white to-pink-100/70 border border-pink-200/80 p-6 sm:p-8 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow">
           <div className="relative z-10">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
@@ -23,7 +23,7 @@ export const PartnerBlogCTA: React.FC<PartnerBlogCTAProps> = ({
               Trở thành
               <br />
               <span className="bg-gradient-to-r from-[#be185d] to-[#e1146c] bg-clip-text text-transparent">
-                Đối tác BeautyPink
+                Đối tác BeautyLink
               </span>
             </h3>
 
@@ -65,7 +65,7 @@ export const PartnerBlogCTA: React.FC<PartnerBlogCTAProps> = ({
           </div>
         </div>
 
-        {/* Right: Khám phá Blog BeautyPink */}
+        {/* Right: Khám phá Blog BeautyLink */}
         <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-purple-50/70 via-white to-pink-50 border border-pink-200/80 p-6 sm:p-8 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow">
           <div className="relative z-10">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
@@ -75,7 +75,7 @@ export const PartnerBlogCTA: React.FC<PartnerBlogCTAProps> = ({
               Khám phá
               <br />
               <span className="bg-gradient-to-r from-[#9d174d] to-[#be185d] bg-clip-text text-transparent">
-                Blog BeautyPink
+                Blog BeautyLink
               </span>
             </h3>
 

@@ -11,7 +11,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import com.example.backend.model.DomainEnums.PaymentTransactionStatus;
-import com.example.backend.model.DomainEnums.PaymentProvider;
 
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, Long> {
     Optional<PaymentTransaction> findFirstByBookingIdOrderByCreatedAtDesc(Long bookingId);
@@ -21,11 +20,6 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from PaymentTransaction p join fetch p.booking b join fetch b.customer where p.orderCode = :orderCode")
     Optional<PaymentTransaction> findByOrderCodeForUpdate(@Param("orderCode") Long orderCode);
-    Optional<PaymentTransaction> findByMerchantReference(String merchantReference);
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select p from PaymentTransaction p join fetch p.booking b join fetch b.customer where p.provider = :provider and p.merchantReference = :reference")
-    Optional<PaymentTransaction> findByProviderAndMerchantReferenceForUpdate(@Param("provider") PaymentProvider provider,
-                                                                              @Param("reference") String merchantReference);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from PaymentTransaction p join fetch p.booking b join fetch b.customer where p.id = :id")
     Optional<PaymentTransaction> findByIdForUpdate(@Param("id") Long id);

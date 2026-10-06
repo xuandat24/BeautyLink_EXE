@@ -7,11 +7,11 @@ export interface SEOConfig {
 }
 
 export const DEFAULT_SEO: SEOConfig = {
-  title: 'BeautyPink - Săn Deal Làm Đẹp, Spa & Thẩm Mỹ Viện Giảm Tới 90%',
+  title: 'BeautyLink - Săn Deal Làm Đẹp, Spa & Thẩm Mỹ Viện Giảm Tới 90%',
   description:
     'Nền tảng đặt lịch làm đẹp thông minh số 1 Việt Nam. Hơn 5.000+ Spa, Clinic, Nail và Thẩm mỹ viện uy tín cùng hàng ngàn deal giờ vàng giá sốc.',
   image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1200&q=80',
-  url: 'https://beautypink.vn',
+  url: 'https://beautylink.vn',
   type: 'website',
 };
 

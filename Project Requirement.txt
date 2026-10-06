@@ -1,6 +1,6 @@
-Project Overview: What is BeautyPink / BeautyLink?
+Project Overview: What is BeautyLink?
 
-BeautyPink (with backend database beautylink) is an on-demand beauty, spa, and salon appointment booking marketplace platform (similar to Fresha, Treatwell, or ClassPass). It connects end-users with verified local beauty salons, spas, hair salons, skin clinics, and nail studios across major Vietnamese cities (TP. Hồ Chí Minh, Hà Nội, Đà Nẵng).
+BeautyLink (with backend database beautylink) is an on-demand beauty, spa, and salon appointment booking marketplace platform (similar to Fresha, Treatwell, or ClassPass). It connects end-users with verified local beauty salons, spas, hair salons, skin clinics, and nail studios across major Vietnamese cities (TP. Hồ Chí Minh, Hà Nội, Đà Nẵng).
 Core Capabilities:
 
     Discovery & Search: City and district filtering, category browsing (Spa, Massage, Thẩm mỹ viện, Chăm sóc da, Salon tóc, Nail, Clinic), price filtering, and flash deals with countdown timers.
@@ -29,7 +29,7 @@ You can copy and paste the entire block below into your .md or .txt file for Cod
 code Text
 
 ================================================================================
-BEAUTYLINK / BEAUTYPINK - FULL-STACK PROJECT REQUIREMENTS & CODEX SPECIFICATION
+BEAUTYLINK - FULL-STACK PROJECT REQUIREMENTS & CODEX SPECIFICATION
 ================================================================================
 Target: AI Codex / LLM Code Generation Engines & Developers
 Scope: End-to-end specification for Spring Boot 3 Backend, MySQL Database, and React Frontend Integration
@@ -37,7 +37,7 @@ Scope: End-to-end specification for Spring Boot 3 Backend, MySQL Database, and R
 --------------------------------------------------------------------------------
 1. PROJECT OVERVIEW & DOMAIN CONTEXT
 --------------------------------------------------------------------------------
-Project Name: BeautyLink (BeautyPink Marketplace)
+Project Name: BeautyLink Marketplace
 Domain: Beauty, Spa, Wellness & Salon Appointment Booking Platform
 Description:
   An on-demand beauty booking platform connecting customers with verified local

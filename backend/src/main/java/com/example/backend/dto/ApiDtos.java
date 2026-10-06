@@ -155,20 +155,11 @@ public final class ApiDtos {
     public record CreatePayOSPaymentRequest(
             @NotNull(message = "Vui lòng chọn hình thức thanh toán") PaymentOption paymentOption,
             @Pattern(regexp = "^[A-Z0-9_-]{3,40}$", message = "Mã voucher không hợp lệ") String voucherCode) {}
-    public record CreatePaymentRequest(
-            @NotNull(message = "Vui lòng chọn cổng thanh toán") PaymentProvider provider,
-            @NotNull(message = "Vui lòng chọn hình thức thanh toán") PaymentOption paymentOption,
-            @Pattern(regexp = "^[A-Z0-9_-]{3,40}$", message = "Mã voucher không hợp lệ") String voucherCode) {}
-    public record PaymentResponse(Long bookingId, String bookingCode, PaymentProvider provider,
-                                  String merchantReference, String providerPaymentId, String checkoutUrl,
-                                  BigDecimal amount, BigDecimal remainingAmount, PaymentOption paymentOption,
-                                  PaymentTransactionStatus status, boolean requiresManualReview, Instant expiresAt) {}
     public record PayOSPaymentResponse(Long bookingId, String bookingCode, Long orderCode, String paymentLinkId,
                                        String checkoutUrl, BigDecimal amount, BigDecimal remainingAmount,
-                                       PaymentOption paymentOption, PaymentTransactionStatus status, Instant expiresAt) {}
+                                       PaymentOption paymentOption, PaymentTransactionStatus status,
+                                       boolean requiresManualReview, Instant expiresAt) {}
     public record PayOSWebhookResponse(boolean success) {}
-    public record VnPayIpnResponse(@com.fasterxml.jackson.annotation.JsonProperty("RspCode") String rspCode,
-                                   @com.fasterxml.jackson.annotation.JsonProperty("Message") String message) {}
     public record ReportResponse(Long id, ReportTargetType targetType, Long targetId, String reason, String details,
                                  ReportStatus status, String reporterName, String assignedStaffName,
                                  String resolutionNote, Instant createdAt) {}

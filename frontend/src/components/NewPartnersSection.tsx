@@ -61,7 +61,7 @@ export const NewPartnersSection: React.FC<NewPartnersSectionProps> = React.memo(
             </span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Các cơ sở thẩm mỹ, spa & clinic uy tín vừa gia nhập hệ sinh thái BeautyPink
+            Các cơ sở thẩm mỹ, spa & clinic uy tín vừa gia nhập hệ sinh thái BeautyLink
           </p>
         </div>
 

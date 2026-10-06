@@ -13,12 +13,12 @@ export const Footer: React.FC = () => {
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
               <span className="text-2xl font-black bg-gradient-to-r from-[#be185d] via-[#db2777] to-[#ec4899] bg-clip-text text-transparent">
-                BeautyPink
+                BeautyLink
               </span>
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed max-w-sm">
-              BeautyPink là nền tảng công nghệ kết nối khách hàng với hàng ngàn cơ sở làm đẹp, thẩm mỹ viện, spa, salon tóc và clinic uy tín hàng đầu Việt Nam.
+              BeautyLink là nền tảng công nghệ kết nối khách hàng với hàng ngàn cơ sở làm đẹp, thẩm mỹ viện, spa, salon tóc và clinic uy tín hàng đầu Việt Nam.
             </p>
 
             <div className="space-y-2 text-xs text-slate-600">
@@ -30,7 +30,7 @@ export const Footer: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-[#e1146c]" />
                 <span className="font-semibold">Email hỗ trợ:</span>
-                <span>cskh@beautypink.vn</span>
+                <span>cskh@beautylink.vn</span>
               </div>
               <div className="flex items-start gap-2">
                 <MapPin className="w-3.5 h-3.5 text-[#e1146c] shrink-0 mt-0.5" />
@@ -39,10 +39,10 @@ export const Footer: React.FC = () => {
             </div>
           </div>
 
-          {/* Col 2: Về BeautyPink */}
+          {/* Col 2: Về BeautyLink */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Về BeautyPink
+              Về BeautyLink
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
@@ -110,7 +110,7 @@ export const Footer: React.FC = () => {
           {/* Col 4: Tải ứng dụng */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Tải ứng dụng BeautyPink
+              Tải ứng dụng BeautyLink
             </h4>
             <p className="text-xs text-slate-500">
               Quét mã QR để nhận ngay voucher giảm 50K khi tải app lần đầu:
@@ -137,7 +137,7 @@ export const Footer: React.FC = () => {
 
         {/* Bottom Bar */}
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-4">
-          <p>© 2026 BeautyPink. All rights reserved. Nền tảng đặt lịch làm đẹp & spa.</p>
+          <p>© 2026 BeautyLink. All rights reserved. Nền tảng đặt lịch làm đẹp & spa.</p>
           <div className="flex items-center gap-4 text-xs">
             <span>Bảo mật SSL 256-bit</span>
             <span>·</span>

@@ -24,8 +24,8 @@ export interface ServiceReviewItem {
   verifiedBooking?: boolean;
 }
 
-const STORAGE_KEY_REVIEWS = 'beautypink_customer_reviews_v3';
-const STORAGE_KEY_REVIEWED_BOOKINGS = 'beautypink_reviewed_bookings_v3';
+const STORAGE_KEY_REVIEWS = 'beautylink_customer_reviews_v3';
+const STORAGE_KEY_REVIEWED_BOOKINGS = 'beautylink_reviewed_bookings_v3';
 
 // Default initial reviews database
 const DEFAULT_REVIEWS: ServiceReviewItem[] = [

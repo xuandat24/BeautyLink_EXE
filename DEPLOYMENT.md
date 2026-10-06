@@ -74,24 +74,13 @@ PAYOS_CHECKSUM_KEY=<payos-checksum-key>
 PAYOS_RETURN_URL=https://YOUR-VERCEL-DOMAIN/?payment=success
 PAYOS_CANCEL_URL=https://YOUR-VERCEL-DOMAIN/?payment=cancelled
 PAYOS_WEBHOOK_URL=https://YOUR-RAILWAY-DOMAIN/api/v1/payments/payos/webhook
-FRONTEND_URL=https://YOUR-VERCEL-DOMAIN
-PAYMENT_RECONCILIATION_MS=60000
-PAYMENT_RECONCILIATION_INITIAL_DELAY_MS=60000
-PAYMENT_RECONCILIATION_MIN_AGE_SECONDS=60
-PAYMENT_RECONCILIATION_MIN_INTERVAL_SECONDS=120
-VNPAY_TMN_CODE=<vnpay-tmn-code>
-VNPAY_HASH_SECRET=<vnpay-hash-secret>
-VNPAY_PAY_URL=<vnpay-production-pay-url>
-VNPAY_RETURN_URL=https://YOUR-RAILWAY-DOMAIN/api/v1/payments/vnpay/return
-VNPAY_QUERY_URL=<vnpay-production-querydr-url>
-VNPAY_SERVER_IP=<backend-public-ip>
+PAYOS_RECONCILIATION_MS=60000
+PAYOS_RECONCILIATION_INITIAL_DELAY_MS=60000
+PAYOS_RECONCILIATION_MIN_AGE_SECONDS=60
+PAYOS_RECONCILIATION_MIN_INTERVAL_SECONDS=120
 ```
 
-In the VNPAY merchant portal, register `https://YOUR-RAILWAY-DOMAIN/api/v1/payments/vnpay/ipn` as the IPN endpoint. Obtain all production endpoint values directly from VNPAY; do not use the sandbox defaults for live money.
-
-When VNPAY credentials are present, the production profile refuses to start with sandbox/local endpoints, incomplete credentials, or a loopback/private `VNPAY_SERVER_IP`. Keep both credentials absent to disable VNPAY safely during a staged deploy. Railway supplies the customer's address through `X-Real-IP`; production trusts it through the Railway edge, while local profiles do not trust caller-supplied proxy headers.
-
-Confirm with VNPAY whether QueryDr calls require source-IP allowlisting. Railway Static Outbound IPs are a Pro feature and may assign multiple HA IPv4 addresses; every possible egress IP must be accepted by VNPAY before enabling production traffic. `VNPAY_SERVER_IP` must be an agreed public IP literal, never a domain or `127.0.0.1`.
+PayOS is the only production payment gateway. Once any PayOS credential is supplied, the production profile requires all three credentials plus public HTTPS return, cancel, and webhook URLs. Keep credentials absent only for a staged deployment where checkout is intentionally disabled.
 
 Generate the secret values locally; do not reuse any development or database password:
 
