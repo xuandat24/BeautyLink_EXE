@@ -8,7 +8,7 @@ import {
 } from '../types';
 import { cache } from '../lib/cache';
 import { notificationService } from '../services/notificationService';
-import { clearAccessToken } from '../services/beautyApi';
+import { clearAccessToken, hasPersistentSession } from '../services/beautyApi';
 
 const STORAGE_KEYS = {
   CART: 'user_cart_items',
@@ -29,7 +29,7 @@ const LEGACY_PROFILE_KEY = 'beautylink_user_profile_data_v2';
 const loadSessionUser = (): CurrentUser | null => {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = sessionStorage.getItem(SESSION_USER_KEY);
+    const raw = sessionStorage.getItem(SESSION_USER_KEY) || localStorage.getItem(SESSION_USER_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -228,8 +228,16 @@ export function useBeautyStore() {
     memoryState.currentUser = user;
     cache.delete(STORAGE_KEYS.USER);
     if (typeof window !== 'undefined') {
-      if (user) sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
-      else sessionStorage.removeItem(SESSION_USER_KEY);
+      if (user && hasPersistentSession()) {
+        sessionStorage.removeItem(SESSION_USER_KEY);
+        localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+      } else if (user) {
+        localStorage.removeItem(SESSION_USER_KEY);
+        sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+      } else {
+        sessionStorage.removeItem(SESSION_USER_KEY);
+        localStorage.removeItem(SESSION_USER_KEY);
+      }
     }
     notify();
   }, []);
@@ -243,6 +251,7 @@ export function useBeautyStore() {
     notificationService.clearUserData();
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(SESSION_USER_KEY);
+      localStorage.removeItem(SESSION_USER_KEY);
       localStorage.removeItem(LEGACY_PROFILE_KEY);
     }
     clearAccessToken();

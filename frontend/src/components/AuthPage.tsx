@@ -150,7 +150,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setLoading(true);
     try {
       if (mode === 'login') {
-        const res = await beautyApi.login(identifier.trim(), password);
+        const res = await beautyApi.login(identifier.trim(), password, rememberMe);
         const mappedUser: CurrentUser = {
           id: res.user.id,
           name: res.user.fullName || res.user.name || 'Khách hàng',
@@ -186,7 +186,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           gender: gender as 'MALE' | 'FEMALE' | 'OTHER',
           dateOfBirth,
           verificationToken: verification.registrationToken,
-        });
+        }, rememberMe);
         const mappedUser: CurrentUser = {
           id: res.user.id,
           name: res.user.fullName || res.user.name || fullName.trim(),
@@ -234,7 +234,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </div>
           <div>
             <span className="text-lg font-black tracking-tight text-slate-900 leading-none">
-              Beauty<span className="text-[#be185d]">Pink</span>
+              Beauty<span className="text-[#be185d]">Link</span>
             </span>
             <span className="text-[9px] font-bold text-pink-600 block uppercase tracking-wider">
               Chuẩn Y Khoa

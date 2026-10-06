@@ -17,7 +17,7 @@ public class UserAccount {
     @Column(length = 160, unique = true) private String email;
     @Enumerated(EnumType.STRING) @Column(length = 20) private Gender gender;
     @Column(name = "date_of_birth") private LocalDate dateOfBirth;
-    @Column(nullable = false) private String passwordHash;
+    @Column(name = "password_hash", nullable = false) private String passwordHash;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private Role role = Role.CUSTOMER;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private AccountStatus status = AccountStatus.ACTIVE;
     @Column(nullable = false) private int loyaltyPoints = 0;

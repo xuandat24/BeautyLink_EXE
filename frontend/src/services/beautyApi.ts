@@ -87,7 +87,7 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = sessionStorage.getItem(TOKEN_KEY);
+    const token = getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -95,10 +95,15 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-export function setAccessToken(token: string) {
+export function setAccessToken(token: string, rememberMe = false) {
   if (typeof window !== 'undefined') {
-    localStorage.removeItem(TOKEN_KEY);
-    sessionStorage.setItem(TOKEN_KEY, token);
+    if (rememberMe) {
+      sessionStorage.removeItem(TOKEN_KEY);
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      sessionStorage.setItem(TOKEN_KEY, token);
+    }
   }
 }
 
@@ -111,9 +116,13 @@ export function clearAccessToken() {
 
 export function getAccessToken(): string | null {
   if (typeof window !== 'undefined') {
-    return sessionStorage.getItem(TOKEN_KEY);
+    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
   }
   return null;
+}
+
+export function hasPersistentSession(): boolean {
+  return typeof window !== 'undefined' && Boolean(localStorage.getItem(TOKEN_KEY));
 }
 
 export function getApiErrorMessage(err: unknown, defaultMessage = 'Đã xảy ra lỗi. Vui lòng thử lại.'): string {
@@ -499,12 +508,12 @@ export const beautyApi = {
   // ==========================================
   // Auth & User Profile
   // ==========================================
-  async login(identifier: string, password: string): Promise<{ user: any; accessToken: string }> {
+  async login(identifier: string, password: string, rememberMe = false): Promise<{ user: any; accessToken: string }> {
     const res = await unwrap<{ user: any; accessToken: string }>(
       apiClient.post('/v1/auth/login', { identifier, password })
     );
     if (res?.accessToken) {
-      setAccessToken(res.accessToken);
+      setAccessToken(res.accessToken, rememberMe);
     }
     return res;
   },
@@ -517,12 +526,12 @@ export const beautyApi = {
     return unwrap(apiClient.post('/v1/auth/registration-verification/confirm', data));
   },
 
-  async register(data: { fullName: string; phone: string; email: string; password: string; gender: 'MALE' | 'FEMALE' | 'OTHER'; dateOfBirth: string; verificationToken: string }): Promise<{ user: any; accessToken: string }> {
+  async register(data: { fullName: string; phone: string; email: string; password: string; gender: 'MALE' | 'FEMALE' | 'OTHER'; dateOfBirth: string; verificationToken: string }, rememberMe = false): Promise<{ user: any; accessToken: string }> {
     const res = await unwrap<{ user: any; accessToken: string }>(
       apiClient.post('/v1/auth/register', data)
     );
     if (res?.accessToken) {
-      setAccessToken(res.accessToken);
+      setAccessToken(res.accessToken, rememberMe);
     }
     return res;
   },

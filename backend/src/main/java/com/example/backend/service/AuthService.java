@@ -6,8 +6,6 @@ import com.example.backend.exception.ApiException;
 import com.example.backend.model.UserAccount;
 import com.example.backend.repository.UserAccountRepository;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.*;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -16,9 +14,9 @@ import static com.example.backend.model.DomainEnums.*;
 
 @Service
 public class AuthService {
-    private final UserAccountRepository users; private final PasswordEncoder encoder; private final JwtService jwt; private final AuthenticationManager authenticationManager; private final RegistrationVerificationService verification;
-    public AuthService(UserAccountRepository users, PasswordEncoder encoder, JwtService jwt, AuthenticationManager authenticationManager, RegistrationVerificationService verification) {
-        this.users = users; this.encoder = encoder; this.jwt = jwt; this.authenticationManager = authenticationManager; this.verification = verification;
+    private final UserAccountRepository users; private final PasswordEncoder encoder; private final JwtService jwt; private final RegistrationVerificationService verification;
+    public AuthService(UserAccountRepository users, PasswordEncoder encoder, JwtService jwt, RegistrationVerificationService verification) {
+        this.users = users; this.encoder = encoder; this.jwt = jwt; this.verification = verification;
     }
     @Transactional public AuthResponse register(RegisterRequest request) {
         String phone = normalizePhone(request.phone());
@@ -38,13 +36,18 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         String identifier = request.identifier().trim();
         UserAccount user = identifier.contains("@") ? users.findByEmailIgnoreCase(identifier).orElse(null) : users.findByPhone(normalizePhone(identifier)).orElse(null);
-        if (user == null) throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Thông tin đăng nhập không chính xác");
-        try { authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(user.getPhone(), request.password())); }
-        catch (AuthenticationException ex) { throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Thông tin đăng nhập không chính xác"); }
+        if (user == null || user.getStatus() != AccountStatus.ACTIVE || !hasValidBcryptHash(user.getPasswordHash())
+                || !encoder.matches(request.password(), user.getPasswordHash())) {
+            throw invalidCredentials();
+        }
         return response(user);
     }
     public AuthResponse response(UserAccount user) { return new AuthResponse(jwt.createToken(user), "Bearer", jwt.getExpirationMs(), toUser(user)); }
     public UserResponse toUser(UserAccount u) { return new UserResponse(u.getId(), u.getFullName(), u.getPhone(), u.getEmail(), u.getGender(), u.getDateOfBirth(), u.getRole(), u.getLoyaltyPoints()); }
     public static String normalizePhone(String value) { return value == null ? "" : value.replaceAll("[\\s.-]", ""); }
     public static ApiException registrationConflict() { return new ApiException(HttpStatus.CONFLICT, "REGISTRATION_CONFLICT", "Không thể đăng ký với thông tin đã cung cấp. Hãy đăng nhập hoặc sử dụng quy trình khôi phục tài khoản"); }
+    private static ApiException invalidCredentials() { return new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Thông tin đăng nhập không chính xác"); }
+    private static boolean hasValidBcryptHash(String value) {
+        return value != null && value.matches("^\\$2[aby]\\$[0-3][0-9]\\$[./A-Za-z0-9]{53}$");
+    }
 }
