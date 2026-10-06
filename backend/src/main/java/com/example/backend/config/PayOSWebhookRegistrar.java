@@ -38,7 +38,8 @@ public class PayOSWebhookRegistrar implements ApplicationRunner {
         } catch (ApiException ex) {
             log.error("PayOS webhook registration failed code={} message={}", ex.getCode(), ex.getMessage());
         } catch (RuntimeException ex) {
-            log.error("PayOS webhook registration failed unexpectedly; registration will be retried on the next deployment");
+            log.error("PayOS webhook registration failed unexpectedly type={} message={}",
+                    ex.getClass().getName(), ex.getMessage(), ex);
         }
     }
 }
