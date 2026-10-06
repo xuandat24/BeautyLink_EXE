@@ -74,7 +74,18 @@ PAYOS_CHECKSUM_KEY=<payos-checksum-key>
 PAYOS_RETURN_URL=https://YOUR-VERCEL-DOMAIN/?payment=success
 PAYOS_CANCEL_URL=https://YOUR-VERCEL-DOMAIN/?payment=cancelled
 PAYOS_WEBHOOK_URL=https://YOUR-RAILWAY-DOMAIN/api/v1/payments/payos/webhook
+FRONTEND_URL=https://YOUR-VERCEL-DOMAIN
+PAYMENT_RECONCILIATION_MS=60000
+PAYMENT_RECONCILIATION_INITIAL_DELAY_MS=60000
+VNPAY_TMN_CODE=<vnpay-tmn-code>
+VNPAY_HASH_SECRET=<vnpay-hash-secret>
+VNPAY_PAY_URL=<vnpay-production-pay-url>
+VNPAY_RETURN_URL=https://YOUR-RAILWAY-DOMAIN/api/v1/payments/vnpay/return
+VNPAY_QUERY_URL=<vnpay-production-querydr-url>
+VNPAY_SERVER_IP=<backend-public-ip>
 ```
+
+In the VNPAY merchant portal, register `https://YOUR-RAILWAY-DOMAIN/api/v1/payments/vnpay/ipn` as the IPN endpoint. Obtain all production endpoint values directly from VNPAY; do not use the sandbox defaults for live money.
 
 Generate the secret values locally; do not reuse any development or database password:
 

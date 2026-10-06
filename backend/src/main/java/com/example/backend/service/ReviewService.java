@@ -44,7 +44,8 @@ public class ReviewService {
     }
 
     public static boolean isEligible(Booking booking) {
-        boolean paid = booking.getPaymentStatus() == PaymentStatus.PAID;
+        boolean paid = booking.getPaymentStatus() == PaymentStatus.PAID
+                || booking.getPaymentStatus() == PaymentStatus.PARTIALLY_PAID;
         return paid && booking.getStatus() != BookingStatus.CANCELLED;
     }
 

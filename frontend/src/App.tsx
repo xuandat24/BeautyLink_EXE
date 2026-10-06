@@ -363,19 +363,28 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const paymentResult = params.get('payment');
-    if (paymentResult !== 'success' && paymentResult !== 'cancelled') return;
+    if (!paymentResult || !['success', 'cancelled', 'pending', 'invalid'].includes(paymentResult)) return;
 
-    const orderCodeValue = params.get('orderCode') || sessionStorage.getItem('beautylink_payos_order_code');
+    const reference = params.get('reference') || params.get('orderCode')
+      || sessionStorage.getItem('beautylink_payment_reference')
+      || sessionStorage.getItem('beautylink_payos_order_code');
+    const legacyPayOSReference = sessionStorage.getItem('beautylink_payos_order_code');
+    const rawProvider = params.get('provider') || sessionStorage.getItem('beautylink_payment_provider')
+      || (legacyPayOSReference ? 'PAYOS' : null);
+    const provider = rawProvider === 'PAYOS' ? 'PayOS' : 'VNPAY';
     window.history.replaceState(null, '', `${window.location.pathname}#bookings`);
     setCurrentPage('bookings');
 
     if (paymentResult === 'cancelled') {
-      showToast('Bạn đã hủy thanh toán PayOS. Lịch hẹn vẫn đang chờ thanh toán.');
+      showToast(`Bạn đã hủy thanh toán ${provider}. Hệ thống sẽ đối soát trạng thái.`);
       return;
     }
-    const orderCode = Number(orderCodeValue);
-    if (!Number.isSafeInteger(orderCode) || orderCode <= 0) {
-      showToast('Không tìm thấy mã giao dịch PayOS để xác minh.');
+    if (paymentResult === 'invalid') {
+      showToast('Kết quả trả về có chữ ký không hợp lệ. Giao dịch chưa được xác nhận.');
+      return;
+    }
+    if (!reference || !/^[A-Za-z0-9_-]{1,64}$/.test(reference)) {
+      showToast('Không tìm thấy mã giao dịch hợp lệ để xác minh.');
       return;
     }
 
@@ -384,10 +393,16 @@ export default function App() {
     const verify = async () => {
       attempts += 1;
       try {
-        const payment = await beautyApi.payOSPaymentStatus(orderCode);
+        const payment = await beautyApi.paymentStatus(reference);
         if (payment.status === 'PAID') {
+          sessionStorage.removeItem('beautylink_payment_reference');
+          sessionStorage.removeItem('beautylink_payment_provider');
           sessionStorage.removeItem('beautylink_payos_order_code');
-          if (!stopped) showToast('Thanh toán PayOS đã được webhook xác thực thành công.');
+          if (!stopped) showToast(`Thanh toán ${provider} đã được máy chủ xác thực thành công.`);
+          return;
+        }
+        if (payment.status === 'REVIEW_REQUIRED') {
+          if (!stopped) showToast('Giao dịch đang được kiểm tra an toàn. Vui lòng không thanh toán lại.');
           return;
         }
       } catch {
@@ -396,7 +411,7 @@ export default function App() {
       if (!stopped && attempts < 10) {
         window.setTimeout(verify, 1500);
       } else if (!stopped) {
-        showToast('PayOS đang xác minh giao dịch. Trạng thái sẽ tự cập nhật trong lịch hẹn.');
+        showToast(`${provider} đang được đối soát. Trạng thái sẽ tự cập nhật trong lịch hẹn.`);
       }
     };
     void verify();

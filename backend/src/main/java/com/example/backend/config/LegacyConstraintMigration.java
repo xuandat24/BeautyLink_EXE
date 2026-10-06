@@ -48,10 +48,17 @@ public class LegacyConstraintMigration implements ApplicationRunner {
                         List.of("practitioner_id", "appointment_date", "start_time"));
                 dropExactUniqueIndex(connection, schema, "payment_transactions", List.of("booking_id"));
                 dropExactUniqueIndex(connection, schema, "bookings", List.of("practitioner_id", "appointment_date", "start_time"));
+                backfillPaymentProviderColumns(connection);
             } finally {
                 releaseMigrationLock(connection);
             }
         }
+    }
+
+    private void backfillPaymentProviderColumns(Connection connection) throws SQLException {
+        execute(connection, "UPDATE `payment_transactions` SET `provider`='PAYOS' WHERE `provider` IS NULL");
+        execute(connection, "UPDATE `payment_transactions` SET `merchant_reference`=CAST(`order_code` AS CHAR) " +
+                "WHERE `merchant_reference` IS NULL OR `merchant_reference`=''");
     }
 
     private void acquireMigrationLock(Connection connection) throws SQLException {

@@ -19,7 +19,7 @@ import {
   Percent,
 } from 'lucide-react';
 import { useBeautyStore } from '../store/beautyStore';
-import { CurrentUser, BackendService, CartItem } from '../types';
+import { CurrentUser, BackendService, CartItem, PaymentProvider } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { OptimizedImage } from './OptimizedImage';
 import { bookingSchema, FieldErrors, voucherCodeSchema, zodFieldErrors } from '../lib/validation';
@@ -130,6 +130,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Payment Deposit Option: 50% deposit or 100% full
   const [depositOption, setDepositOption] = useState<'deposit50' | 'full100'>('deposit50');
+  const [paymentProvider, setPaymentProvider] = useState<PaymentProvider>('VNPAY');
 
   // Voucher state
   const [voucherCodeInput, setVoucherCodeInput] = useState('');
@@ -244,7 +245,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
     if (items.length > 1) {
-      setErrorMsg('Mỗi giao dịch PayOS chỉ áp dụng cho một lịch hẹn. Vui lòng thanh toán từng dịch vụ.');
+      setErrorMsg('Mỗi giao dịch chỉ áp dụng cho một lịch hẹn. Vui lòng thanh toán từng dịch vụ.');
       return;
     }
     const validation = bookingSchema.safeParse({
@@ -269,19 +270,21 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         practitionerId: directService?.practitioners?.[0]?.id,
         appointmentDate: selectedDate,
         startTime: selectedTimeSlot,
-        note: `Thanh toán ${depositOption === 'deposit50' ? 'cọc 50%' : '100%'} qua PayOS`,
+        note: `Thanh toán ${depositOption === 'deposit50' ? 'cọc 50%' : '100%'} qua ${paymentProvider}`,
       });
-      const payment = await beautyApi.createPayOSPayment(booking.id, {
+      const payment = await beautyApi.createPayment(booking.id, {
+        provider: paymentProvider,
         paymentOption: depositOption === 'deposit50' ? 'DEPOSIT_50' : 'FULL_100',
         voucherCode: appliedVoucher?.code,
       });
       if (!payment.checkoutUrl) {
-        throw new Error('PayOS không trả về đường dẫn thanh toán hợp lệ.');
+        throw new Error(`${paymentProvider} không trả về đường dẫn thanh toán hợp lệ.`);
       }
-      sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
+      sessionStorage.setItem('beautylink_payment_reference', payment.merchantReference);
+      sessionStorage.setItem('beautylink_payment_provider', payment.provider);
       window.location.assign(payment.checkoutUrl);
     } catch (err: any) {
-      setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng thử lại.'));
+      setErrorMsg(getApiErrorMessage(err, `Có lỗi xảy ra khi tạo giao dịch ${paymentProvider}. Vui lòng thử lại.`));
     } finally {
       setSubmitting(false);
     }
@@ -737,7 +740,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
 
               <div className="space-y-3">
-                <div className="p-4 rounded-2xl border border-[#e1146c] bg-pink-50/40 ring-1 ring-[#e1146c]">
+                <button
+                  type="button"
+                  onClick={() => setPaymentProvider('VNPAY')}
+                  className={`w-full p-4 rounded-2xl border text-left transition ${paymentProvider === 'VNPAY' ? 'border-[#e1146c] bg-pink-50/40 ring-1 ring-[#e1146c]' : 'border-slate-200 hover:border-pink-200'}`}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-pink-100/70 text-[#e1146c] flex items-center justify-center shrink-0">
@@ -746,28 +753,49 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs sm:text-sm font-bold text-slate-900">
-                            Thanh toán bảo mật qua PayOS
+                            Thanh toán qua VNPAY
                           </span>
                           <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
                             Khuyên dùng
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                          Bạn sẽ được chuyển đến trang PayOS để quét VietQR hoặc thanh toán qua ngân hàng.
+                          Thẻ ATM nội địa, tài khoản ngân hàng, VietQR và các phương thức do VNPAY hỗ trợ.
                         </p>
                       </div>
                     </div>
-                    <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 border-[#e1146c] bg-[#e1146c]">
-                      <div className="w-2 h-2 rounded-full bg-white" />
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentProvider === 'VNPAY' ? 'border-[#e1146c] bg-[#e1146c]' : 'border-slate-300'}`}>
+                      {paymentProvider === 'VNPAY' && <div className="w-2 h-2 rounded-full bg-white" />}
                     </div>
                   </div>
                   <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
                     <div className="flex items-start gap-2">
                       <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                      <p>BeautyLink không lưu thông tin ngân hàng. Trạng thái chỉ được xác nhận sau khi webhook PayOS vượt qua kiểm tra chữ ký.</p>
+                      <p>BeautyLink không lưu thông tin ngân hàng. Backend chỉ xác nhận sau IPN đã kiểm tra HMAC và đối soát máy chủ.</p>
                     </div>
                   </div>
-                </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentProvider('PAYOS')}
+                  className={`w-full p-4 rounded-2xl border text-left transition ${paymentProvider === 'PAYOS' ? 'border-[#e1146c] bg-pink-50/40 ring-1 ring-[#e1146c]' : 'border-slate-200 hover:border-pink-200'}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
+                        <QrCode className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-xs sm:text-sm font-bold text-slate-900">Thanh toán qua PayOS</span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Quét VietQR hoặc thanh toán từ ứng dụng ngân hàng hỗ trợ.</p>
+                      </div>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${paymentProvider === 'PAYOS' ? 'border-[#e1146c] bg-[#e1146c]' : 'border-slate-300'}`}>
+                      {paymentProvider === 'PAYOS' && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </div>
+                </button>
               </div>
             </div>
 
@@ -998,7 +1026,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span>Trạng thái thanh toán được xác thực trực tiếp với PayOS</span>
+                  <span>Trạng thái được xác thực trực tiếp với {paymentProvider === 'VNPAY' ? 'VNPAY' : 'PayOS'}</span>
                 </div>
               </div>
 

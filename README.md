@@ -217,6 +217,15 @@ PAYOS_CANCEL_URL=http://localhost:5173/?payment=cancelled
 PAYOS_WEBHOOK_URL=https://your-api.example.com/api/v1/payments/payos/webhook
 PAYOS_RECONCILIATION_MS=60000
 PAYOS_RECONCILIATION_INITIAL_DELAY_MS=60000
+FRONTEND_URL=http://localhost:5173
+PAYMENT_RECONCILIATION_MS=60000
+PAYMENT_RECONCILIATION_INITIAL_DELAY_MS=60000
+VNPAY_TMN_CODE=your_vnpay_tmn_code
+VNPAY_HASH_SECRET=your_vnpay_hash_secret
+VNPAY_PAY_URL=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+VNPAY_RETURN_URL=https://your-api.example.com/api/v1/payments/vnpay/return
+VNPAY_QUERY_URL=https://sandbox.vnpayment.vn/merchant_webapi/api/transaction
+VNPAY_SERVER_IP=your_backend_public_ip
 ```
 
 `backend/.env.properties` is ignored by Git. Never commit this file or paste production secrets into source code.
@@ -224,9 +233,13 @@ PAYOS_RECONCILIATION_INITIAL_DELAY_MS=60000
 
 For production PayOS, create and verify a Payment Channel at `my.payos.vn`, connect the receiving bank account, then place that channel's `Client ID`, `API Key`, and `Checksum Key` in the deployment secret store. Set `PAYOS_WEBHOOK_URL` to the public HTTPS backend endpoint shown above. On startup, the backend confirms that webhook URL with PayOS; it never logs credentials, signatures, or the bank account number. Pending transactions are also reconciled directly with PayOS every 60 seconds so webhook delivery is not the only source of truth.
 
+For VNPAY, obtain production `TMN Code`, `Hash Secret`, PAY URL and QueryDr URL from VNPAY and store them only as deployment secrets. Register `https://your-api.example.com/api/v1/payments/vnpay/ipn` as the IPN URL and set `VNPAY_RETURN_URL` to the backend return endpoint shown above. The IPN is the only browser-independent callback allowed to update a transaction; it verifies HMAC-SHA512, checks merchant/reference/amount, and locks the database row before applying an idempotent transition. The browser return endpoint is display-only. If IPN delivery is delayed, the scheduler calls QueryDr before it expires/releases a booking slot. Use the production endpoints supplied by VNPAY when going live; the checked-in defaults are sandbox endpoints.
+
+VNPAY and PayOS are independent, equal payment providers. The customer chooses one provider for an attempt and the backend never silently falls back to the other. A booking can keep multiple immutable attempts, while only one pending attempt is allowed at a time. A verified 50% payment sets `PARTIALLY_PAID`; only a verified 100% payment sets `PAID`.
+
 For one production replica, the bounded in-memory login limiter is the default so an unavailable Redis service never blocks valid database-account login. Before scaling to multiple replicas, set `RATE_LIMIT_BACKEND=redis` and point `REDIS_URL` at a private Redis service shared by every backend replica. If Redis becomes unavailable later, the backend logs the outage and retains the same bounded limiter locally rather than rejecting every login. Configure Twilio (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`) and SMTP (`SPRING_MAIL_*`, `OTP_MAIL_FROM`) with real providers. `OTP_PEPPER` must be an independent random secret of at least 32 characters. If it is missing during a staged deployment, the API healthcheck remains available but OTP and registration fail closed with `OTP_NOT_CONFIGURED`; no account or token can be issued. OTP values and raw contact identifiers are never stored or logged.
 
-On the first MySQL startup after this upgrade, an idempotent compatibility migration removes only the legacy unique indexes on `payment_transactions.booking_id` and the practitioner/date/time booking slot, then adds non-unique lookup indexes. Back up the database before deployment and treat the change as roll-forward once a booking has multiple attempts. Existing transaction rows are retained unchanged.
+On the first MySQL startup after this upgrade, an idempotent compatibility migration removes only the legacy unique indexes on `payment_transactions.booking_id` and the practitioner/date/time booking slot, then adds non-unique lookup indexes. It also backfills existing payment rows as PayOS attempts with their original order code as the merchant reference. Back up the database before deployment and treat the change as roll-forward once a booking has multiple attempts. Existing transaction rows are retained.
 
 ### 5. Install the frontend dependencies
 

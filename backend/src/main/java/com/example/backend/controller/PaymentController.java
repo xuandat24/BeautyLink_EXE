@@ -12,10 +12,15 @@ import vn.payos.model.webhooks.Webhook;
 @RequestMapping("/api/v1/payments/payos")
 public class PaymentController {
     private final PaymentService payments;
+    private final PaymentAttemptService attempts;
+    private final PayOSPaymentProvider payOS;
     private final CurrentAccountService current;
 
-    public PaymentController(PaymentService payments, CurrentAccountService current) {
+    public PaymentController(PaymentService payments, PaymentAttemptService attempts,
+                             PayOSPaymentProvider payOS, CurrentAccountService current) {
         this.payments = payments;
+        this.attempts = attempts;
+        this.payOS = payOS;
         this.current = current;
     }
 
@@ -34,6 +39,10 @@ public class PaymentController {
 
     @PostMapping("/webhook")
     public PayOSWebhookResponse webhook(@RequestBody Webhook webhook) {
-        return new PayOSWebhookResponse(payments.handleWebhook(webhook));
+        PayOSPaymentProvider.VerifiedCallback callback = payOS.verifyWebhook(webhook);
+        PaymentAttemptService.ApplyResult result = attempts.applyProviderOutcome(
+                com.example.backend.model.DomainEnums.PaymentProvider.PAYOS,
+                callback.merchantReference(), callback.outcome(), "payos-webhook");
+        return new PayOSWebhookResponse(result != PaymentAttemptService.ApplyResult.AMOUNT_MISMATCH);
     }
 }

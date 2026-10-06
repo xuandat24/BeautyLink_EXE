@@ -423,7 +423,7 @@ class PlatformApiIntegrationTest {
         mvc.perform(get("/api/v1/payments/payos/" + orderCode).header("Authorization", "Bearer " + customerToken))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status", is("PAID")));
         mvc.perform(get("/api/v1/bookings/mine").header("Authorization", "Bearer " + customerToken))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.id == " + bookingId + ")].paymentStatus", hasItem("PAID")));
+                .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.id == " + bookingId + ")].paymentStatus", hasItem("PARTIALLY_PAID")));
     }
 
     @Test

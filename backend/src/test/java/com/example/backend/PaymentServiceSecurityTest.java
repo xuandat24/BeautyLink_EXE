@@ -88,7 +88,7 @@ class PaymentServiceSecurityTest {
         service.handleWebhook(webhook);
 
         assertEquals(PaymentTransactionStatus.PAID, payment.getStatus());
-        assertEquals(PaymentStatus.PAID, payment.getBooking().getPaymentStatus());
+        assertEquals(PaymentStatus.PARTIALLY_PAID, payment.getBooking().getPaymentStatus());
         assertEquals(BookingStatus.CANCELLED, payment.getBooking().getStatus());
     }
 
@@ -118,7 +118,7 @@ class PaymentServiceSecurityTest {
         assertEquals(PaymentTransactionStatus.PAID, oldAttempt.getStatus());
         assertEquals(PaymentTransactionStatus.CANCELLED, newerAttempt.getStatus());
         assertEquals(BookingStatus.CONFIRMED, oldAttempt.getBooking().getStatus());
-        assertEquals(PaymentStatus.PAID, oldAttempt.getBooking().getPaymentStatus());
+        assertEquals(PaymentStatus.PARTIALLY_PAID, oldAttempt.getBooking().getPaymentStatus());
     }
 
     private PaymentTransaction pendingPayment() {

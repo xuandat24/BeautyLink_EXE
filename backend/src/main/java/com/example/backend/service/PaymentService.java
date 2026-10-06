@@ -6,7 +6,6 @@ import com.example.backend.model.*;
 import com.example.backend.repository.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
@@ -51,7 +50,7 @@ public class PaymentService {
         if (booking.getStatus() == BookingStatus.COMPLETED) {
             throw new ApiException(HttpStatus.CONFLICT, "BOOKING_NOT_PAYABLE", "Lịch hẹn không còn ở trạng thái có thể thanh toán");
         }
-        if (booking.getPaymentStatus() == PaymentStatus.PAID) {
+        if (isPaid(booking)) {
             return payments.findFirstByBookingIdAndStatusOrderByCreatedAtDesc(bookingId, PaymentTransactionStatus.PAID).map(this::response)
                     .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "PAYMENT_ALREADY_PAID", "Lịch hẹn đã được thanh toán"));
         }
@@ -99,7 +98,9 @@ public class PaymentService {
 
         PaymentTransaction transaction = new PaymentTransaction();
         transaction.setBooking(booking);
+        transaction.setProvider(PaymentProvider.PAYOS);
         transaction.setOrderCode(nextOrderCode(booking.getId()));
+        transaction.setMerchantReference(Long.toString(transaction.getOrderCode()));
         transaction.setAmount(amount);
         transaction.setRemainingAmount(remaining);
         transaction.setPaymentOption(request.paymentOption());
@@ -142,9 +143,6 @@ public class PaymentService {
         return response(payment);
     }
 
-    @Scheduled(
-            fixedDelayString = "${app.payos.reconciliation-ms:60000}",
-            initialDelayString = "${app.payos.reconciliation-initial-delay-ms:60000}")
     @Transactional
     public void reconcileExpiredPayments() {
         for (PaymentTransaction payment : payments.findByStatusAndExpiresAtBefore(PaymentTransactionStatus.PENDING, Instant.now())) {
@@ -225,7 +223,8 @@ public class PaymentService {
         if (reference != null) payment.setPaymentReference(reference);
         payment.setPaidAt(Instant.now());
         Booking booking = payment.getBooking();
-        booking.setPaymentStatus(PaymentStatus.PAID);
+        booking.setPaymentStatus(payment.getPaymentOption() == PaymentOption.DEPOSIT_50
+                ? PaymentStatus.PARTIALLY_PAID : PaymentStatus.PAID);
         booking.setStatus(BookingStatus.CONFIRMED);
         booking.setPaymentRetryAllowed(false);
         closeSupersededAttempts(payment);
@@ -248,7 +247,7 @@ public class PaymentService {
     private void expireAndRelease(PaymentTransaction payment, String source) {
         payment.setStatus(PaymentTransactionStatus.EXPIRED);
         Booking booking = payment.getBooking();
-        if (booking.getPaymentStatus() != PaymentStatus.PAID && booking.getStatus() == BookingStatus.PENDING) {
+        if (!isPaid(booking) && booking.getStatus() == BookingStatus.PENDING) {
             booking.setStatus(BookingStatus.CANCELLED);
             booking.setPaymentStatus(PaymentStatus.UNPAID);
             booking.setPaymentRetryAllowed(true);
@@ -259,7 +258,7 @@ public class PaymentService {
     private void closeAndRelease(PaymentTransaction payment, PaymentTransactionStatus status, PaymentLinkStatus providerStatus) {
         payment.setStatus(status);
         Booking booking = payment.getBooking();
-        if (booking.getPaymentStatus() != PaymentStatus.PAID && booking.getStatus() == BookingStatus.PENDING) {
+        if (!isPaid(booking) && booking.getStatus() == BookingStatus.PENDING) {
             booking.setStatus(BookingStatus.CANCELLED);
             booking.setPaymentStatus(PaymentStatus.UNPAID);
             booking.setPaymentRetryAllowed(true);
@@ -271,7 +270,8 @@ public class PaymentService {
         payment.setStatus(PaymentTransactionStatus.PAID);
         payment.setPaymentReference(reference);
         payment.setPaidAt(Instant.now());
-        payment.getBooking().setPaymentStatus(PaymentStatus.PAID);
+        payment.getBooking().setPaymentStatus(payment.getPaymentOption() == PaymentOption.DEPOSIT_50
+                ? PaymentStatus.PARTIALLY_PAID : PaymentStatus.PAID);
         payment.getBooking().setPaymentRetryAllowed(false);
         log.error("PayOS payment arrived after slot release; manual resolution required orderCode={} bookingId={}",
                 payment.getOrderCode(), payment.getBooking().getId());
@@ -316,6 +316,11 @@ public class PaymentService {
 
     private boolean isExpired(PaymentTransaction payment) {
         return payment.getExpiresAt() != null && !payment.getExpiresAt().isAfter(Instant.now());
+    }
+
+    private boolean isPaid(Booking booking) {
+        return booking.getPaymentStatus() == PaymentStatus.PAID
+                || booking.getPaymentStatus() == PaymentStatus.PARTIALLY_PAID;
     }
 
     private PayOSPaymentResponse response(PaymentTransaction payment) {

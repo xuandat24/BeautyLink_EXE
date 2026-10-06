@@ -112,20 +112,24 @@ export interface BackendBooking {
   serviceImageUrl?: string | null;
   supplierImageUrl?: string | null;
   supplierAddress?: string | null;
-  paymentStatus?: 'SIMULATED' | 'UNPAID' | 'PAID' | 'REFUNDED';
+  paymentStatus?: 'SIMULATED' | 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'REFUNDED';
   reviewEligible?: boolean;
 }
 
-export interface PayOSPayment {
+export type PaymentProvider = 'VNPAY' | 'PAYOS';
+
+export interface PaymentAttempt {
   bookingId: number;
   bookingCode: string;
-  orderCode: number;
-  paymentLinkId: string;
+  provider: PaymentProvider;
+  merchantReference: string;
+  providerPaymentId?: string | null;
   checkoutUrl: string;
   amount: number;
   remainingAmount: number;
   paymentOption: 'DEPOSIT_50' | 'FULL_100';
-  status: 'PENDING' | 'PAID' | 'CANCELLED' | 'EXPIRED' | 'FAILED';
+  status: 'PENDING' | 'PAID' | 'CANCELLED' | 'EXPIRED' | 'FAILED' | 'REVIEW_REQUIRED';
+  requiresManualReview: boolean;
   expiresAt: string;
 }
 
