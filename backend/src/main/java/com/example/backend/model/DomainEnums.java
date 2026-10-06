@@ -3,6 +3,8 @@ package com.example.backend.model;
 public final class DomainEnums {
     private DomainEnums() {}
     public enum Role { CUSTOMER, SUPPLIER, STAFF, ADMIN }
+    public enum Gender { MALE, FEMALE, OTHER }
+    public enum VerificationChannel { PHONE, EMAIL }
     public enum AccountStatus { ACTIVE, SUSPENDED, DISABLED }
     public enum LocationType { PROVINCE_CITY, DISTRICT, WARD_COMMUNE }
     public enum VerificationStatus { PENDING, VERIFIED, REJECTED, SUSPENDED }

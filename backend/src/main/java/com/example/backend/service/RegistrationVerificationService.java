@@ -3,7 +3,9 @@ package com.example.backend.service;
 import com.example.backend.dto.ApiDtos.*;
 import com.example.backend.exception.ApiException;
 import com.example.backend.model.OtpVerificationChallenge;
+import com.example.backend.model.DomainEnums.VerificationChannel;
 import com.example.backend.repository.OtpVerificationChallengeRepository;
+import com.example.backend.repository.UserAccountRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -24,19 +26,21 @@ public class RegistrationVerificationService {
     private final OtpVerificationChallengeRepository challenges;
     private final OtpHashingService hashing;
     private final OtpDeliveryService delivery;
+    private final UserAccountRepository users;
     private final AuthAbuseGuard abuseGuard;
     private final long codeTtlSeconds;
     private final long tokenTtlSeconds;
     private final int maxAttempts;
 
     public RegistrationVerificationService(OtpVerificationChallengeRepository challenges, OtpHashingService hashing,
-                                           OtpDeliveryService delivery, AuthAbuseGuard abuseGuard,
+                                           OtpDeliveryService delivery, UserAccountRepository users, AuthAbuseGuard abuseGuard,
                                            @Value("${app.otp.code-ttl-seconds:600}") long codeTtlSeconds,
                                            @Value("${app.otp.registration-token-ttl-seconds:900}") long tokenTtlSeconds,
                                            @Value("${app.otp.max-attempts:5}") int maxAttempts) {
         this.challenges = challenges;
         this.hashing = hashing;
         this.delivery = delivery;
+        this.users = users;
         this.abuseGuard = abuseGuard;
         this.codeTtlSeconds = codeTtlSeconds;
         this.tokenTtlSeconds = tokenTtlSeconds;
@@ -48,24 +52,25 @@ public class RegistrationVerificationService {
         String phone = AuthService.normalizePhone(request.phone());
         String email = normalizeEmail(request.email());
         abuseGuard.checkVerificationTarget(phone, email);
+        if (users.existsByPhone(phone) || users.existsByEmailIgnoreCase(email)) throw AuthService.registrationConflict();
+        VerificationChannel channel = chooseChannel(request.channel());
         String challengeId = UUID.randomUUID().toString();
-        String phoneCode = code();
-        String emailCode = email == null ? null : code();
+        String otpCode = code();
         OtpVerificationChallenge challenge = new OtpVerificationChallenge();
         challenge.setId(challengeId);
         challenge.setPhoneHash(hashing.hash("phone", phone));
-        challenge.setEmailHash(email == null ? null : hashing.hash("email", email));
-        challenge.setPhoneCodeHash(hashing.hash("otp-phone-" + challengeId, phoneCode));
-        challenge.setEmailCodeHash(emailCode == null ? null : hashing.hash("otp-email-" + challengeId, emailCode));
+        challenge.setEmailHash(hashing.hash("email", email));
+        challenge.setPhoneCodeHash(hashing.hash("otp-phone-" + challengeId, otpCode));
+        challenge.setEmailCodeHash(channel == VerificationChannel.EMAIL ? hashing.hash("otp-email-" + challengeId, otpCode) : null);
+        challenge.setVerificationChannel(channel);
         challenge.setExpiresAt(Instant.now().plusSeconds(codeTtlSeconds));
         challenges.save(challenge);
 
         long minutes = Math.max(1, (codeTtlSeconds + 59) / 60);
-        delivery.sendPhoneCode(phone, phoneCode, minutes);
-        if (email != null) delivery.sendEmailCode(email, emailCode, minutes);
+        if (channel == VerificationChannel.PHONE) delivery.sendPhoneCode(phone, otpCode, minutes);
+        else delivery.sendEmailCode(email, otpCode, minutes);
         Set<String> channels = new LinkedHashSet<>();
-        channels.add("PHONE");
-        if (email != null) channels.add("EMAIL");
+        channels.add(channel.name());
         return new StartRegistrationVerificationResponse(challengeId, codeTtlSeconds, channels);
     }
 
@@ -77,8 +82,13 @@ public class RegistrationVerificationService {
         Instant now = Instant.now();
         if (challenge.getVerifiedAt() != null || challenge.getConsumedAt() != null || challenge.getExpiresAt().isBefore(now)
                 || challenge.getAttempts() >= maxAttempts) throw invalidCode();
-        boolean phoneMatches = hashing.matches(challenge.getPhoneCodeHash(), hashing.hash("otp-phone-" + challenge.getId(), request.phoneCode()));
-        boolean emailMatches = challenge.getEmailCodeHash() == null
+        VerificationChannel selectedChannel = challenge.getVerificationChannel();
+        boolean phoneRequired = selectedChannel == VerificationChannel.PHONE || selectedChannel == null;
+        boolean emailRequired = selectedChannel == VerificationChannel.EMAIL
+                || (selectedChannel == null && challenge.getEmailCodeHash() != null);
+        boolean phoneMatches = !phoneRequired
+                || hashing.matches(challenge.getPhoneCodeHash(), hashing.hash("otp-phone-" + challenge.getId(), request.phoneCode() == null ? "" : request.phoneCode()));
+        boolean emailMatches = !emailRequired
                 || hashing.matches(challenge.getEmailCodeHash(), hashing.hash("otp-email-" + challenge.getId(), request.emailCode() == null ? "" : request.emailCode()));
         if (!phoneMatches || !emailMatches) {
             challenge.setAttempts(challenge.getAttempts() + 1);
@@ -119,6 +129,18 @@ public class RegistrationVerificationService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
     private String normalizeEmail(String email) { return email == null || email.isBlank() ? null : email.trim().toLowerCase(Locale.ROOT); }
+    private VerificationChannel chooseChannel(VerificationChannel requested) {
+        if (requested == VerificationChannel.PHONE && delivery.isPhoneConfigured()) return requested;
+        if (requested == VerificationChannel.EMAIL && delivery.isEmailConfigured()) return requested;
+        if (requested != null) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "OTP_CHANNEL_UNAVAILABLE",
+                    requested == VerificationChannel.PHONE ? "Kênh SMS OTP chưa được cấu hình" : "Kênh email OTP chưa được cấu hình");
+        }
+        if (delivery.isEmailConfigured()) return VerificationChannel.EMAIL;
+        if (delivery.isPhoneConfigured()) return VerificationChannel.PHONE;
+        throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "OTP_DELIVERY_UNAVAILABLE",
+                "Chưa có kênh gửi OTP nào được cấu hình trên máy chủ");
+    }
     private ApiException invalidCode() { return new ApiException(HttpStatus.BAD_REQUEST, "OTP_INVALID", "Mã xác minh không đúng, đã hết hạn hoặc đã dùng"); }
     private ApiException invalidToken() { return new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_REQUIRED", "Phiên xác minh không hợp lệ hoặc đã hết hạn"); }
 }

@@ -18,7 +18,7 @@ export interface CurrentUser {
   points?: number;
   address?: string;
   citizenId?: string; // Số CCCD / CMND
-  gender?: 'Nam' | 'Nữ' | 'Khác' | string;
+  gender?: 'Nam' | 'Nữ' | 'Others' | string;
   dateOfBirth?: string; // Ngày sinh
 }
 

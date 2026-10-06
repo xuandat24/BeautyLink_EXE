@@ -14,6 +14,7 @@ public class OtpVerificationChallenge {
     @Column(name = "email_hash", length = 64) private String emailHash;
     @Column(name = "phone_code_hash", nullable = false, length = 64) private String phoneCodeHash;
     @Column(name = "email_code_hash", length = 64) private String emailCodeHash;
+    @Enumerated(EnumType.STRING) @Column(name = "verification_channel", length = 16) private DomainEnums.VerificationChannel verificationChannel;
     @Column(nullable = false) private int attempts;
     @Column(name = "expires_at", nullable = false) private Instant expiresAt;
     @Column(name = "verified_at") private Instant verifiedAt;
@@ -28,6 +29,7 @@ public class OtpVerificationChallenge {
     public String getEmailHash() { return emailHash; } public void setEmailHash(String emailHash) { this.emailHash = emailHash; }
     public String getPhoneCodeHash() { return phoneCodeHash; } public void setPhoneCodeHash(String phoneCodeHash) { this.phoneCodeHash = phoneCodeHash; }
     public String getEmailCodeHash() { return emailCodeHash; } public void setEmailCodeHash(String emailCodeHash) { this.emailCodeHash = emailCodeHash; }
+    public DomainEnums.VerificationChannel getVerificationChannel() { return verificationChannel; } public void setVerificationChannel(DomainEnums.VerificationChannel verificationChannel) { this.verificationChannel = verificationChannel; }
     public int getAttempts() { return attempts; } public void setAttempts(int attempts) { this.attempts = attempts; }
     public Instant getExpiresAt() { return expiresAt; } public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     public Instant getVerifiedAt() { return verifiedAt; } public void setVerifiedAt(Instant verifiedAt) { this.verifiedAt = verifiedAt; }

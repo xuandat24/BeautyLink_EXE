@@ -621,7 +621,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     >
                       <option value="Nam">Nam</option>
                       <option value="Nữ">Nữ</option>
-                      <option value="Khác">Khác</option>
+                      <option value="Others">Others</option>
                     </select>
                   ) : (
                     <div className="px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs sm:text-sm font-bold text-slate-900">

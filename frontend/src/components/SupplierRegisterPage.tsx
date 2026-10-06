@@ -132,7 +132,6 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [activeStep, setActiveStep] = useState<number>(1);
   const [verificationChallengeId, setVerificationChallengeId] = useState('');
-  const [phoneCode, setPhoneCode] = useState('');
   const [emailCode, setEmailCode] = useState('');
 
   const [formData, setFormData] = useState({
@@ -172,7 +171,6 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
     setFormData((prev) => ({ ...prev, [key]: value }));
     if (key === 'phone' || key === 'email') {
       setVerificationChallengeId('');
-      setPhoneCode('');
       setEmailCode('');
     }
   };
@@ -248,14 +246,13 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
       };
 
       if (!verificationChallengeId) {
-        const challenge = await beautyApi.startRegistrationVerification({ phone: cleanPhone, email: formData.email.trim() });
+        const challenge = await beautyApi.startRegistrationVerification({ phone: cleanPhone, email: formData.email.trim(), channel: 'EMAIL' });
         setVerificationChallengeId(challenge.challengeId);
-        setError('Mã OTP đã được gửi đến số điện thoại và email. Vui lòng nhập đủ hai mã để tiếp tục.');
+        setError('Mã OTP đã được gửi đến email. Vui lòng nhập mã để tiếp tục.');
         return;
       }
       const verification = await beautyApi.confirmRegistrationVerification({
         challengeId: verificationChallengeId,
-        phoneCode,
         emailCode,
       });
       const res = await beautyApi.registerSupplier({ ...payload, verificationToken: verification.registrationToken });
@@ -391,7 +388,7 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Số điện thoại đăng nhập & nhận mã OTP *
+                    Số điện thoại đăng nhập *
                   </label>
                   <div className="relative">
                     <Phone className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
@@ -700,16 +697,10 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
             )}
 
             {verificationChallengeId && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
                 <div>
-                  <label className="mb-1 block text-xs font-black text-slate-700">OTP số điện thoại</label>
+                  <label className="mb-1 block text-xs font-black text-slate-700">OTP gửi qua email</label>
                   <input inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6}
-                    value={phoneCode} onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, ''))}
-                    placeholder="000000" className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-3 text-sm font-black tracking-[0.35em] outline-hidden focus:ring-2 focus:ring-emerald-200" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-black text-slate-700">OTP email</label>
-                  <input inputMode="numeric" required pattern="[0-9]{6}" maxLength={6}
                     value={emailCode} onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ''))}
                     placeholder="000000" className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-3 text-sm font-black tracking-[0.35em] outline-hidden focus:ring-2 focus:ring-emerald-200" />
                 </div>

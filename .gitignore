@@ -4,6 +4,7 @@ frontend/dist/
 frontend-legacy-20260925/
 frontend-node-modules-incomplete-20260925/
 backend/target/
+backend/.m2/
 backend/.env.properties
 backend/*.log
 .env

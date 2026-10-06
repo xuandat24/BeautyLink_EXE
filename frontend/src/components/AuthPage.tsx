@@ -86,6 +86,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | ''>('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [verificationChannel, setVerificationChannel] = useState<'PHONE' | 'EMAIL'>('EMAIL');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [rememberMe, setRememberMe] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
@@ -94,6 +97,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [verificationChallengeId, setVerificationChallengeId] = useState('');
   const [phoneCode, setPhoneCode] = useState('');
   const [emailCode, setEmailCode] = useState('');
+
+  const resetVerification = () => {
+    setVerificationChallengeId('');
+    setPhoneCode('');
+    setEmailCode('');
+  };
+
+  const passwordStrength = [
+    password.length >= 12,
+    /[a-z]/.test(password),
+    /[A-Z]/.test(password),
+    /[0-9]/.test(password),
+    /[^A-Za-z0-9\s]/.test(password),
+  ].filter(Boolean).length;
 
   // Dynamic live booking ticker
   const [activeBookingIndex, setActiveBookingIndex] = useState(0);
@@ -116,6 +133,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       email,
       password,
       confirmPassword,
+      gender,
+      dateOfBirth,
+      verificationChannel,
     });
     if (!validation.success) {
       const errors = zodFieldErrors(validation.error);
@@ -146,7 +166,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         if (!verificationChallengeId) {
           const challenge = await beautyApi.startRegistrationVerification({
             phone: cleanPhone,
-            email: email.trim() || undefined,
+            email: email.trim(),
+            channel: verificationChannel,
           });
           setVerificationChallengeId(challenge.challengeId);
           setError('Mã OTP đã được gửi. Vui lòng nhập mã để xác minh quyền sở hữu liên hệ.');
@@ -154,21 +175,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         }
         const verification = await beautyApi.confirmRegistrationVerification({
           challengeId: verificationChallengeId,
-          phoneCode,
-          emailCode: email.trim() ? emailCode : undefined,
+          phoneCode: verificationChannel === 'PHONE' ? phoneCode : undefined,
+          emailCode: verificationChannel === 'EMAIL' ? emailCode : undefined,
         });
         const res = await beautyApi.register({
           fullName: fullName.trim(),
           phone: cleanPhone,
-          email: email.trim() || undefined,
+          email: email.trim(),
           password,
+          gender: gender as 'MALE' | 'FEMALE' | 'OTHER',
+          dateOfBirth,
           verificationToken: verification.registrationToken,
         });
         const mappedUser: CurrentUser = {
           id: res.user.id,
           name: res.user.fullName || res.user.name || fullName.trim(),
           phone: cleanPhone,
-          email: email.trim() || undefined,
+          email: email.trim(),
+          gender: gender === 'MALE' ? 'Nam' : gender === 'FEMALE' ? 'Nữ' : 'Others',
+          dateOfBirth,
           role: res.user.role || 'CUSTOMER',
           memberTier: 'Standard',
           loyaltyPoints: 100,
@@ -244,6 +269,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   onClick={() => {
                     setMode('login');
                     setError('');
+                    resetVerification();
                   }}
                   className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     mode === 'login'
@@ -260,6 +286,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   onClick={() => {
                     setMode('register');
                     setError('');
+                    resetVerification();
                   }}
                   className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     mode === 'register'
@@ -333,7 +360,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         type="text"
                         required
                         value={fullName}
-                        onChange={(e) => { setFullName(e.target.value); setFieldErrors((prev) => ({ ...prev, fullName: '' })); }}
+                        onChange={(e) => { setFullName(e.target.value.replace(/[^\p{L}\s]/gu, '')); setFieldErrors((prev) => ({ ...prev, fullName: '' })); }}
+                        onBlur={() => setFullName((value) => value.trim().replace(/\s+/g, ' '))}
                         minLength={2}
                         maxLength={120}
                         aria-invalid={Boolean(fieldErrors.fullName)}
@@ -347,21 +375,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 )}
 
                 {mode === 'register' && verificationChallengeId && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">OTP số điện thoại</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        {verificationChannel === 'PHONE' ? 'OTP gửi qua số điện thoại' : 'OTP gửi qua email'}
+                      </label>
                       <input inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6}
-                        value={phoneCode} onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, ''))}
+                        value={verificationChannel === 'PHONE' ? phoneCode : emailCode}
+                        onChange={(event) => verificationChannel === 'PHONE'
+                          ? setPhoneCode(event.target.value.replace(/\D/g, ''))
+                          : setEmailCode(event.target.value.replace(/\D/g, ''))}
                         className="w-full rounded-xl border border-emerald-200 px-3 py-2.5 text-xs font-bold tracking-[0.3em] outline-hidden focus:ring-2 focus:ring-emerald-200"
                         placeholder="000000" />
                     </div>
-                    {email.trim() && <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">OTP email</label>
-                      <input inputMode="numeric" required pattern="[0-9]{6}" maxLength={6}
-                        value={emailCode} onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ''))}
-                        className="w-full rounded-xl border border-emerald-200 px-3 py-2.5 text-xs font-bold tracking-[0.3em] outline-hidden focus:ring-2 focus:ring-emerald-200"
-                        placeholder="000000" />
-                    </div>}
                   </div>
                 )}
 
@@ -375,8 +401,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       type="text"
                       required
                       value={identifier}
-                      onChange={(e) => { setIdentifier(e.target.value); setVerificationChallengeId(''); setPhoneCode(''); setEmailCode(''); setFieldErrors((prev) => ({ ...prev, identifier: '' })); }}
-                      maxLength={254}
+                      onChange={(e) => { setIdentifier(mode === 'register' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value); resetVerification(); setFieldErrors((prev) => ({ ...prev, identifier: '' })); }}
+                      maxLength={mode === 'register' ? 10 : 254}
+                      inputMode={mode === 'register' ? 'numeric' : 'email'}
                       aria-invalid={Boolean(fieldErrors.identifier)}
                       aria-describedby="identifier-error"
                       placeholder={mode === 'login' ? '0901234567 hoặc user@example.com' : '0901234567'}
@@ -389,14 +416,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 {mode === 'register' && (
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Email nhận hóa đơn & voucher <span className="text-slate-400 font-normal">(Không bắt buộc)</span>
+                      Email nhận mã OTP, hóa đơn & voucher
                     </label>
                     <div className="relative">
                       <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                       <input
                         type="email"
+                        required
                         value={email}
-                        onChange={(e) => { setEmail(e.target.value); setVerificationChallengeId(''); setPhoneCode(''); setEmailCode(''); setFieldErrors((prev) => ({ ...prev, email: '' })); }}
+                        onChange={(e) => { setEmail(e.target.value); resetVerification(); setFieldErrors((prev) => ({ ...prev, email: '' })); }}
+                        onBlur={() => setEmail((value) => value.trim().toLowerCase())}
                         maxLength={254}
                         aria-invalid={Boolean(fieldErrors.email)}
                         aria-describedby="email-error"
@@ -405,6 +434,46 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       />
                     </div>
                     <FieldError id="email-error" message={fieldErrors.email} />
+                  </div>
+                )}
+
+                {mode === 'register' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Giới tính</label>
+                      <select required value={gender}
+                        onChange={(event) => { setGender(event.target.value as typeof gender); setFieldErrors((prev) => ({ ...prev, gender: '' })); }}
+                        aria-invalid={Boolean(fieldErrors.gender)} aria-describedby="gender-error"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium bg-white">
+                        <option value="">Chọn giới tính</option>
+                        <option value="MALE">Nam</option>
+                        <option value="FEMALE">Nữ</option>
+                        <option value="OTHER">Others</option>
+                      </select>
+                      <FieldError id="gender-error" message={fieldErrors.gender} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Ngày sinh</label>
+                      <input type="date" required value={dateOfBirth} min="1900-01-01"
+                        max={new Date().toISOString().slice(0, 10)}
+                        onChange={(event) => { setDateOfBirth(event.target.value); setFieldErrors((prev) => ({ ...prev, dateOfBirth: '' })); }}
+                        aria-invalid={Boolean(fieldErrors.dateOfBirth)} aria-describedby="dateOfBirth-error"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium bg-white" />
+                      <FieldError id="dateOfBirth-error" message={fieldErrors.dateOfBirth} />
+                    </div>
+                  </div>
+                )}
+
+                {mode === 'register' && !verificationChallengeId && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Nhận mã OTP qua</label>
+                    <select required value={verificationChannel}
+                      onChange={(event) => { setVerificationChannel(event.target.value as 'PHONE' | 'EMAIL'); resetVerification(); }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium bg-white">
+                      <option value="EMAIL">Email (Gmail)</option>
+                      <option value="PHONE">Tin nhắn SMS</option>
+                    </select>
+                    <FieldError id="verificationChannel-error" message={fieldErrors.verificationChannel} />
                   </div>
                 )}
 
@@ -428,7 +497,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       required
                       value={password}
                       onChange={(e) => { setPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, password: '' })); }}
-                      minLength={8}
+                      minLength={mode === 'register' ? 12 : 1}
                       maxLength={72}
                       aria-invalid={Boolean(fieldErrors.password)}
                       aria-describedby="password-error"
@@ -444,6 +513,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </button>
                   </div>
                   <FieldError id="password-error" message={fieldErrors.password} />
+                  {mode === 'register' && password && (
+                    <div className="mt-1.5" aria-live="polite">
+                      <div className="grid grid-cols-5 gap-1">
+                        {[1, 2, 3, 4, 5].map((level) => (
+                          <span key={level} className={`h-1 rounded-full ${passwordStrength >= level ? (passwordStrength === 5 ? 'bg-emerald-500' : 'bg-amber-400') : 'bg-slate-200'}`} />
+                        ))}
+                      </div>
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        {passwordStrength === 5 ? 'Mật khẩu mạnh' : 'Cần ít nhất 12 ký tự, chữ hoa, chữ thường, số và ký tự đặc biệt'}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {mode === 'register' && (
@@ -458,7 +539,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         required
                         value={confirmPassword}
                         onChange={(e) => { setConfirmPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, confirmPassword: '' })); }}
-                        minLength={8}
+                        minLength={12}
                         maxLength={72}
                         aria-invalid={Boolean(fieldErrors.confirmPassword)}
                         aria-describedby="confirmPassword-error"

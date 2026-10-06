@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.*;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.example.backend.model.DomainEnums.*;
@@ -23,11 +24,16 @@ public class AuthService {
         String phone = normalizePhone(request.phone());
         verification.consume(request.verificationToken(), phone, request.email());
         if (users.existsByPhone(phone)) throw registrationConflict();
-        if (request.email() != null && !request.email().isBlank() && users.existsByEmailIgnoreCase(request.email().trim())) throw registrationConflict();
-        UserAccount user = new UserAccount(); user.setFullName(request.fullName().trim()); user.setPhone(phone);
-        user.setEmail(request.email() == null || request.email().isBlank() ? null : request.email().trim().toLowerCase());
+        if (users.existsByEmailIgnoreCase(request.email().trim())) throw registrationConflict();
+        if (request.dateOfBirth().getYear() < 1900) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_BIRTH_DATE", "Năm sinh phải gồm 4 chữ số và từ năm 1900 trở đi");
+        }
+        UserAccount user = new UserAccount(); user.setFullName(request.fullName().trim().replaceAll("\\s+", " ")); user.setPhone(phone);
+        user.setEmail(request.email().trim().toLowerCase());
+        user.setGender(request.gender()); user.setDateOfBirth(request.dateOfBirth());
         user.setPasswordHash(encoder.encode(request.password())); user.setRole(Role.CUSTOMER); user.setStatus(AccountStatus.ACTIVE);
-        return response(users.save(user));
+        try { return response(users.saveAndFlush(user)); }
+        catch (DataIntegrityViolationException ex) { throw registrationConflict(); }
     }
     public AuthResponse login(LoginRequest request) {
         String identifier = request.identifier().trim();
@@ -38,7 +44,7 @@ public class AuthService {
         return response(user);
     }
     public AuthResponse response(UserAccount user) { return new AuthResponse(jwt.createToken(user), "Bearer", jwt.getExpirationMs(), toUser(user)); }
-    public UserResponse toUser(UserAccount u) { return new UserResponse(u.getId(), u.getFullName(), u.getPhone(), u.getEmail(), u.getRole(), u.getLoyaltyPoints()); }
+    public UserResponse toUser(UserAccount u) { return new UserResponse(u.getId(), u.getFullName(), u.getPhone(), u.getEmail(), u.getGender(), u.getDateOfBirth(), u.getRole(), u.getLoyaltyPoints()); }
     public static String normalizePhone(String value) { return value == null ? "" : value.replaceAll("[\\s.-]", ""); }
     public static ApiException registrationConflict() { return new ApiException(HttpStatus.CONFLICT, "REGISTRATION_CONFLICT", "Không thể đăng ký với thông tin đã cung cấp. Hãy đăng nhập hoặc sử dụng quy trình khôi phục tài khoản"); }
 }

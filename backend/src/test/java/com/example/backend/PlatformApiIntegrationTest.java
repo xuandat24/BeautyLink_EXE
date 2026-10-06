@@ -133,7 +133,7 @@ class PlatformApiIntegrationTest {
     @Test
     void customerCanRegisterAndUseProtectedProfileEndpoint() throws Exception {
         String registerBody = """
-                {"fullName":"Nguyen An","phone":"0912345678","email":"an@example.com","password":"StrongPass123!","verificationToken":"verified-test-token"}
+                {"fullName":"Nguyen An","phone":"0912345678","email":"an@example.com","password":"StrongPass123!","gender":"MALE","dateOfBirth":"1995-06-15","verificationToken":"verified-test-token"}
                 """;
 
         String response = mvc.perform(post("/api/v1/auth/register")
@@ -221,7 +221,7 @@ class PlatformApiIntegrationTest {
         mvc.perform(post("/api/v1/auth/register")
                         .with(request -> { request.setRemoteAddr("198.51.100.78"); return request; })
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"fullName\":\"Duplicate User\",\"phone\":\"0900000001\",\"email\":\"unused@example.com\",\"password\":\"StrongPass123!\",\"verificationToken\":\"verified-test-token\"}"))
+                        .content("{\"fullName\":\"Duplicate User\",\"phone\":\"0900000001\",\"email\":\"unused@example.com\",\"password\":\"StrongPass123!\",\"gender\":\"OTHER\",\"dateOfBirth\":\"1995-06-15\",\"verificationToken\":\"verified-test-token\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code", is("REGISTRATION_CONFLICT")))
                 .andExpect(content().string(not(containsString("PHONE_EXISTS"))));

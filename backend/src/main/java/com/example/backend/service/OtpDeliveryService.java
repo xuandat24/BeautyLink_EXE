@@ -41,7 +41,7 @@ public class OtpDeliveryService {
     }
 
     public void sendPhoneCode(String phone, String code, long expiresMinutes) {
-        if (!StringUtils.hasText(twilioAccountSid) || !StringUtils.hasText(twilioAuthToken) || !StringUtils.hasText(twilioFromNumber)) {
+        if (!isPhoneConfigured()) {
             throw unavailable("Kênh SMS OTP chưa được cấu hình");
         }
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
@@ -62,7 +62,7 @@ public class OtpDeliveryService {
 
     public void sendEmailCode(String email, String code, long expiresMinutes) {
         JavaMailSender sender = mailSender.getIfAvailable();
-        if (sender == null || !StringUtils.hasText(mailFrom)) throw unavailable("Kênh email OTP chưa được cấu hình");
+        if (!isEmailConfigured()) throw unavailable("Kênh email OTP chưa được cấu hình");
         try {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(mailFrom);
@@ -73,6 +73,15 @@ public class OtpDeliveryService {
         } catch (RuntimeException ex) {
             throw unavailable("Không thể gửi email OTP. Vui lòng thử lại sau");
         }
+    }
+
+    public boolean isPhoneConfigured() {
+        return StringUtils.hasText(twilioAccountSid) && StringUtils.hasText(twilioAuthToken)
+                && StringUtils.hasText(twilioFromNumber);
+    }
+
+    public boolean isEmailConfigured() {
+        return mailSender.getIfAvailable() != null && StringUtils.hasText(mailFrom);
     }
 
     private String toE164(String phone) {

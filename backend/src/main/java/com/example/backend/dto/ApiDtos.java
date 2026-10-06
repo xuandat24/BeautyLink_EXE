@@ -12,16 +12,20 @@ public final class ApiDtos {
     private ApiDtos() {}
 
     public record RegisterRequest(
-            @NotBlank(message = "Họ tên không được để trống") @Size(min = 2, max = 120, message = "Họ tên phải có từ 2 đến 120 ký tự") String fullName,
-            @NotBlank(message = "Số điện thoại không được để trống") @Pattern(regexp = "^(0|\\+84)(3|5|7|8|9)[0-9]{8}$", message = "Số điện thoại Việt Nam không hợp lệ") String phone,
-            @Email(message = "Email không đúng định dạng") @Size(max = 254, message = "Email tối đa 254 ký tự") String email,
-            @NotBlank(message = "Mật khẩu không được để trống") @Size(min = 8, max = 72, message = "Mật khẩu phải có từ 8 đến 72 ký tự")
-            @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*[0-9]).+$", message = "Mật khẩu phải có ít nhất một chữ cái và một chữ số") String password,
-            @NotBlank(message = "Bạn cần xác minh số điện thoại và email trước khi đăng ký") @Size(max = 120) String verificationToken) {}
+            @NotBlank(message = "Họ tên không được để trống") @Size(min = 2, max = 120, message = "Họ tên phải có từ 2 đến 120 ký tự")
+            @Pattern(regexp = "^\\s*[\\p{L}]+(?:\\s+[\\p{L}]+)*\\s*$", message = "Họ tên chỉ được chứa chữ cái và khoảng trắng") String fullName,
+            @NotBlank(message = "Số điện thoại không được để trống") @Pattern(regexp = "^0(?:3|8|9)[0-9]{8}$", message = "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 08 hoặc 09") String phone,
+            @NotBlank(message = "Email không được để trống") @Email(message = "Email không đúng định dạng") @Size(max = 254, message = "Email tối đa 254 ký tự") String email,
+            @NotBlank(message = "Mật khẩu không được để trống") @Size(min = 12, max = 72, message = "Mật khẩu phải có từ 12 đến 72 ký tự")
+            @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\\s])\\S+$", message = "Mật khẩu phải có chữ hoa, chữ thường, chữ số và ký tự đặc biệt") String password,
+            @NotNull(message = "Vui lòng chọn giới tính") Gender gender,
+            @NotNull(message = "Ngày sinh không được để trống") @Past(message = "Ngày sinh phải là một ngày hợp lệ trong quá khứ") LocalDate dateOfBirth,
+            @NotBlank(message = "Bạn cần xác minh số điện thoại hoặc email trước khi đăng ký") @Size(max = 120) String verificationToken) {}
     public record LoginRequest(
             @NotBlank(message = "Số điện thoại hoặc email không được để trống") @Size(max = 254, message = "Thông tin đăng nhập quá dài") String identifier,
             @NotBlank(message = "Mật khẩu không được để trống") @Size(max = 72, message = "Mật khẩu tối đa 72 ký tự") String password) {}
-    public record UserResponse(Long id, String fullName, String phone, String email, Role role, int loyaltyPoints) {}
+    public record UserResponse(Long id, String fullName, String phone, String email, Gender gender,
+                               LocalDate dateOfBirth, Role role, int loyaltyPoints) {}
     public record AuthResponse(String accessToken, String tokenType, long expiresInMs, UserResponse user) {}
     public record SupplierRegistrationRequest(
             @NotBlank @Size(min = 2, max = 120) String ownerName,
@@ -42,12 +46,13 @@ public final class ApiDtos {
             @NotNull @DecimalMin("-90.0") @DecimalMax("90.0") Double latitude,
             @NotNull @DecimalMin("-180.0") @DecimalMax("180.0") Double longitude) {}
     public record StartRegistrationVerificationRequest(
-            @NotBlank @Pattern(regexp = "^(0|\\+84)(3|5|7|8|9)[0-9]{8}$", message = "Số điện thoại Việt Nam không hợp lệ") String phone,
-            @Email(message = "Email không đúng định dạng") @Size(max = 254) String email) {}
+            @NotBlank(message = "Số điện thoại không được để trống") @Pattern(regexp = "^0(?:3|8|9)[0-9]{8}$", message = "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 08 hoặc 09") String phone,
+            @NotBlank(message = "Email không được để trống") @Email(message = "Email không đúng định dạng") @Size(max = 254) String email,
+            VerificationChannel channel) {}
     public record StartRegistrationVerificationResponse(String challengeId, long expiresInSeconds, Set<String> requiredChannels) {}
     public record ConfirmRegistrationVerificationRequest(
             @NotBlank @Size(max = 36) String challengeId,
-            @NotBlank @Pattern(regexp = "^[0-9]{6}$", message = "Mã SMS phải gồm 6 chữ số") String phoneCode,
+            @Pattern(regexp = "^$|^[0-9]{6}$", message = "Mã SMS phải gồm 6 chữ số") String phoneCode,
             @Pattern(regexp = "^$|^[0-9]{6}$", message = "Mã email phải gồm 6 chữ số") String emailCode) {}
     public record ConfirmRegistrationVerificationResponse(String registrationToken, long expiresInSeconds) {}
     public record SupplierResponse(Long id, String name, String slug, String businessType, String description,
