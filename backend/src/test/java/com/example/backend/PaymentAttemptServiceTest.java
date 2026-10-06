@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.*;
+import org.springframework.data.domain.Pageable;
 
 import static com.example.backend.model.DomainEnums.*;
 import static com.example.backend.service.PaymentProviderAdapter.OutcomeStatus.*;
@@ -28,7 +29,7 @@ class PaymentAttemptServiceTest {
     @BeforeEach
     void setUp() {
         when(vnPay.provider()).thenReturn(PaymentProvider.VNPAY);
-        service = new PaymentAttemptService(payments, bookings, practitioners, List.of(vnPay));
+        service = new PaymentAttemptService(payments, bookings, practitioners, List.of(vnPay), 60, 120);
     }
 
     @Test
@@ -74,6 +75,20 @@ class PaymentAttemptServiceTest {
         assertEquals(PaymentTransactionStatus.EXPIRED, payment.getStatus());
         assertEquals(BookingStatus.CANCELLED, payment.getBooking().getStatus());
         assertTrue(payment.getBooking().isPaymentRetryAllowed());
+    }
+
+    @Test
+    void reconciliationSelectsMaturePendingAttemptsBeforeCheckoutExpiry() {
+        PaymentTransaction candidate = mock(PaymentTransaction.class);
+        when(candidate.getId()).thenReturn(71L);
+        when(payments.findReconciliationCandidates(eq(PaymentTransactionStatus.PENDING), any(Instant.class),
+                any(Instant.class), any(Pageable.class))).thenReturn(List.of(candidate));
+
+        assertEquals(List.of(71L), service.reconciliationCandidates());
+
+        verify(payments).findReconciliationCandidates(eq(PaymentTransactionStatus.PENDING),
+                any(Instant.class), any(Instant.class), any(Pageable.class));
+        verify(payments, never()).findByStatusAndExpiresAtBefore(any(), any());
     }
 
     private PaymentTransaction pending(PaymentOption option) {

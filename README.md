@@ -220,6 +220,8 @@ PAYOS_RECONCILIATION_INITIAL_DELAY_MS=60000
 FRONTEND_URL=http://localhost:5173
 PAYMENT_RECONCILIATION_MS=60000
 PAYMENT_RECONCILIATION_INITIAL_DELAY_MS=60000
+PAYMENT_RECONCILIATION_MIN_AGE_SECONDS=60
+PAYMENT_RECONCILIATION_MIN_INTERVAL_SECONDS=120
 VNPAY_TMN_CODE=your_vnpay_tmn_code
 VNPAY_HASH_SECRET=your_vnpay_hash_secret
 VNPAY_PAY_URL=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
@@ -233,7 +235,9 @@ VNPAY_SERVER_IP=your_backend_public_ip
 
 For production PayOS, create and verify a Payment Channel at `my.payos.vn`, connect the receiving bank account, then place that channel's `Client ID`, `API Key`, and `Checksum Key` in the deployment secret store. Set `PAYOS_WEBHOOK_URL` to the public HTTPS backend endpoint shown above. On startup, the backend confirms that webhook URL with PayOS; it never logs credentials, signatures, or the bank account number. Pending transactions are also reconciled directly with PayOS every 60 seconds so webhook delivery is not the only source of truth.
 
-For VNPAY, obtain production `TMN Code`, `Hash Secret`, PAY URL and QueryDr URL from VNPAY and store them only as deployment secrets. Register `https://your-api.example.com/api/v1/payments/vnpay/ipn` as the IPN URL and set `VNPAY_RETURN_URL` to the backend return endpoint shown above. The IPN is the only browser-independent callback allowed to update a transaction; it verifies HMAC-SHA512, checks merchant/reference/amount, and locks the database row before applying an idempotent transition. The browser return endpoint is display-only. If IPN delivery is delayed, the scheduler calls QueryDr before it expires/releases a booking slot. Use the production endpoints supplied by VNPAY when going live; the checked-in defaults are sandbox endpoints.
+For VNPAY, obtain production `TMN Code`, `Hash Secret`, PAY URL and QueryDr URL from VNPAY and store them only as deployment secrets. Register `https://your-api.example.com/api/v1/payments/vnpay/ipn` as the IPN URL and set `VNPAY_RETURN_URL` to the backend return endpoint shown above. The IPN is the only browser-independent callback allowed to update a transaction; it verifies HMAC-SHA512, checks merchant/reference/amount, and locks the database row before applying an idempotent transition. The browser return endpoint is display-only. If IPN delivery is delayed, QueryDr starts after 60 seconds and is rate-limited to one attempt per transaction every 120 seconds; a slot is released only after the provider reports a terminal failure/expiry. Use the production endpoints supplied by VNPAY when going live; the checked-in defaults are sandbox endpoints.
+
+The `prod` profile permits VNPAY to remain fully disabled when neither merchant credential is present, so staged deployments stay healthy. Once either production credential is supplied, startup becomes fail-closed: both credentials, non-sandbox HTTPS Pay/Query/Return/Frontend URLs, and a public `VNPAY_SERVER_IP` are required. This prevents production credentials from silently being paired with sandbox defaults. Railway production trusts its edge-provided `X-Real-IP` for the customer payment IP; other profiles ignore proxy headers unless `TRUST_PROXY_CLIENT_IP=true` is explicitly set.
 
 VNPAY and PayOS are independent, equal payment providers. The customer chooses one provider for an attempt and the backend never silently falls back to the other. A booking can keep multiple immutable attempts, while only one pending attempt is allowed at a time. A verified 50% payment sets `PARTIALLY_PAID`; only a verified 100% payment sets `PAID`.
 

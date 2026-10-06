@@ -8,6 +8,8 @@ import com.example.backend.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,15 +27,21 @@ public class PaymentAttemptService {
     private final BookingRepository bookings;
     private final PractitionerRepository practitioners;
     private final Map<PaymentProvider, PaymentProviderAdapter> providers;
+    private final long reconciliationMinAgeSeconds;
+    private final long reconciliationMinIntervalSeconds;
 
     public PaymentAttemptService(PaymentTransactionRepository payments, BookingRepository bookings,
-                                 PractitionerRepository practitioners, List<PaymentProviderAdapter> adapters) {
+                                 PractitionerRepository practitioners, List<PaymentProviderAdapter> adapters,
+                                 @Value("${app.payment.reconciliation-min-age-seconds:60}") long reconciliationMinAgeSeconds,
+                                 @Value("${app.payment.reconciliation-min-interval-seconds:120}") long reconciliationMinIntervalSeconds) {
         this.payments = payments;
         this.bookings = bookings;
         this.practitioners = practitioners;
         EnumMap<PaymentProvider, PaymentProviderAdapter> byProvider = new EnumMap<>(PaymentProvider.class);
         adapters.forEach(adapter -> byProvider.put(adapter.provider(), adapter));
         this.providers = Collections.unmodifiableMap(byProvider);
+        this.reconciliationMinAgeSeconds = Math.max(30, reconciliationMinAgeSeconds);
+        this.reconciliationMinIntervalSeconds = Math.max(60, reconciliationMinIntervalSeconds);
     }
 
     @Transactional
@@ -118,7 +126,10 @@ public class PaymentAttemptService {
 
     @Transactional(readOnly = true)
     public List<Long> reconciliationCandidates() {
-        return payments.findByStatusAndExpiresAtBefore(PaymentTransactionStatus.PENDING, Instant.now())
+        Instant now = Instant.now();
+        return payments.findReconciliationCandidates(PaymentTransactionStatus.PENDING,
+                        now.minusSeconds(reconciliationMinAgeSeconds),
+                        now.minusSeconds(reconciliationMinIntervalSeconds), PageRequest.of(0, 100))
                 .stream().map(PaymentTransaction::getId).toList();
     }
 

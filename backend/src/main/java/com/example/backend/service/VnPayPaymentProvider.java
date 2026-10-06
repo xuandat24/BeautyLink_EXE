@@ -63,7 +63,8 @@ public class VnPayPaymentProvider implements PaymentProviderAdapter {
     @Override public com.example.backend.model.DomainEnums.PaymentProvider provider() { return VNPAY; }
     @Override public boolean isConfigured() {
         return StringUtils.hasText(tmnCode) && StringUtils.hasText(hashSecret)
-                && StringUtils.hasText(payUrl) && StringUtils.hasText(returnUrl);
+                && StringUtils.hasText(payUrl) && StringUtils.hasText(returnUrl)
+                && StringUtils.hasText(queryUrl) && StringUtils.hasText(serverIp);
     }
 
     @Override

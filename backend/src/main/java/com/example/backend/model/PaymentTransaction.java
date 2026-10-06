@@ -9,6 +9,7 @@ import static com.example.backend.model.DomainEnums.*;
 @Table(name = "payment_transactions", indexes = {
         @Index(name = "idx_payment_booking_attempts_v2", columnList = "booking_id,created_at"),
         @Index(name = "idx_payment_status", columnList = "status"),
+        @Index(name = "idx_payment_reconciliation", columnList = "status,created_at,last_reconciled_at"),
         @Index(name = "idx_payment_provider_reference", columnList = "provider,merchant_reference")
 })
 public class PaymentTransaction {

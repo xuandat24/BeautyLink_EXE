@@ -15,7 +15,7 @@ public class PaymentReconciliationScheduler {
 
     @Scheduled(fixedDelayString = "${app.payment.reconciliation-ms:60000}",
             initialDelayString = "${app.payment.reconciliation-initial-delay-ms:60000}")
-    public void reconcileExpiredAttempts() {
+    public void reconcilePendingAttempts() {
         for (Long id : payments.reconciliationCandidates()) {
             try { payments.reconcileById(id); }
             catch (ApiException exception) { log.error("Payment reconciliation failed paymentId={} code={}", id, exception.getCode()); }
