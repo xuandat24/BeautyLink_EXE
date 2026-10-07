@@ -88,19 +88,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | ''>('');
   const [dateOfBirth, setDateOfBirth] = useState('');
-  const [verificationChannel, setVerificationChannel] = useState<'PHONE' | 'EMAIL'>('EMAIL');
+  const verificationChannel = 'EMAIL' as const;
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [rememberMe, setRememberMe] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [verificationChallengeId, setVerificationChallengeId] = useState('');
-  const [phoneCode, setPhoneCode] = useState('');
   const [emailCode, setEmailCode] = useState('');
 
   const resetVerification = () => {
     setVerificationChallengeId('');
-    setPhoneCode('');
     setEmailCode('');
   };
 
@@ -175,8 +173,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         }
         const verification = await beautyApi.confirmRegistrationVerification({
           challengeId: verificationChallengeId,
-          phoneCode: verificationChannel === 'PHONE' ? phoneCode : undefined,
-          emailCode: verificationChannel === 'EMAIL' ? emailCode : undefined,
+          emailCode,
         });
         const res = await beautyApi.register({
           fullName: fullName.trim(),
@@ -378,13 +375,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        {verificationChannel === 'PHONE' ? 'OTP gửi qua số điện thoại' : 'OTP gửi qua email'}
+                        OTP gửi qua email
                       </label>
                       <input inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6}
-                        value={verificationChannel === 'PHONE' ? phoneCode : emailCode}
-                        onChange={(event) => verificationChannel === 'PHONE'
-                          ? setPhoneCode(event.target.value.replace(/\D/g, ''))
-                          : setEmailCode(event.target.value.replace(/\D/g, ''))}
+                        value={emailCode}
+                        onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ''))}
                         className="w-full rounded-xl border border-emerald-200 px-3 py-2.5 text-xs font-bold tracking-[0.3em] outline-hidden focus:ring-2 focus:ring-emerald-200"
                         placeholder="000000" />
                     </div>
@@ -464,18 +459,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
                 )}
 
-                {mode === 'register' && !verificationChallengeId && (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Nhận mã OTP qua</label>
-                    <select required value={verificationChannel}
-                      onChange={(event) => { setVerificationChannel(event.target.value as 'PHONE' | 'EMAIL'); resetVerification(); }}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium bg-white">
-                      <option value="EMAIL">Email (Gmail)</option>
-                      <option value="PHONE">Tin nhắn SMS</option>
-                    </select>
-                    <FieldError id="verificationChannel-error" message={fieldErrors.verificationChannel} />
-                  </div>
-                )}
 
                 <div>
                   <div className="flex items-center justify-between mb-1">

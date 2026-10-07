@@ -53,7 +53,12 @@ public class RegistrationVerificationService {
         String email = normalizeEmail(request.email());
         abuseGuard.checkVerificationTarget(phone, email);
         if (users.existsByPhone(phone) || users.existsByEmailIgnoreCase(email)) throw AuthService.registrationConflict();
-        VerificationChannel channel = chooseChannel(request.channel());
+        if (request.channel() == VerificationChannel.PHONE) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "OTP_EMAIL_ONLY", "BeautyLink chỉ hỗ trợ gửi mã OTP qua email");
+        }
+        if (!delivery.isEmailConfigured()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "OTP_DELIVERY_UNAVAILABLE", "Kênh email OTP chưa được cấu hình");
+        }
         String challengeId = UUID.randomUUID().toString();
         String otpCode = code();
         OtpVerificationChallenge challenge = new OtpVerificationChallenge();
@@ -61,16 +66,15 @@ public class RegistrationVerificationService {
         challenge.setPhoneHash(hashing.hash("phone", phone));
         challenge.setEmailHash(hashing.hash("email", email));
         challenge.setPhoneCodeHash(hashing.hash("otp-phone-" + challengeId, otpCode));
-        challenge.setEmailCodeHash(channel == VerificationChannel.EMAIL ? hashing.hash("otp-email-" + challengeId, otpCode) : null);
-        challenge.setVerificationChannel(channel);
+        challenge.setEmailCodeHash(hashing.hash("otp-email-" + challengeId, otpCode));
+        challenge.setVerificationChannel(VerificationChannel.EMAIL);
         challenge.setExpiresAt(Instant.now().plusSeconds(codeTtlSeconds));
         challenges.save(challenge);
 
         long minutes = Math.max(1, (codeTtlSeconds + 59) / 60);
-        if (channel == VerificationChannel.PHONE) delivery.sendPhoneCode(phone, otpCode, minutes);
-        else delivery.sendEmailCode(email, otpCode, minutes);
+        delivery.sendEmailCode(email, otpCode, minutes);
         Set<String> channels = new LinkedHashSet<>();
-        channels.add(channel.name());
+        channels.add(VerificationChannel.EMAIL.name());
         return new StartRegistrationVerificationResponse(challengeId, codeTtlSeconds, channels);
     }
 
@@ -82,15 +86,9 @@ public class RegistrationVerificationService {
         Instant now = Instant.now();
         if (challenge.getVerifiedAt() != null || challenge.getConsumedAt() != null || challenge.getExpiresAt().isBefore(now)
                 || challenge.getAttempts() >= maxAttempts) throw invalidCode();
-        VerificationChannel selectedChannel = challenge.getVerificationChannel();
-        boolean phoneRequired = selectedChannel == VerificationChannel.PHONE || selectedChannel == null;
-        boolean emailRequired = selectedChannel == VerificationChannel.EMAIL
-                || (selectedChannel == null && challenge.getEmailCodeHash() != null);
-        boolean phoneMatches = !phoneRequired
-                || hashing.matches(challenge.getPhoneCodeHash(), hashing.hash("otp-phone-" + challenge.getId(), request.phoneCode() == null ? "" : request.phoneCode()));
-        boolean emailMatches = !emailRequired
-                || hashing.matches(challenge.getEmailCodeHash(), hashing.hash("otp-email-" + challenge.getId(), request.emailCode() == null ? "" : request.emailCode()));
-        if (!phoneMatches || !emailMatches) {
+        boolean emailMatches = challenge.getVerificationChannel() == VerificationChannel.EMAIL
+                && hashing.matches(challenge.getEmailCodeHash(), hashing.hash("otp-email-" + challenge.getId(), request.emailCode() == null ? "" : request.emailCode()));
+        if (!emailMatches) {
             challenge.setAttempts(challenge.getAttempts() + 1);
             throw invalidCode();
         }
@@ -129,18 +127,6 @@ public class RegistrationVerificationService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
     private String normalizeEmail(String email) { return email == null || email.isBlank() ? null : email.trim().toLowerCase(Locale.ROOT); }
-    private VerificationChannel chooseChannel(VerificationChannel requested) {
-        if (requested == VerificationChannel.PHONE && delivery.isPhoneConfigured()) return requested;
-        if (requested == VerificationChannel.EMAIL && delivery.isEmailConfigured()) return requested;
-        if (requested != null) {
-            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "OTP_CHANNEL_UNAVAILABLE",
-                    requested == VerificationChannel.PHONE ? "Kênh SMS OTP chưa được cấu hình" : "Kênh email OTP chưa được cấu hình");
-        }
-        if (delivery.isEmailConfigured()) return VerificationChannel.EMAIL;
-        if (delivery.isPhoneConfigured()) return VerificationChannel.PHONE;
-        throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "OTP_DELIVERY_UNAVAILABLE",
-                "Chưa có kênh gửi OTP nào được cấu hình trên máy chủ");
-    }
     private ApiException invalidCode() { return new ApiException(HttpStatus.BAD_REQUEST, "OTP_INVALID", "Mã xác minh không đúng, đã hết hạn hoặc đã dùng"); }
     private ApiException invalidToken() { return new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_REQUIRED", "Phiên xác minh không hợp lệ hoặc đã hết hạn"); }
 }

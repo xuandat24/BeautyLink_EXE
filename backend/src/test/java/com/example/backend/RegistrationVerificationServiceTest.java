@@ -37,7 +37,6 @@ class RegistrationVerificationServiceTest {
         when(challenges.save(saved.capture())).thenAnswer(invocation -> invocation.getArgument(0));
 
         var started = service.start(new StartRegistrationVerificationRequest("0912345678", "Owner@Example.com", com.example.backend.model.DomainEnums.VerificationChannel.EMAIL));
-        verify(delivery, never()).sendPhoneCode(anyString(), anyString(), anyLong());
         verify(delivery).sendEmailCode(eq("owner@example.com"), emailCode.capture(), anyLong());
         OtpVerificationChallenge challenge = saved.getValue();
         when(challenges.findLockedById(started.challengeId())).thenReturn(Optional.of(challenge));
@@ -59,12 +58,12 @@ class RegistrationVerificationServiceTest {
                 challenges, hashing, delivery, users, abuseGuard, 600, 900, 5);
         ArgumentCaptor<OtpVerificationChallenge> saved = ArgumentCaptor.forClass(OtpVerificationChallenge.class);
         when(challenges.save(saved.capture())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(delivery.isPhoneConfigured()).thenReturn(true);
-        var started = service.start(new StartRegistrationVerificationRequest("0912345678", "owner@example.com", com.example.backend.model.DomainEnums.VerificationChannel.PHONE));
+        when(delivery.isEmailConfigured()).thenReturn(true);
+        var started = service.start(new StartRegistrationVerificationRequest("0912345678", "owner@example.com", com.example.backend.model.DomainEnums.VerificationChannel.EMAIL));
         when(challenges.findLockedById(started.challengeId())).thenReturn(Optional.of(saved.getValue()));
 
         ApiException exception = assertThrows(ApiException.class,
-                () -> service.confirm(new ConfirmRegistrationVerificationRequest(started.challengeId(), "000000", null), "198.51.100.11"));
+                () -> service.confirm(new ConfirmRegistrationVerificationRequest(started.challengeId(), null, "000000"), "198.51.100.11"));
 
         assertEquals("OTP_INVALID", exception.getCode());
         assertEquals(1, saved.getValue().getAttempts());
@@ -76,13 +75,25 @@ class RegistrationVerificationServiceTest {
         OtpHashingService hashing = new OtpHashingService("");
         RegistrationVerificationService service = new RegistrationVerificationService(
                 challenges, hashing, delivery, users, abuseGuard, 600, 900, 5);
-        when(delivery.isPhoneConfigured()).thenReturn(true);
+        when(delivery.isEmailConfigured()).thenReturn(true);
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> service.start(new StartRegistrationVerificationRequest("0912345678", "owner@example.com", com.example.backend.model.DomainEnums.VerificationChannel.EMAIL)));
+
+        assertEquals("OTP_NOT_CONFIGURED", exception.getCode());
+        verify(delivery, never()).sendEmailCode(anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void phoneOtpRequestsAreRejectedWithoutAttemptingDelivery() {
+        OtpHashingService hashing = new OtpHashingService("test-otp-pepper-that-is-longer-than-thirty-two-bytes");
+        RegistrationVerificationService service = new RegistrationVerificationService(
+                challenges, hashing, delivery, users, abuseGuard, 600, 900, 5);
 
         ApiException exception = assertThrows(ApiException.class,
                 () -> service.start(new StartRegistrationVerificationRequest("0912345678", "owner@example.com", com.example.backend.model.DomainEnums.VerificationChannel.PHONE)));
 
-        assertEquals("OTP_NOT_CONFIGURED", exception.getCode());
-        verify(delivery, never()).sendPhoneCode(anyString(), anyString(), anyLong());
+        assertEquals("OTP_EMAIL_ONLY", exception.getCode());
         verify(delivery, never()).sendEmailCode(anyString(), anyString(), anyLong());
     }
 }

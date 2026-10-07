@@ -10,10 +10,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import static com.example.backend.model.DomainEnums.*;
 
 @Service
 public class AuthService {
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private final UserAccountRepository users; private final PasswordEncoder encoder; private final JwtService jwt; private final RegistrationVerificationService verification;
     public AuthService(UserAccountRepository users, PasswordEncoder encoder, JwtService jwt, RegistrationVerificationService verification) {
         this.users = users; this.encoder = encoder; this.jwt = jwt; this.verification = verification;
@@ -36,11 +39,19 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         String identifier = request.identifier().trim();
         UserAccount user = identifier.contains("@") ? users.findByEmailIgnoreCase(identifier).orElse(null) : users.findByPhone(normalizePhone(identifier)).orElse(null);
-        if (user == null || user.getStatus() != AccountStatus.ACTIVE || !hasValidBcryptHash(user.getPasswordHash())
-                || !encoder.matches(request.password(), user.getPasswordHash())) {
+        if (user == null || user.getStatus() != AccountStatus.ACTIVE) {
             throw invalidCredentials();
         }
-        return response(user);
+        if (!hasValidBcryptHash(user.getPasswordHash())) {
+            log.warn("Login rejected because accountId={} has an invalid stored password hash", user.getId());
+            throw invalidCredentials();
+        }
+        try {
+            if (encoder.matches(request.password(), user.getPasswordHash())) return response(user);
+        } catch (IllegalArgumentException ex) {
+            log.warn("Login rejected because accountId={} has an unreadable stored password hash", user.getId());
+        }
+        throw invalidCredentials();
     }
     public AuthResponse response(UserAccount user) { return new AuthResponse(jwt.createToken(user), "Bearer", jwt.getExpirationMs(), toUser(user)); }
     public UserResponse toUser(UserAccount u) { return new UserResponse(u.getId(), u.getFullName(), u.getPhone(), u.getEmail(), u.getGender(), u.getDateOfBirth(), u.getRole(), u.getLoyaltyPoints()); }
