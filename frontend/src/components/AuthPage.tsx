@@ -33,6 +33,7 @@ interface AuthPageProps {
   onBackToHome: () => void;
   onSuccess: (user: CurrentUser) => void;
   onNavigateSupplierRegister?: () => void;
+  onModeChange?: (mode: 'login' | 'register') => void;
 }
 
 const LIVE_BOOKINGS = [
@@ -79,6 +80,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   onBackToHome,
   onSuccess,
   onNavigateSupplierRegister,
+  onModeChange,
 }) => {
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [fullName, setFullName] = useState<string>('');
@@ -101,6 +103,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setVerificationChallengeId('');
     setEmailCode('');
   };
+
+  useEffect(() => {
+    setMode(initialMode);
+    setError('');
+    setFieldErrors({});
+    setVerificationChallengeId('');
+    setEmailCode('');
+  }, [initialMode]);
 
   const passwordStrength = [
     password.length >= 12,
@@ -263,12 +273,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               <div className="flex p-1 bg-pink-50/90 rounded-2xl mb-6 gap-1 border border-pink-200/70">
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => {
                     setMode('login');
                     setError('');
                     resetVerification();
+                    onModeChange?.('login');
                   }}
-                  className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer disabled:cursor-wait disabled:opacity-60 flex items-center justify-center gap-1.5 ${
                     mode === 'login'
                       ? 'bg-white text-[#be185d] shadow-sm border border-pink-200/60'
                       : 'text-slate-500 hover:text-slate-900'
@@ -280,12 +292,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => {
                     setMode('register');
                     setError('');
                     resetVerification();
+                    onModeChange?.('register');
                   }}
-                  className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer disabled:cursor-wait disabled:opacity-60 flex items-center justify-center gap-1.5 ${
                     mode === 'register'
                       ? 'bg-white text-[#be185d] shadow-sm border border-pink-200/60'
                       : 'text-slate-500 hover:text-slate-900'
@@ -559,6 +573,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
+                  aria-busy={loading}
                   className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-pink-500 via-[#db2777] to-[#be185d] text-white text-xs sm:text-sm font-black shadow-lg shadow-pink-500/25 hover:opacity-95 hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {loading ? (

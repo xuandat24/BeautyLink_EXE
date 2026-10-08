@@ -44,7 +44,7 @@ import {
   CurrentUser,
   SearchFilters,
 } from './types';
-import { beautyApi, DEFAULT_CATEGORIES } from './services/beautyApi';
+import { beautyApi, DEFAULT_CATEGORIES, getAccessToken } from './services/beautyApi';
 import { updateMetaTags } from './lib/seo';
 import { CheckCircle2 } from 'lucide-react';
 
@@ -366,8 +366,20 @@ export default function App() {
     if (!paymentResult || !['success', 'cancelled'].includes(paymentResult)) return;
 
     const orderCode = params.get('orderCode') || sessionStorage.getItem('beautylink_payos_order_code');
-    window.history.replaceState(null, '', `${window.location.pathname}#bookings`);
-    setCurrentPage('bookings');
+    const hasAuthenticatedSession = Boolean(currentUser && getAccessToken());
+    const destination = hasAuthenticatedSession ? 'bookings' : 'login';
+    window.history.replaceState(null, '', `${window.location.pathname}#${destination}`);
+    setCurrentPage(destination);
+
+    if (!hasAuthenticatedSession) {
+      setReturnTarget('bookings');
+      showToast(
+        paymentResult === 'success'
+          ? 'Thanh toán đã quay về BeautyLink. Vui lòng đăng nhập để xem trạng thái lịch hẹn.'
+          : 'Bạn đã hủy thanh toán PayOS. Vui lòng đăng nhập để tiếp tục.'
+      );
+      return;
+    }
 
     if (paymentResult === 'cancelled') {
       showToast('Bạn đã hủy thanh toán PayOS. Hệ thống sẽ đối soát trạng thái trên máy chủ.');
@@ -406,7 +418,7 @@ export default function App() {
     return () => {
       stopped = true;
     };
-  }, [showToast]);
+  }, [currentUser, showToast]);
 
   // Geolocation state
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -706,6 +718,7 @@ export default function App() {
           onBackToHome={handleBackToHome}
           onSuccess={handleUserSuccess}
           onNavigateSupplierRegister={() => navigateTo('supplier-register')}
+          onModeChange={(mode) => navigateTo(mode, returnTarget)}
         />
         {toastMessage && (
           <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
