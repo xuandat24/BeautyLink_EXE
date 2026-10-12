@@ -53,16 +53,8 @@ OTP_PEPPER=<a-third-independent-random-secret>
 RATE_LIMIT_BACKEND=redis
 REDIS_URL=${{Redis.REDIS_URL}}
 REDIS_TIMEOUT=2s
-SPRING_MAIL_HOST=<smtp-host>
-SPRING_MAIL_PORT=587
-SPRING_MAIL_USERNAME=<smtp-username>
-SPRING_MAIL_PASSWORD=<smtp-password>
-SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
-SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
-OTP_MAIL_FROM=<verified-sender-address>
-TWILIO_ACCOUNT_SID=<twilio-account-sid>
-TWILIO_AUTH_TOKEN=<twilio-auth-token>
-TWILIO_FROM_NUMBER=<twilio-sender-number>
+RESEND_API_KEY=<resend-api-key>
+OTP_MAIL_FROM=BeautyLink <otp@YOUR-VERIFIED-DOMAIN>
 LOGIN_MAX_PER_IDENTIFIER=8
 LOGIN_MAX_PER_IP=20
 LOGIN_RATE_WINDOW_SECONDS=900
@@ -108,7 +100,7 @@ DEMO_DATA_ENABLED=false
 SUPPLIER_AUTO_VERIFY=false
 ```
 
-Add a private Redis service to Railway and keep `RATE_LIMIT_BACKEND=redis`; production fails closed if Redis cannot enforce a limit. Registration sends real SMS through Twilio and email through SMTP. Missing or rejected provider credentials produce a safe `503`, and no account/token is created.
+Add a private Redis service to Railway and keep `RATE_LIMIT_BACKEND=redis` when running multiple replicas. Registration OTP is email-only and is sent through Resend over HTTPS port 443. Missing or rejected Resend credentials produce a safe `503`; no account or registration token is created. SMTP, Gmail App Password, Twilio and Zalo are not used.
 
 Before the first deployment of this version, take a MySQL backup. Startup performs a narrow idempotent migration that drops the legacy unique payment-per-booking and all-status slot constraints, preserving rows and foreign keys. Verify the startup logs, then confirm multiple payment attempts for one booking in MySQL. Once a second attempt exists, recover by rolling forward rather than reverting to code that assumes one payment row per booking.
 
@@ -169,7 +161,8 @@ Verify all of these from the Vercel website:
 - Hà Nội and Hồ Chí Minh can be selected.
 - Categories and homepage services load.
 - A customer can sign in and create a booking.
-- A new customer receives real phone/email OTP messages and cannot register with a wrong, expired, or reused verification token.
+- A new customer and supplier receives a real six-digit email OTP through Resend and cannot register with a wrong, expired, or reused verification token.
+- Before the customer's first booking, the phone confirmation dialog loads history from MySQL; changing the phone persists it and the new phone can be used to log in.
 - The booking appears in **Tổng quan & Lịch hẹn**.
 - A PayOS payment opens on the hosted checkout and the booking becomes paid only after its webhook is received.
 - A supplier can sign in, edit its profile, create a service, and update a schedule.
@@ -204,4 +197,14 @@ Verify all of these from the Vercel website:
 - Do not expose the Railway MySQL service publicly unless external database access is specifically required.
 - Replace the demonstration password before any public deployment.
 - Never expose PayOS credentials in `VITE_` variables or frontend source code.
-- Keep Redis private, require TLS/auth where supported, and never expose Twilio, SMTP, or `OTP_PEPPER` values to the frontend.
+- Keep Redis private, require TLS/auth where supported, and never expose Resend credentials or `OTP_PEPPER` values to the frontend.
+
+## 10. Resend setup, smoke test and rollback
+
+1. Create a Resend account, add the production sending domain, and publish the DNS records shown by Resend.
+2. Wait until the domain is marked verified. Create a restricted sending API key and store it as Railway `RESEND_API_KEY`.
+3. Set `OTP_MAIL_FROM` to an address on that verified domain. Do not add the key to Vercel or any `VITE_` variable.
+4. Redeploy the backend and request one OTP for a dedicated test account. Confirm the email arrives, the six-digit code works once, and wrong/reused codes fail. Provider acceptance is not proof of Inbox delivery, so check Inbox and spam during the smoke test.
+5. Verify customer and supplier registration, login by email and phone, first-booking phone confirmation, booking cancellation, and PayOS checkout in that order.
+
+Automated tests use a local HTTP fake and never call Resend or a production database. If the OTP change must be rolled back, redeploy the previous application image/commit and remove or disable `RESEND_API_KEY`; there is no database migration to reverse. Keep `OTP_PEPPER` unchanged so existing unexpired challenges remain consistently hashed. The legacy `phone_code_hash` column remains populated for old MySQL `NOT NULL` compatibility and must not be dropped during rollback.

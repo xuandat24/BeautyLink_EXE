@@ -13,6 +13,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     @Query("select b from Booking b where b.id = :id")
     Optional<Booking> findByIdForUpdate(@Param("id") Long id);
     List<Booking> findByCustomerIdOrderByAppointmentDateDescStartTimeDesc(Long customerId);
+    boolean existsByCustomerId(Long customerId);
     List<Booking> findBySupplierIdOrderByAppointmentDateDescStartTimeDesc(Long supplierId);
     boolean existsByPractitionerIdAndAppointmentDateAndStartTimeAndStatusNot(Long practitionerId, LocalDate date, LocalTime startTime, BookingStatus status);
     boolean existsByPractitionerIdAndAppointmentDateAndStartTimeAndStatusNotAndIdNot(Long practitionerId, LocalDate date, LocalTime startTime, BookingStatus status, Long id);

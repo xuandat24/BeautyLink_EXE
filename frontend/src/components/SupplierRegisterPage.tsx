@@ -27,6 +27,7 @@ import {
 import { BackendLocation, CurrentUser } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { prepareImageUpload } from '../lib/imageUpload';
+import { strongPasswordSchema, vietnamPhoneSchema } from '../lib/validation';
 
 interface SupplierRegisterPageProps {
   onBack: () => void;
@@ -208,6 +209,18 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
       return;
     }
 
+    const cleanPhoneForValidation = formData.phone.replace(/[\s.-]/g, '');
+    const phoneValidation = vietnamPhoneSchema.safeParse(cleanPhoneForValidation);
+    if (!phoneValidation.success) {
+      setError(phoneValidation.error.issues[0].message);
+      return;
+    }
+    const passwordValidation = strongPasswordSchema.safeParse(formData.password);
+    if (!passwordValidation.success) {
+      setError(passwordValidation.error.issues[0].message);
+      return;
+    }
+
     if (!/^\d{12}$/.test(formData.cccdNumber.trim())) {
       setError('Số CCCD phải gồm đúng 12 chữ số.');
       return;
@@ -249,6 +262,10 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
         const challenge = await beautyApi.startRegistrationVerification({ phone: cleanPhone, email: formData.email.trim(), channel: 'EMAIL' });
         setVerificationChallengeId(challenge.challengeId);
         setError('Mã OTP đã được gửi đến email. Vui lòng nhập mã để tiếp tục.');
+        return;
+      }
+      if (!/^\d{6}$/.test(emailCode)) {
+        setError('Mã OTP email phải gồm đúng 6 chữ số.');
         return;
       }
       const verification = await beautyApi.confirmRegistrationVerification({
@@ -396,7 +413,9 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
                       required
                       type="tel"
                       value={formData.phone}
-                      onChange={(e) => updateField('phone', e.target.value)}
+                      maxLength={10}
+                      inputMode="numeric"
+                      onChange={(e) => updateField('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
                       placeholder="09xxxxxxxx (10 chữ số)"
                       className="w-full rounded-xl border border-pink-200 bg-white py-2.5 pl-10 pr-4 text-xs sm:text-sm font-semibold text-slate-900 outline-none transition focus:border-[#e1146c] focus:ring-2 focus:ring-pink-100"
                     />
@@ -424,13 +443,14 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Mật khẩu quản trị (ít nhất 6 ký tự) *
+                    Mật khẩu quản trị (12–72 ký tự, đủ chữ hoa, chữ thường, số và ký tự đặc biệt) *
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                     <input
                       required
-                      minLength={6}
+                      minLength={12}
+                      maxLength={72}
                       type={showPassword ? 'text' : 'password'}
                       value={formData.password}
                       onChange={(e) => updateField('password', e.target.value)}
@@ -456,7 +476,8 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
                   <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                   <input
                     required
-                    minLength={6}
+                    minLength={12}
+                    maxLength={72}
                     type="password"
                     value={formData.confirmPassword}
                     onChange={(e) => updateField('confirmPassword', e.target.value)}

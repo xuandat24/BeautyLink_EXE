@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   ShieldCheck,
@@ -24,6 +24,8 @@ import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { OptimizedImage } from './OptimizedImage';
 import { bookingSchema, FieldErrors, voucherCodeSchema, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
+import { FirstBookingPhoneConfirmationDialog } from './FirstBookingPhoneConfirmationDialog';
+import { useFirstBookingPhoneConfirmation } from '../hooks/useFirstBookingPhoneConfirmation';
 
 interface CheckoutPageProps {
   currentUser: CurrentUser | null;
@@ -65,6 +67,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   preselectedTime,
 }) => {
   const { cartItems, updateCartQuantity } = useBeautyStore();
+  const { confirmBeforeFirstBooking, dialogProps } = useFirstBookingPhoneConfirmation(currentUser);
+  const submissionInFlight = useRef(false);
 
   // If there's a direct service passed, create synthetic cart list, else use store cart
   const items: CartItem[] = useMemo(() => {
@@ -230,6 +234,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Submit & Complete Booking
   const handleFinalSubmit = async () => {
+    if (submissionInFlight.current) return;
     setErrorMsg('');
     if (!currentUser) {
       onNeedLogin();
@@ -257,9 +262,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
 
+    submissionInFlight.current = true;
     setSubmitting(true);
 
     try {
+      if (!(await confirmBeforeFirstBooking())) return;
       const firstItem = items[0];
       if (!firstItem?.deal.serviceId) {
         throw new Error('Dịch vụ chưa được đồng bộ với hệ thống. Vui lòng chọn lại từ trang dịch vụ.');
@@ -283,6 +290,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     } catch (err: any) {
       setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng thử lại.'));
     } finally {
+      submissionInFlight.current = false;
       setSubmitting(false);
     }
   };
@@ -318,6 +326,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // VIEW: REDESIGNED STEPPER CHECKOUT FLOW
   // =========================================================================
   return (
+    <>
     <div className="min-h-screen bg-[#FFF8F9] text-slate-900 pb-16">
       {/* Top Bar with Navigation */}
       <section className="bg-white border-b border-pink-100 shadow-2xs">
@@ -1028,5 +1037,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         )}
       </main>
     </div>
+    <FirstBookingPhoneConfirmationDialog {...dialogProps} />
+    </>
   );
 };

@@ -53,10 +53,24 @@ public class AuthService {
         }
         throw invalidCredentials();
     }
+    @Transactional
+    public AuthResponse updatePhone(UserAccount current, UpdatePhoneRequest request) {
+        String phone = normalizePhone(request.phone());
+        if (phone.equals(current.getPhone())) return response(current);
+        if (users.existsByPhoneAndIdNot(phone, current.getId())) throw phoneConflict();
+        current.setPhone(phone);
+        try {
+            // A new JWT is mandatory because the current phone is the token subject.
+            return response(users.saveAndFlush(current));
+        } catch (DataIntegrityViolationException ex) {
+            throw phoneConflict();
+        }
+    }
     public AuthResponse response(UserAccount user) { return new AuthResponse(jwt.createToken(user), "Bearer", jwt.getExpirationMs(), toUser(user)); }
     public UserResponse toUser(UserAccount u) { return new UserResponse(u.getId(), u.getFullName(), u.getPhone(), u.getEmail(), u.getGender(), u.getDateOfBirth(), u.getRole(), u.getLoyaltyPoints()); }
     public static String normalizePhone(String value) { return value == null ? "" : value.replaceAll("[\\s.-]", ""); }
     public static ApiException registrationConflict() { return new ApiException(HttpStatus.CONFLICT, "REGISTRATION_CONFLICT", "Không thể đăng ký với thông tin đã cung cấp. Hãy đăng nhập hoặc sử dụng quy trình khôi phục tài khoản"); }
+    private static ApiException phoneConflict() { return new ApiException(HttpStatus.CONFLICT, "PHONE_ALREADY_IN_USE", "Số điện thoại này đang được sử dụng bởi tài khoản khác"); }
     private static ApiException invalidCredentials() { return new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Thông tin đăng nhập không chính xác"); }
     private static boolean hasValidBcryptHash(String value) {
         return value != null && value.matches("^\\$2[aby]\\$[0-3][0-9]\\$[./A-Za-z0-9]{53}$");

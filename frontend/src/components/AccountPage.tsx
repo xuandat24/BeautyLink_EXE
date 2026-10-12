@@ -29,6 +29,7 @@ import {
   Save,
   QrCode,
   Camera,
+  Loader2,
 } from 'lucide-react';
 import { CurrentUser, BookingDetails } from '../types';
 import { useBeautyStore } from '../store/beautyStore';
@@ -38,6 +39,7 @@ import { ServiceReviewModal } from './ServiceReviewModal';
 import { reviewService } from '../services/reviewService';
 import { customerProfileSchema, FieldErrors, passwordChangeSchema, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
+import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 
 interface AccountPageProps {
   currentUser: CurrentUser | null;
@@ -106,6 +108,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
   const [profileErrors, setProfileErrors] = useState<FieldErrors>({});
+  const [profileSaving, setProfileSaving] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordErrors, setPasswordErrors] = useState<FieldErrors>({});
 
@@ -140,7 +143,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     setTimeout(() => setProfileSuccessMsg(''), 4000);
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     const validation = customerProfileSchema.safeParse(profileForm);
     if (!validation.success) {
@@ -150,19 +153,44 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     }
     setProfileErrors({});
     const normalizedProfile = validation.data as UserProfileData;
-    setProfile(normalizedProfile);
-    if (currentUser) {
-      setCurrentUser({
-        ...currentUser,
-        name: normalizedProfile.name,
-        phone: normalizedProfile.phone,
-        email: normalizedProfile.email,
-        avatar: normalizedProfile.avatar,
-      });
+    setProfileSaving(true);
+    try {
+      let persistedPhone = currentUser?.phone || normalizedProfile.phone;
+      let serverUser = currentUser;
+      if (currentUser && normalizedProfile.phone !== currentUser.phone) {
+        const response = await beautyApi.updateMyPhone(normalizedProfile.phone);
+        persistedPhone = response.user.phone;
+        serverUser = {
+          ...currentUser,
+          id: response.user.id,
+          name: response.user.fullName || currentUser.name,
+          phone: response.user.phone,
+          email: response.user.email,
+          role: response.user.role || currentUser.role,
+          loyaltyPoints: response.user.loyaltyPoints,
+        };
+      }
+      const updatedProfile = { ...normalizedProfile, phone: persistedPhone };
+      setProfile(updatedProfile);
+      setProfileForm(updatedProfile);
+      if (serverUser) {
+        setCurrentUser({
+          ...serverUser,
+          avatar: normalizedProfile.avatar,
+        });
+      }
+      setIsEditingProfile(false);
+      setProfileSuccessMsg('Số điện thoại đã được lưu vào tài khoản. Các trường hồ sơ khác chỉ hiển thị trong phiên hiện tại vì chưa có API lưu hồ sơ.');
+      setTimeout(() => setProfileSuccessMsg(''), 5000);
+    } catch (err) {
+      setProfileSuccessMsg('');
+      setProfileErrors((previous) => ({
+        ...previous,
+        phone: getApiErrorMessage(err, 'Không thể cập nhật số điện thoại. Vui lòng thử lại.'),
+      }));
+    } finally {
+      setProfileSaving(false);
     }
-    setIsEditingProfile(false);
-    setProfileSuccessMsg('Cập nhật thông tin cá nhân thành công!');
-    setTimeout(() => setProfileSuccessMsg(''), 3000);
   };
 
   const handleUpdateAvatar = (newAvatarUrl: string) => {
@@ -569,8 +597,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       type="tel"
                       required
                       value={profileForm.phone}
-                      onChange={(e) => { setProfileForm({ ...profileForm, phone: e.target.value }); setProfileErrors((prev) => ({ ...prev, phone: '' })); }}
-                      maxLength={15}
+                      onChange={(e) => { setProfileForm({ ...profileForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }); setProfileErrors((prev) => ({ ...prev, phone: '' })); }}
+                      maxLength={10}
                       aria-invalid={Boolean(profileErrors.phone)}
                       className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/20 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#e1146c]"
                     />
@@ -619,6 +647,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       aria-invalid={Boolean(profileErrors.gender)}
                       className="w-full px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/20 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#e1146c]"
                     >
+                      <option value="">Chưa cập nhật</option>
                       <option value="Nam">Nam</option>
                       <option value="Nữ">Nữ</option>
                       <option value="Others">Others</option>
@@ -713,16 +742,18 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsEditingProfile(false)}
+                    disabled={profileSaving}
                     className="py-2.5 px-5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
                   >
                     Hủy bỏ
                   </button>
                   <button
                     type="submit"
-                    className="py-2.5 px-6 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs font-bold shadow-md hover:opacity-95 transition flex items-center gap-1.5 cursor-pointer"
+                    disabled={profileSaving}
+                    className="py-2.5 px-6 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs font-bold shadow-md hover:opacity-95 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>Lưu thay đổi hồ sơ</span>
+                    {profileSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    <span>{profileSaving ? 'Đang lưu...' : 'Lưu thay đổi hồ sơ'}</span>
                   </button>
                 </div>
               )}
@@ -1136,9 +1167,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50/60 border border-emerald-100 text-xs">
                   <div className="flex items-center gap-2 text-emerald-800">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span className="font-bold">Xác thực 2 lớp (2FA qua SMS)</span>
+                    <span className="font-bold">Kênh OTP đăng ký: Email</span>
                   </div>
-                  <span className="text-emerald-700 font-extrabold text-[11px]">Đang bật</span>
+                  <span className="text-emerald-700 font-extrabold text-[11px]">Email-only</span>
                 </div>
 
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs">

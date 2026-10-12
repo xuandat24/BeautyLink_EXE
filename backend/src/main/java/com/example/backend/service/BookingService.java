@@ -42,6 +42,7 @@ public class BookingService {
         return response(bookings.save(booking));
     }
     @Transactional(readOnly = true) public List<BookingResponse> customerBookings(UserAccount customer) { return bookings.findByCustomerIdOrderByAppointmentDateDescStartTimeDesc(customer.getId()).stream().map(this::response).toList(); }
+    @Transactional(readOnly = true) public BookingHistoryStatusResponse bookingHistoryStatus(UserAccount customer) { return new BookingHistoryStatusResponse(bookings.existsByCustomerId(customer.getId())); }
     @Transactional(readOnly = true) public List<BookingResponse> supplierBookings(UserAccount owner) {
         Supplier supplier = suppliers.findByOwnerId(owner.getId()).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND", "Không tìm thấy nhà cung cấp"));
         return bookings.findBySupplierIdOrderByAppointmentDateDescStartTimeDesc(supplier.getId()).stream().map(this::response).toList();

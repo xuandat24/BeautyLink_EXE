@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, User, Calendar, Clock, Loader2, CheckCircle, ShieldCheck, CheckCircle2, Sparkles } from 'lucide-react';
 import { BackendService, BackendPractitioner, CurrentUser } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { BookingShareFeature } from './BookingShareFeature';
 import { bookingSchema } from '../lib/validation';
+import { FirstBookingPhoneConfirmationDialog } from './FirstBookingPhoneConfirmationDialog';
+import { useFirstBookingPhoneConfirmation } from '../hooks/useFirstBookingPhoneConfirmation';
 
 interface BookingModalProps {
   service: BackendService;
@@ -55,6 +57,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [note, setNote] = useState<string>('');
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const submissionInFlight = useRef(false);
   const [error, setError] = useState<string>('');
   const [confirmedBooking, setConfirmedBooking] = useState<{
     bookingCode: string;
@@ -64,6 +67,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     practitionerName: string;
     practitionerSpecialty?: string;
   } | null>(null);
+  const { confirmBeforeFirstBooking, dialogProps } = useFirstBookingPhoneConfirmation(currentUser);
 
   // Lock body scrolling when modal is active
   useBodyScrollLock(true);
@@ -71,11 +75,11 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !dialogProps.open) onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [onClose, dialogProps.open]);
 
   useEffect(() => {
     if (!selectedPractitioner || !date) return;
@@ -110,6 +114,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   );
 
   const handleSubmit = async () => {
+    if (submissionInFlight.current) return;
     if (!currentUser) {
       onNeedLogin();
       return;
@@ -128,10 +133,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       return;
     }
 
+    submissionInFlight.current = true;
     setSubmitting(true);
     setError('');
 
     try {
+      if (!(await confirmBeforeFirstBooking())) return;
       const res = await beautyApi.createBooking({
         serviceId: service.id,
         practitionerId: selectedPractitioner.id,
@@ -151,11 +158,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     } catch (err) {
       setError(getApiErrorMessage(err, 'Không thể xác nhận lịch hẹn.'));
     } finally {
+      submissionInFlight.current = false;
       setSubmitting(false);
     }
   };
 
   return (
+    <>
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
       role="dialog"
@@ -431,5 +440,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         )}
       </div>
     </div>
+    <FirstBookingPhoneConfirmationDialog {...dialogProps} />
+    </>
   );
 };

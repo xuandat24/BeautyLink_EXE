@@ -178,7 +178,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             channel: verificationChannel,
           });
           setVerificationChallengeId(challenge.challengeId);
-          setError('Mã OTP đã được gửi. Vui lòng nhập mã để xác minh quyền sở hữu liên hệ.');
+          setError('Mã OTP 6 chữ số đã được gửi đến email. Vui lòng kiểm tra cả hộp thư rác.');
+          return;
+        }
+        if (!/^\d{6}$/.test(emailCode)) {
+          setFieldErrors({ emailCode: 'Mã OTP email phải gồm đúng 6 chữ số.' });
+          setError('Vui lòng nhập đầy đủ mã OTP đã gửi đến email.');
           return;
         }
         const verification = await beautyApi.confirmRegistrationVerification({
@@ -393,9 +398,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       </label>
                       <input inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6}
                         value={emailCode}
-                        onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ''))}
+                        onChange={(event) => { setEmailCode(event.target.value.replace(/\D/g, '')); setFieldErrors((previous) => ({ ...previous, emailCode: '' })); }}
                         className="w-full rounded-xl border border-emerald-200 px-3 py-2.5 text-xs font-bold tracking-[0.3em] outline-hidden focus:ring-2 focus:ring-emerald-200"
                         placeholder="000000" />
+                      <FieldError message={fieldErrors.emailCode} />
                     </div>
                   </div>
                 )}

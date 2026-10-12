@@ -52,6 +52,19 @@ type BackendScheduleRule = {
   active: boolean;
 };
 
+export type BackendAuthUser = {
+  id: number;
+  fullName: string;
+  phone: string;
+  email: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+  dateOfBirth?: string;
+  role: CurrentUser['role'];
+  loyaltyPoints: number;
+};
+
+type BackendAuthResponse = { user: BackendAuthUser; accessToken: string };
+
 const BACKEND_DAYS: BackendDay[] = [
   'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY',
 ];
@@ -518,11 +531,11 @@ export const beautyApi = {
     return res;
   },
 
-  async startRegistrationVerification(data: { phone: string; email: string; channel?: 'PHONE' | 'EMAIL' }): Promise<{ challengeId: string; expiresInSeconds: number; requiredChannels: string[] }> {
+  async startRegistrationVerification(data: { phone: string; email: string; channel?: 'EMAIL' }): Promise<{ challengeId: string; expiresInSeconds: number; requiredChannels: string[] }> {
     return unwrap(apiClient.post('/v1/auth/registration-verification/start', data));
   },
 
-  async confirmRegistrationVerification(data: { challengeId: string; phoneCode?: string; emailCode?: string }): Promise<{ registrationToken: string; expiresInSeconds: number }> {
+  async confirmRegistrationVerification(data: { challengeId: string; emailCode: string }): Promise<{ registrationToken: string; expiresInSeconds: number }> {
     return unwrap(apiClient.post('/v1/auth/registration-verification/confirm', data));
   },
 
@@ -548,6 +561,15 @@ export const beautyApi = {
 
   async me(): Promise<any> {
     return unwrap(apiClient.get('/v1/auth/me'));
+  },
+
+  async updateMyPhone(phone: string): Promise<BackendAuthResponse> {
+    const persistent = hasPersistentSession();
+    const response = await unwrap<BackendAuthResponse>(
+      apiClient.patch('/v1/auth/me/phone', { phone })
+    );
+    if (response?.accessToken) setAccessToken(response.accessToken, persistent);
+    return response;
   },
 
   // ==========================================
@@ -675,6 +697,10 @@ export const beautyApi = {
 
   async myBookings(): Promise<BackendBooking[]> {
     return unwrap(apiClient.get('/v1/bookings/mine'));
+  },
+
+  async bookingHistoryStatus(): Promise<{ hasPreviousBooking: boolean }> {
+    return unwrap(apiClient.get('/v1/bookings/mine/history-status'));
   },
 
   async cancelBooking(id: number): Promise<BackendBooking> {

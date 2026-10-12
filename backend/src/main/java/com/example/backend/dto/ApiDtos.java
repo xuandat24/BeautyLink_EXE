@@ -20,18 +20,22 @@ public final class ApiDtos {
             @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\\s])\\S+$", message = "Mật khẩu phải có chữ hoa, chữ thường, chữ số và ký tự đặc biệt") String password,
             @NotNull(message = "Vui lòng chọn giới tính") Gender gender,
             @NotNull(message = "Ngày sinh không được để trống") @Past(message = "Ngày sinh phải là một ngày hợp lệ trong quá khứ") LocalDate dateOfBirth,
-            @NotBlank(message = "Bạn cần xác minh số điện thoại hoặc email trước khi đăng ký") @Size(max = 120) String verificationToken) {}
+            @NotBlank(message = "Bạn cần xác minh email trước khi đăng ký") @Size(max = 120) String verificationToken) {}
     public record LoginRequest(
             @NotBlank(message = "Số điện thoại hoặc email không được để trống") @Size(max = 254, message = "Thông tin đăng nhập quá dài") String identifier,
             @NotBlank(message = "Mật khẩu không được để trống") @Size(max = 72, message = "Mật khẩu tối đa 72 ký tự") String password) {}
     public record UserResponse(Long id, String fullName, String phone, String email, Gender gender,
                                LocalDate dateOfBirth, Role role, int loyaltyPoints) {}
     public record AuthResponse(String accessToken, String tokenType, long expiresInMs, UserResponse user) {}
+    public record UpdatePhoneRequest(
+            @NotBlank(message = "Số điện thoại không được để trống")
+            @Pattern(regexp = "^0(?:3|8|9)[0-9]{8}$", message = "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 08 hoặc 09") String phone) {}
     public record SupplierRegistrationRequest(
             @NotBlank @Size(min = 2, max = 120) String ownerName,
-            @NotBlank @Pattern(regexp = "^(0|\\+84)[0-9]{9,10}$") String phone,
+            @NotBlank @Pattern(regexp = "^0(?:3|8|9)[0-9]{8}$", message = "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 08 hoặc 09") String phone,
             @NotBlank @Email String email,
-            @NotBlank @Size(min = 8, max = 72) String password,
+            @NotBlank @Size(min = 12, max = 72, message = "Mật khẩu phải có từ 12 đến 72 ký tự")
+            @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\\s])\\S+$", message = "Mật khẩu phải có chữ hoa, chữ thường, chữ số và ký tự đặc biệt") String password,
             @NotBlank @Size(max = 120) String verificationToken,
             @NotBlank @Size(min = 2, max = 160) String businessName,
             @NotBlank @Size(max = 120) String businessType,
@@ -52,7 +56,8 @@ public final class ApiDtos {
     public record StartRegistrationVerificationResponse(String challengeId, long expiresInSeconds, Set<String> requiredChannels) {}
     public record ConfirmRegistrationVerificationRequest(
             @NotBlank @Size(max = 36) String challengeId,
-            @Pattern(regexp = "^$|^[0-9]{6}$", message = "Mã SMS phải gồm 6 chữ số") String phoneCode,
+            // Kept only so older clients deserialize safely; email-only verification ignores it.
+            @Pattern(regexp = "^$|^[0-9]{6}$", message = "Mã OTP cũ phải gồm 6 chữ số") String phoneCode,
             @Pattern(regexp = "^$|^[0-9]{6}$", message = "Mã email phải gồm 6 chữ số") String emailCode) {}
     public record ConfirmRegistrationVerificationResponse(String registrationToken, long expiresInSeconds) {}
     public record SupplierResponse(Long id, String name, String slug, String businessType, String description,
@@ -111,6 +116,7 @@ public final class ApiDtos {
                                   LocalTime endTime, BigDecimal totalAmount, BookingStatus status,
                                   PaymentStatus paymentStatus, boolean reviewEligible,
                                   BookingReviewResponse serviceReview, BookingReviewResponse supplierReview) {}
+    public record BookingHistoryStatusResponse(boolean hasPreviousBooking) {}
     public record UpsertBookingReviewRequest(
             @NotNull(message = "Vui lòng chọn số sao") @Min(value = 1, message = "Đánh giá tối thiểu 1 sao") @Max(value = 5, message = "Đánh giá tối đa 5 sao") Integer rating,
             @Size(max = 1500, message = "Nội dung đánh giá tối đa 1500 ký tự") String comment) {}
