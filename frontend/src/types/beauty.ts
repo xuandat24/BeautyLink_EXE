@@ -114,6 +114,19 @@ export interface BackendBooking {
   supplierAddress?: string | null;
   paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'REFUNDED';
   reviewEligible?: boolean;
+  completionEligible?: boolean;
+  serviceReview?: BookingReview | null;
+  supplierReview?: BookingReview | null;
+}
+
+export interface BookingReview {
+  id: number;
+  bookingId: number;
+  targetType: 'SERVICE' | 'SUPPLIER';
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PayOSPayment {
@@ -206,6 +219,7 @@ export interface Salon {
 
 export interface NewPartner {
   id: string;
+  supplierId?: number;
   serviceId?: number;
   name: string;
   subTitle: string;

@@ -5,6 +5,7 @@ import {
   BackendLocation,
   BackendPractitioner,
   BackendBooking,
+  BookingReview,
   BackendSupplierProfile,
   ScheduleRule,
   BackendReport,
@@ -675,6 +676,19 @@ export const beautyApi = {
 
   async myBookings(): Promise<BackendBooking[]> {
     return unwrap(apiClient.get('/v1/bookings/mine'));
+  },
+
+  async publicBookingReviews(supplierId: number): Promise<Array<{ id: number; targetType: 'SERVICE' | 'SUPPLIER'; rating: number; comment: string | null; reviewerDisplayName: string; serviceId: number; serviceName: string; createdAt: string }>> {
+    const shop = await unwrap<{ reviews: Array<{ id: number; targetType: 'SERVICE' | 'SUPPLIER'; rating: number; comment: string | null; reviewerDisplayName: string; serviceId: number; serviceName: string; createdAt: string }> }>(apiClient.get(`/v1/suppliers/${supplierId}`));
+    return shop.reviews;
+  },
+
+  async completeBooking(id: number): Promise<BackendBooking> {
+    return unwrap(apiClient.patch(`/v1/bookings/${id}/complete`));
+  },
+
+  async upsertBookingReview(id: number, target: 'SERVICE' | 'SUPPLIER', data: { rating: number; comment: string }): Promise<BookingReview> {
+    return unwrap(apiClient.put(`/v1/bookings/${id}/reviews/${target}`, data));
   },
 
   async cancelBooking(id: number): Promise<BackendBooking> {

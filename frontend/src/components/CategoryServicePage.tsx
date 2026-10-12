@@ -37,6 +37,7 @@ import { beautyApi, getApiErrorMessage, DEFAULT_CATEGORIES } from '../services/b
 import { BookingModal } from './BookingModal';
 import { OptimizedImage } from './OptimizedImage';
 import { reviewService, ServiceStep, ServiceReviewItem } from '../services/reviewService';
+import { useBookingReviews } from '../hooks/useBookingReviews';
 import { ServiceReviewModal } from './ServiceReviewModal';
 
 interface CategoryServicePageProps {
@@ -123,6 +124,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
   const [previewTab, setPreviewTab] = useState<'overview' | 'steps' | 'reviews'>('overview');
   const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
   const [reviewsUpdateTrigger, setReviewsUpdateTrigger] = useState<number>(0);
+  const { reviews: serviceReviews, error: reviewsError } = useBookingReviews(previewService?.supplierId, previewService?.id, reviewsUpdateTrigger);
 
   // Booking modal state
   const [selectedServiceForBooking, setSelectedServiceForBooking] = useState<BackendService | null>(null);
@@ -1393,7 +1395,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
       {/* ========================================================================= */}
       {previewService && (() => {
         const procedureSteps = reviewService.getProcedureSteps(previewService.categorySlug, previewService.name);
-        const serviceReviews = reviewService.getReviewsForService(previewService.name, previewService.id);
+
 
         return (
           <div
@@ -1634,6 +1636,8 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                       </button>
                     </div>
 
+                    {reviewsError && <p role="alert" className="text-rose-700">{reviewsError}</p>}
+                    {!reviewsError && serviceReviews.length === 0 && <p>Chưa có đánh giá sau hoàn thành dịch vụ.</p>}
                     {/* List of customer reviews */}
                     <div className="space-y-3">
                       {serviceReviews.map((rev) => (
@@ -1752,8 +1756,11 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
       {/* Review Modal for Service */}
       {isReviewModalOpen && previewService && (
         <ServiceReviewModal
+          key={previewService.id}
           isOpen={isReviewModalOpen}
           onClose={() => setIsReviewModalOpen(false)}
+          serviceId={previewService.id}
+          supplierId={previewService.supplierId}
           serviceTitle={previewService.name}
           salonName={previewService.supplierName}
           customerName={currentUser?.name || 'Khách hàng BeautyLink'}

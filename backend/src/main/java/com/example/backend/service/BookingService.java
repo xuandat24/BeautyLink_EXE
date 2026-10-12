@@ -13,8 +13,10 @@ import static com.example.backend.model.DomainEnums.*;
 
 @Service
 public class BookingService {
+    private final BookingCompletionPolicy completion;
     private final BookingRepository bookings; private final ServiceOfferingRepository services; private final PractitionerRepository practitioners; private final SupplierRepository suppliers; private final AvailabilityService availability; private final BookingReviewRepository reviews;
-    public BookingService(BookingRepository bookings, ServiceOfferingRepository services, PractitionerRepository practitioners, SupplierRepository suppliers, AvailabilityService availability, BookingReviewRepository reviews) {
+    public BookingService(BookingRepository bookings, ServiceOfferingRepository services, PractitionerRepository practitioners, SupplierRepository suppliers, AvailabilityService availability, BookingReviewRepository reviews, BookingCompletionPolicy completion) {
+        this.completion = completion;
         this.bookings = bookings; this.services = services; this.practitioners = practitioners; this.suppliers = suppliers; this.availability = availability; this.reviews = reviews;
     }
     @Transactional public BookingResponse create(UserAccount customer, CreateBookingRequest request) {
@@ -48,10 +50,26 @@ public class BookingService {
         return bookings.findBySupplierIdOrderByAppointmentDateDescStartTimeDesc(supplier.getId()).stream().map(this::response).toList();
     }
     @Transactional public BookingResponse cancel(UserAccount customer, Long bookingId) {
-        Booking booking = bookings.findById(bookingId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "Không tìm thấy lịch hẹn"));
+        Booking booking = bookings.findByIdForUpdate(bookingId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "Không tìm thấy lịch hẹn"));
         if (!booking.getCustomer().getId().equals(customer.getId())) throw new ApiException(HttpStatus.FORBIDDEN, "BOOKING_FORBIDDEN", "Bạn không thể hủy lịch hẹn này");
         if (booking.getStatus() == BookingStatus.COMPLETED) throw new ApiException(HttpStatus.CONFLICT, "BOOKING_COMPLETED", "Lịch hẹn đã hoàn thành");
         booking.setStatus(BookingStatus.CANCELLED); booking.setPaymentRetryAllowed(false); return response(booking);
+    }
+    @Transactional public BookingResponse complete(UserAccount customer, Long bookingId) {
+        Booking booking = bookings.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "Không tìm thấy lịch hẹn"));
+        if (!booking.getCustomer().getId().equals(customer.getId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "BOOKING_FORBIDDEN", "Bạn chỉ có thể xác nhận lịch hẹn của chính mình");
+        }
+        // Retrying an already accepted confirmation is safe.
+        if (booking.getStatus() == BookingStatus.COMPLETED) return response(booking);
+        if (!completion.canComplete(booking)) {
+            throw new ApiException(HttpStatus.CONFLICT, "BOOKING_NOT_COMPLETABLE",
+                    "Chỉ xác nhận sau khi dịch vụ kết thúc, lịch hẹn đã được xác nhận và có thanh toán hoặc đặt cọc");
+        }
+        booking.setStatus(BookingStatus.COMPLETED);
+        booking.setPaymentRetryAllowed(false);
+        return response(booking);
     }
     private BookingResponse response(Booking b) {
         BookingReviewResponse serviceReview = reviews.findByBookingIdAndTargetType(b.getId(), ReviewTargetType.SERVICE).map(this::reviewResponse).orElse(null);
@@ -60,7 +78,7 @@ public class BookingService {
                 b.getService().getImageUrl(), b.getSupplier().getId(), b.getSupplier().getName(),
                 b.getSupplier().getImageUrl(), b.getSupplier().getAddressLine(), b.getPractitioner().getDisplayName(),
                 b.getAppointmentDate(), b.getStartTime(), b.getEndTime(), b.getTotalAmount(), b.getStatus(),
-                b.getPaymentStatus(), ReviewService.isEligible(b), serviceReview, supplierReview);
+                b.getPaymentStatus(), ReviewService.isEligible(b), serviceReview, supplierReview, completion.canComplete(b));
     }
     private BookingReviewResponse reviewResponse(BookingReview review) {
         return new BookingReviewResponse(review.getId(), review.getBooking().getId(), review.getTargetType(), review.getRating(), review.getComment(), review.getCreatedAt(), review.getUpdatedAt());

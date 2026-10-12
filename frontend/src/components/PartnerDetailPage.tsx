@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { NewPartner } from '../data/mockData';
 import { CurrentUser } from '../types';
-import { reviewService } from '../services/reviewService';
+import { useBookingReviews } from '../hooks/useBookingReviews';
 import { ServiceReviewModal } from './ServiceReviewModal';
 import { FavoriteToast, FavoriteToastInfo } from './FavoriteToast';
 
@@ -214,9 +214,8 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
     ] as PartnerServiceOffer[],
   };
 
-  const reviews = React.useMemo(() => {
-    return reviewService.getReviewsForService(partner.name);
-  }, [partner.name, reviewsUpdateTrigger]);
+  const { reviews, error: reviewsError } = useBookingReviews(partner.supplierId, undefined, reviewsUpdateTrigger);
+  const reviewRating = reviews.length ? (reviews.reduce((sum, item) => sum + item.rating, 0) / reviews.length).toFixed(1) : "—";
 
   return (
     <div className="min-h-screen bg-[#FFF9FA] text-slate-900 pb-16">
@@ -269,7 +268,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    <span>{partnerProfile.rating} ({partnerProfile.reviewsCount} đánh giá)</span>
+                    <span>{reviewRating} ({reviews.length} đánh giá)</span>
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                     <Users className="w-3.5 h-3.5 text-emerald-600" />
@@ -682,7 +681,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
             <div className="bg-white rounded-3xl border border-pink-100 p-6 flex flex-col sm:flex-row items-center justify-between gap-5">
               <div className="flex items-center gap-4 text-center sm:text-left">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-300 text-white flex flex-col items-center justify-center font-black shadow-md">
-                  <span className="text-2xl leading-none">{partnerProfile.rating}</span>
+                  <span className="text-2xl leading-none">{reviewRating}</span>
                   <span className="text-[11px]">★/5</span>
                 </div>
                 <div>
@@ -695,7 +694,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                     Điểm đánh giá trải nghiệm thực tế
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {reviews.length} đánh giá từ khách hàng đã đặt lịch thành công qua BeautyLink
+                    {reviews.length} đánh giá từ khách hàng đã hoàn thành dịch vụ qua BeautyLink
                   </p>
                 </div>
               </div>
@@ -710,6 +709,8 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
               </button>
             </div>
 
+            {reviewsError && <p role="alert" className="text-rose-700">{reviewsError}</p>}
+            {!reviewsError && reviews.length === 0 && <p>Chưa có đánh giá nhà cung cấp sau hoàn thành dịch vụ.</p>}
             {/* Customer Reviews List */}
             <div className="space-y-3.5">
               {reviews.map((rev) => (
@@ -841,6 +842,8 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
         <ServiceReviewModal
           isOpen={isReviewModalOpen}
           onClose={() => setIsReviewModalOpen(false)}
+          supplierId={partner.supplierId}
+          initialTarget="SUPPLIER"
           serviceTitle={selectedServiceForReview}
           salonName={partner.name}
           customerName={currentUser?.name}

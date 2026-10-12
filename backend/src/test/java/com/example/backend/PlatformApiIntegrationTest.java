@@ -43,6 +43,9 @@ class PlatformApiIntegrationTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired SupplierVerificationRepository supplierVerifications;
     @Autowired BookingRepository bookings;
+    @Autowired com.example.backend.repository.ServiceOfferingRepository offerings;
+    @Autowired com.example.backend.repository.PractitionerRepository practitioners;
+    @Autowired com.example.backend.repository.BookingReviewRepository reviews;
     @Autowired PaymentTransactionRepository paymentTransactions;
     @Autowired com.example.backend.repository.UserAccountRepository users;
     @MockitoBean PayOSGateway payOSGateway;
@@ -414,8 +417,65 @@ class PlatformApiIntegrationTest {
                 .andExpect(jsonPath("$[*].status", hasItem("PENDING")));
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+        "PENDING,UNPAID,false,false", "PENDING,PAID,false,false",
+        "CONFIRMED,UNPAID,false,false", "CONFIRMED,PARTIALLY_PAID,false,true",
+        "CONFIRMED,PAID,false,true", "COMPLETED,UNPAID,false,false",
+        "COMPLETED,PARTIALLY_PAID,true,false", "COMPLETED,PAID,true,false",
+        "COMPLETED,REFUNDED,false,false", "CANCELLED,UNPAID,false,false",
+        "CANCELLED,PARTIALLY_PAID,false,false", "CANCELLED,PAID,false,false"
+    })
+    @org.springframework.transaction.annotation.Transactional
+    void bookingReviewAndCompletionApiMatrix(BookingStatus state, PaymentStatus payment, boolean eligible, boolean completable) throws Exception {
+        String token = login("0900000001", "BeautyLinkTest123!", "192.0.2." + (1 + state.ordinal() * 4 + payment.ordinal()));
+        var offering = offerings.findAll().get(0);
+        var booking = new com.example.backend.model.Booking();
+        booking.setBookingCode("BL-" + java.util.UUID.randomUUID().toString().substring(0, 8));
+        booking.setCustomer(users.findByPhone("0900000001").orElseThrow());
+        booking.setSupplier(offering.getSupplier()); booking.setService(offering);
+        booking.setPractitioner(practitioners.findBySupplierIdAndActiveTrue(offering.getSupplier().getId()).get(0));
+        booking.setAppointmentDate(LocalDate.now().minusDays(2));
+        booking.setStartTime(java.time.LocalTime.of(10, 0)); booking.setEndTime(java.time.LocalTime.of(11, 0));
+        booking.setTotalAmount(offering.getPrice()); booking.setStatus(state); booking.setPaymentStatus(payment);
+        bookings.saveAndFlush(booking);
+        long id = booking.getId();
+        mvc.perform(get("/api/v1/bookings/mine").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == " + id + ")].reviewEligible", hasItem(eligible)))
+                .andExpect(jsonPath("$[?(@.id == " + id + ")].completionEligible", hasItem(completable)));
+        for (String target : new String[]{"SERVICE", "SUPPLIER"}) {
+            var result = mvc.perform(put("/api/v1/bookings/" + id + "/reviews/" + target)
+                    .header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"rating\":4,\"comment\":\"Trải nghiệm thực tế\"}"));
+            if (eligible) result.andExpect(status().isOk()).andExpect(jsonPath("$.bookingId", is((int) id)));
+            else result.andExpect(status().isConflict()).andExpect(jsonPath("$.code", is("REVIEW_NOT_ELIGIBLE")));
+        }
+        var completion = mvc.perform(patch("/api/v1/bookings/" + id + "/complete").header("Authorization", "Bearer " + token));
+        if (completable || state == BookingStatus.COMPLETED) {
+            completion.andExpect(status().isOk()).andExpect(jsonPath("$.status", is("COMPLETED")));
+        } else completion.andExpect(status().isConflict());
+        mvc.perform(patch("/api/v1/bookings/" + id + "/complete")).andExpect(status().isUnauthorized());
+        mvc.perform(patch("/api/v1/bookings/" + id + "/complete")
+                .header("Authorization", "Bearer " + login("0900000002", "BeautyLinkTest123!", "192.0.2." + (1 + state.ordinal() * 4 + payment.ordinal()))))
+                .andExpect(status().isForbidden());
+        if (eligible) {
+            long publicReviewId = reviews.findByBookingIdAndTargetType(id, com.example.backend.model.DomainEnums.ReviewTargetType.SERVICE).orElseThrow().getId();
+            mvc.perform(get("/api/v1/suppliers/" + offering.getSupplier().getId()))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.reviews[*].id", hasItem((int) publicReviewId)));
+            assertTrue(reviews.findBySupplierIdOrderByCreatedAtDesc(offering.getSupplier().getId()).stream()
+                    .anyMatch(review -> review.getBooking().getId().equals(id)));
+            // Old reviews on non-completed bookings must not remain publicly verified.
+            booking.setStatus(BookingStatus.CONFIRMED); bookings.flush();
+            assertFalse(reviews.findBySupplierIdOrderByCreatedAtDesc(offering.getSupplier().getId()).stream()
+                    .anyMatch(review -> review.getBooking().getId().equals(id)));
+            mvc.perform(get("/api/v1/suppliers/" + offering.getSupplier().getId()))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.reviews[*].id", not(hasItem((int) publicReviewId))));
+        }
+    }
+
     @Test
-    void paidCustomerBookingCanReviewServiceAndSupplier() throws Exception {
+    void completedCustomerBookingCanReviewServiceAndSupplier() throws Exception {
         String customerToken = login("0900000001", "BeautyLinkTest123!");
         JsonNode services = objectMapper.readTree(mvc.perform(get("/api/v1/homepage/services"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
@@ -452,6 +512,26 @@ class PlatformApiIntegrationTest {
         paidBooking.setStatus(BookingStatus.CONFIRMED);
         bookings.saveAndFlush(paidBooking);
 
+        mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SERVICE")
+                        .header("Authorization", "Bearer " + customerToken).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rating\":5}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code", is("REVIEW_NOT_ELIGIBLE")));
+        mvc.perform(patch("/api/v1/bookings/" + bookingId + "/complete")
+                        .header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isConflict());
+        // Simulate elapsed appointment time, not completion: completion is performed via API.
+        paidBooking.setAppointmentDate(LocalDate.now().minusDays(1));
+        bookings.saveAndFlush(paidBooking);
+        mvc.perform(patch("/api/v1/bookings/" + bookingId + "/complete")
+                        .header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status", is("COMPLETED")))
+                .andExpect(jsonPath("$.reviewEligible", is(true)))
+                .andExpect(jsonPath("$.completionEligible", is(false)));
+        mvc.perform(patch("/api/v1/bookings/" + bookingId + "/complete")
+                        .header("Authorization", "Bearer " + customerToken)).andExpect(status().isOk());
+        mvc.perform(patch("/api/v1/bookings/" + bookingId + "/cancel")
+                        .header("Authorization", "Bearer " + customerToken)).andExpect(status().isConflict());
+
         String serviceReview = mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SERVICE")
                         .header("Authorization", "Bearer " + customerToken)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -462,13 +542,20 @@ class PlatformApiIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         long serviceReviewId = objectMapper.readTree(serviceReview).path("id").asLong();
 
-        mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SUPPLIER")
+        String supplierReview = mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SUPPLIER")
                         .header("Authorization", "Bearer " + customerToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"rating\":4,\"comment\":\"Cua hang sach se\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.targetType", is("SUPPLIER")))
-                .andExpect(jsonPath("$.rating", is(4)));
+                .andExpect(jsonPath("$.rating", is(4)))
+                .andReturn().getResponse().getContentAsString();
+        long supplierReviewId = objectMapper.readTree(supplierReview).path("id").asLong();
+        mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SUPPLIER")
+                        .header("Authorization", "Bearer " + customerToken)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"rating\":2,\"comment\":\"Cap nhat nha cung cap\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id", is((int) supplierReviewId)))
+                .andExpect(jsonPath("$.rating", is(2)));
 
         mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SERVICE")
                         .header("Authorization", "Bearer " + customerToken)
@@ -486,7 +573,7 @@ class PlatformApiIntegrationTest {
         assertNotNull(reviewedBooking);
         assertTrue(reviewedBooking.path("reviewEligible").asBoolean());
         assertTrue(reviewedBooking.path("serviceReview").path("rating").asInt() == 3);
-        assertTrue(reviewedBooking.path("supplierReview").path("rating").asInt() == 4);
+        assertTrue(reviewedBooking.path("supplierReview").path("rating").asInt() == 2);
 
         mvc.perform(put("/api/v1/bookings/" + bookingId + "/reviews/SERVICE")
                         .header("Authorization", "Bearer " + customerToken)
@@ -736,7 +823,12 @@ class PlatformApiIntegrationTest {
     }
 
     private String login(String identifier, String password) throws Exception {
+        return login(identifier, password, "127.0.0.1");
+    }
+
+    private String login(String identifier, String password, String remoteAddress) throws Exception {
         String response = mvc.perform(post("/api/v1/auth/login")
+                        .with(request -> { request.setRemoteAddr(remoteAddress); return request; })
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"identifier\":\"" + identifier + "\",\"password\":\"" + password + "\"}"))
                 .andExpect(status().isOk())

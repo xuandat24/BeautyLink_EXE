@@ -306,6 +306,32 @@ The backend enforces booking ownership and payment eligibility; hiding or changi
 
 Uploaded JPG, PNG, and WEBP files are resized in the browser and stored with the related MySQL record. The original file limit is 10 MB.
 
+### Complete an appointment and write verified reviews
+
+1. Booking creation stores `PENDING / UNPAID`. A verified PayOS payment changes it to
+   `CONFIRMED / PARTIALLY_PAID` (deposit) or `CONFIRMED / PAID` (full payment).
+2. After the scheduled end time in Vietnam, the booking owner can select **Đã sử dụng dịch vụ**
+   in the bookings page, account bookings tab, or appointments modal, and confirm completion.
+   `PATCH /api/v1/bookings/{id}/complete` checks ownership, verified payment, status, and time
+   on the server; repeating an accepted completion is idempotent.
+3. `COMPLETED` with `PAID` or `PARTIALLY_PAID` enables separate service and supplier reviews.
+   Each target can be edited using the existing PUT API; the unique booking/target constraint
+   prevents duplicate reviews. Deposits remain eligible because the remaining balance may be
+   settled at the salon; completion does not invent an online balance payment.
+4. `PENDING`, `CONFIRMED`, `CANCELLED`, unpaid, and refunded bookings cannot be reviewed.
+   Completed bookings cannot be cancelled. Public review lists and aggregates exclude reviews
+   whose booking does not satisfy the completed/paid rule, including legacy premature reviews.
+
+The API returns `completionEligible`, `reviewEligible`, `serviceReview`, and `supplierReview`.
+Customer actions use those server flags. Browser storage is not evidence of an appointment or
+review; customer screens no longer fabricate booking history or grant local review success.
+No existing booking is automatically marked completed by this change.
+
+This MVP uses the customer's explicit declaration after the scheduled appointment, not proof
+of physical attendance. Photo/video attachments and reward-point issuance are not implemented
+by the current review persistence API; the review form does not promise to save them or award points.
+See [BOOKING_REVIEW_AUDIT.md](BOOKING_REVIEW_AUDIT.md) for requirements, test coverage, and remaining gaps.
+
 ### Process a report
 
 1. A customer submits a report from an eligible page.
@@ -346,7 +372,7 @@ All application endpoints use the `/api/v1` prefix.
 | Supplier registration | `POST /auth/register-supplier` |
 | Catalog | `GET /locations`, `GET /categories`, `GET /categories/{slug}/services`, `GET /suppliers/{id}` |
 | Availability | `GET /services/{serviceId}/availability` |
-| Customer bookings | `POST /bookings`, `GET /bookings/mine`, `GET /bookings/mine/history-status`, `PATCH /bookings/{id}/cancel` |
+| Customer bookings | `POST /bookings`, `GET /bookings/mine`, `GET /bookings/mine/history-status`, `PATCH /bookings/{id}/cancel`, `PATCH /bookings/{id}/complete` |
 | Booking reviews | `PUT /bookings/{bookingId}/reviews/{SERVICE|SUPPLIER}` |
 | Supplier workspace | `GET/PUT /supplier/profile`, practitioner and schedule endpoints |
 | Supplier services | `GET/POST /supplier/services`, `PUT/DELETE /supplier/services/{id}` |

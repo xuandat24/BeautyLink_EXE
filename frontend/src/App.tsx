@@ -156,6 +156,7 @@ const mapServiceToSalon = (
 
 const mapServiceToPartner = (item: BackendService): NewPartner => ({
   id: `new-supplier-${item.supplierId}`,
+  supplierId: item.supplierId,
   serviceId: item.id,
   name: item.supplierName,
   subTitle: item.supplierBusinessType.toUpperCase(),

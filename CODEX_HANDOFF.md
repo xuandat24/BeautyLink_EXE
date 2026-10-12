@@ -1,17 +1,15 @@
-# BeautyLink release checkpoint
+# BeautyLink booking/review integration checkpoint
 
-Status: BACKEND_RELEASE_PREPARED — GitHub CI passed; PR creation needs user action; awaiting owner approval. Production unchanged.
+Status: CODE_VERIFIED — ready for commit/push and draft PR; no production release authorized.
 
-- Branch: `release/resend-backend-safe`; base `5f424585daec6246c9e711bf76d17566da19673c`.
-- Imported backend-only changes once from `codex/resend-first-booking`; sender/docs from `codex/resend-railway-otp`.
-- Added JWT identity/version binding, safe old-token rejection, DB-locked phone updates, compatibility-preserving Supplier validation and targeted tests.
-- Baseline: 45 backend tests passed. Final Java 21 Maven verify: 81 tests passed, 0 failures/errors/skips; package built successfully.
-- Existing frontend: npm ci, TypeScript (`npm run lint`), production build passed; no frontend source changes.
-- Read-only production audit: Railway and Vercel on base commit; healthy backend/MySQL; variable names present but values redacted; old API domain and CORS work. Custom API domain health is not verified from this workstation.
-- Code commit `9a4d7dce41e937da5262cf83e34d40be05407ff2` is pushed; GitHub CI passed: https://github.com/xuandat24/BeautyLink_EXE/actions/runs/38236172785 . Later documentation-only commits do not change the tested implementation; inspect actual Git HEAD and its CI before approval.
-- GitHub connector returned 403 `Resource not accessible by integration` on PR creation. User can create the backend PR at https://github.com/xuandat24/BeautyLink_EXE/compare/main...release/resend-backend-safe?expand=1 . No PR was created, merged or deployed by this task.
-- Next: user creates/reviews backend PR, privately confirms production configuration and MySQL backup, and explicitly approves the exact commit for merge/release. Never merge/deploy before that approval.
-- Phase 2 intentionally not started; source UI needs account-change race handling and interactive flow tests before release.
-- Details: `RELEASE_RESEND_BACKEND.md`.
+- Branch: `fix/completed-booking-reviews`; base: `5cdc5d3de0bc51bcc2358f6b1f0088ee933448ad`.
+- Integrated the supplied ZIP after a clean patch check. Preserved merged backend Resend/phone changes from main.
+- Added owner-only customer completion after appointment end in Vietnam, server eligibility, locked completion/cancellation/review writes and public review filtering.
+- Account/bookings/appointments load real bookings; both review targets use backend persistence and stable supplier IDs.
+- Scoped additions: stale review-load cleanup/retry, repeated-submit guard and tested booking ID scope; extra overnight/supplier-edit/public-HTTP checks.
+- Verified: Java 21 Maven verify 114 tests with no failures/errors/skips; frontend npm ci, 21 tests, TypeScript and production build pass; git diff --check pass.
+- No entity/schema migration, dependency, payment behavior or production configuration changes. No live payment/OTP/database mutation.
+- Next: commit/push review branch; create draft PR if GitHub connector permits, otherwise provide compare link and PR_DRAFT.md. Never merge/deploy for this task.
+- Limits: independent attendance verification, photo/video persistence and review points remain unimplemented. See BOOKING_REVIEW_AUDIT.md.
 
-No credentials, customer data, OTPs, JWTs or local environment paths are stored here.
+Inspect actual Git status/HEAD before continuing. This file contains no secrets, tokens or customer data.

@@ -9,14 +9,20 @@ import java.util.Optional;
 import java.util.List;
 
 public interface BookingReviewRepository extends JpaRepository<BookingReview, Long> {
+    String VALID_BOOKING = "r.booking.status = :#{T(com.example.backend.model.DomainEnums.BookingStatus).COMPLETED} "
+            + "and r.booking.paymentStatus in (:#{T(com.example.backend.model.DomainEnums.PaymentStatus).PAID}, "
+            + ":#{T(com.example.backend.model.DomainEnums.PaymentStatus).PARTIALLY_PAID})";
     Optional<BookingReview> findByBookingIdAndTargetType(Long bookingId, ReviewTargetType targetType);
-    List<BookingReview> findBySupplierIdOrderByCreatedAtDesc(Long supplierId);
+    @Query("select r from BookingReview r where r.supplier.id = :supplierId and " + VALID_BOOKING + " order by r.createdAt desc")
+    List<BookingReview> findBySupplierIdOrderByCreatedAtDesc(@Param("supplierId") Long supplierId);
 
-    long countByServiceIdAndTargetType(Long serviceId, ReviewTargetType targetType);
-    @Query("select avg(r.rating) from BookingReview r where r.service.id = :serviceId and r.targetType = :targetType")
+    @Query("select count(r) from BookingReview r where r.service.id = :serviceId and r.targetType = :targetType and " + VALID_BOOKING)
+    long countByServiceIdAndTargetType(@Param("serviceId") Long serviceId, @Param("targetType") ReviewTargetType targetType);
+    @Query("select avg(r.rating) from BookingReview r where r.service.id = :serviceId and r.targetType = :targetType and " + VALID_BOOKING)
     Double averageByService(@Param("serviceId") Long serviceId, @Param("targetType") ReviewTargetType targetType);
 
-    long countBySupplierIdAndTargetType(Long supplierId, ReviewTargetType targetType);
-    @Query("select coalesce(sum(r.rating), 0) from BookingReview r where r.supplier.id = :supplierId and r.targetType = :targetType")
+    @Query("select count(r) from BookingReview r where r.supplier.id = :supplierId and r.targetType = :targetType and " + VALID_BOOKING)
+    long countBySupplierIdAndTargetType(@Param("supplierId") Long supplierId, @Param("targetType") ReviewTargetType targetType);
+    @Query("select coalesce(sum(r.rating), 0) from BookingReview r where r.supplier.id = :supplierId and r.targetType = :targetType and " + VALID_BOOKING)
     Long ratingSumBySupplier(@Param("supplierId") Long supplierId, @Param("targetType") ReviewTargetType targetType);
 }
