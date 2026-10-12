@@ -101,6 +101,8 @@ OTP endpoints and request/response fields remain unchanged. PHONE channel is rej
 - Production frontend is unchanged. `npm ci`, `npm run lint` (`tsc --noEmit`) and `npm run build` passed. Existing Rollup/Zod annotation and >500 kB chunk warnings remain. There is no ESLint or frontend test script in `main`; UI tests belong to Phase 2.
 - `git diff --check` passed. GitHub CI results for the final pushed commit must be successful before approval. No live MySQL, real email delivery, browser session or payment test is claimed here.
 
+Code commit: `9a4d7dce41e937da5262cf83e34d40be05407ff2` (pushed). [GitHub CI](https://github.com/xuandat24/BeautyLink_EXE/actions/runs/38236172785) completed successfully for that commit. GitHub's PR creation endpoint returned 403 `Resource not accessible by integration`; no PR number exists. [Create backend PR: main ← release/resend-backend-safe](https://github.com/xuandat24/BeautyLink_EXE/compare/main...release/resend-backend-safe?expand=1). Documentation-only follow-up commits are checked by the same branch CI; approve the actual latest HEAD.
+
 ## D. Approval and manual actions
 
 1. GitHub: review the backend PR (or create one using its compare link if connector permission is insufficient), wait for both CI jobs to pass, then explicitly approve the exact commit for merge and production release. Because Railway follows `main` without a CI deploy gate, approval to merge must account for that deployment trigger. No main merge is authorized by this runbook.
