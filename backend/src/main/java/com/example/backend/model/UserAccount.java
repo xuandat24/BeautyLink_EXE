@@ -3,6 +3,7 @@ package com.example.backend.model;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import static com.example.backend.model.DomainEnums.*;
 
 @Entity
@@ -22,8 +23,11 @@ public class UserAccount {
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private AccountStatus status = AccountStatus.ACTIVE;
     @Column(nullable = false) private int loyaltyPoints = 0;
     @Column(nullable = false, updatable = false) private Instant createdAt = Instant.now();
-    @Column(nullable = false) private Instant updatedAt = Instant.now();
-    @PreUpdate void touch() { updatedAt = Instant.now(); }
+    @Column(nullable = false) private Instant updatedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+    @PreUpdate void touch() {
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        updatedAt = now.isAfter(updatedAt) ? now : updatedAt.plusMillis(1);
+    }
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
     public String getFullName() { return fullName; } public void setFullName(String fullName) { this.fullName = fullName; }
     public String getPhone() { return phone; } public void setPhone(String phone) { this.phone = phone; }

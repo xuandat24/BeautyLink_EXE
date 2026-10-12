@@ -8,6 +8,8 @@ This guide deploys the recommended production-shaped setup:
 
 No local `.env` file or real secret should be committed. Railway and Vercel store the production variables.
 
+For the existing BeautyLink production project, follow [RELEASE_RESEND_BACKEND.md](RELEASE_RESEND_BACKEND.md). The setup sections below are for a new installation. Preserve existing secrets, domains, CORS, API base and PayOS URLs; require explicit approval before any production change or deployment.
+
 ## 1. Verify the repository
 
 Deploy the `main` branch only after these commands pass locally:
@@ -44,25 +46,14 @@ MYSQLUSER=${{MySQL.MYSQLUSER}}
 MYSQLPASSWORD=${{MySQL.MYSQLPASSWORD}}
 JWT_EXPIRATION_MS=3600000
 CORS_ALLOWED_ORIGINS=https://temporary.invalid
-DEMO_DATA_ENABLED=true
-DEMO_ACCOUNT_PASSWORD=<a-new-private-demo-password>
-SUPPLIER_AUTO_VERIFY=true
+DEMO_DATA_ENABLED=false
+SUPPLIER_AUTO_VERIFY=false
 JWT_SECRET=<a-new-random-secret>
 KYC_ENCRYPTION_KEY=<a-different-random-secret>
 OTP_PEPPER=<a-third-independent-random-secret>
-RATE_LIMIT_BACKEND=redis
-REDIS_URL=${{Redis.REDIS_URL}}
-REDIS_TIMEOUT=2s
-SPRING_MAIL_HOST=<smtp-host>
-SPRING_MAIL_PORT=587
-SPRING_MAIL_USERNAME=<smtp-username>
-SPRING_MAIL_PASSWORD=<smtp-password>
-SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
-SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
-OTP_MAIL_FROM=<verified-sender-address>
-TWILIO_ACCOUNT_SID=<twilio-account-sid>
-TWILIO_AUTH_TOKEN=<twilio-auth-token>
-TWILIO_FROM_NUMBER=<twilio-sender-number>
+RATE_LIMIT_BACKEND=memory
+RESEND_API_KEY=<resend-api-key>
+OTP_MAIL_FROM=no-reply@beautylink.cloud
 LOGIN_MAX_PER_IDENTIFIER=8
 LOGIN_MAX_PER_IP=20
 LOGIN_RATE_WINDOW_SECONDS=900
@@ -82,24 +73,24 @@ PAYOS_RECONCILIATION_MIN_INTERVAL_SECONDS=120
 
 PayOS is the only production payment gateway. Once any PayOS credential is supplied, the production profile requires all three credentials plus public HTTPS return, cancel, and webhook URLs. Keep credentials absent only for a staged deployment where checkout is intentionally disabled.
 
-Generate the secret values locally; do not reuse any development or database password:
+For a new installation only, generate independent secret values locally. Preserve all existing production secrets during this release:
 
 ```powershell
 node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 ```
 
-Run the command four times: use independent results for `JWT_SECRET`, `KYC_ENCRYPTION_KEY`, `OTP_PEPPER`, and `DEMO_ACCOUNT_PASSWORD`. Keep `KYC_ENCRYPTION_KEY` and `OTP_PEPPER` stable across redeployments.
+For a new installation, use independent results for `JWT_SECRET`, `KYC_ENCRYPTION_KEY`, and `OTP_PEPPER`. Keep these stable across this release; never print them in logs or paste them into a PR or chat.
 
 ### Demo versus real production
 
-For the classroom demonstration, keep:
+For local development using a non-production profile only:
 
 ```text
 DEMO_DATA_ENABLED=true
 SUPPLIER_AUTO_VERIFY=true
 ```
 
-This creates fake suppliers, services, schedules, and demo accounts in a new database. The two supported cities and five categories are created in either mode because real supplier registration needs them. The seeding is safe to run repeatedly. Share `DEMO_ACCOUNT_PASSWORD` privately with the demonstrators.
+Demo seeders are profile-gated and always disabled in production. The two supported cities and five categories are created in either mode because real supplier registration needs them. Do not enable demo flags to fill a production catalog.
 
 For a real public launch, use:
 
@@ -108,7 +99,7 @@ DEMO_DATA_ENABLED=false
 SUPPLIER_AUTO_VERIFY=false
 ```
 
-Add a private Redis service to Railway and keep `RATE_LIMIT_BACKEND=redis`; production fails closed if Redis cannot enforce a limit. Registration sends real SMS through Twilio and email through SMTP. Missing or rejected provider credentials produce a safe `503`, and no account/token is created.
+Preserve the current single-replica rate-limit backend. Shared Redis is required before scaling, which is a separate approved change; the existing implementation falls back to bounded in-memory limits during Redis outages. Registration OTP is email-only and is sent through Resend over HTTPS port 443. Missing or rejected Resend credentials produce a safe `503`; no account or registration token is created. SMTP, Gmail App Password, Twilio and Zalo are not used.
 
 Before the first deployment of this version, take a MySQL backup. Startup performs a narrow idempotent migration that drops the legacy unique payment-per-booking and all-status slot constraints, preserving rows and foreign keys. Verify the startup logs, then confirm multiple payment attempts for one booking in MySQL. Once a second attempt exists, recover by rolling forward rather than reverting to code that assumes one payment row per booking.
 
@@ -124,7 +115,7 @@ Deploy the Railway backend, generate its public domain, and open:
 https://YOUR-RAILWAY-DOMAIN/api/v1/categories
 ```
 
-With demo data enabled, the response should contain five categories. Also check the Railway deployment logs for a successful database connection and health check.
+The response should contain the reference categories without enabling demo data. Also check the Railway deployment logs for a successful database connection and health check.
 
 ## 5. Deploy the frontend on Vercel
 
@@ -169,7 +160,7 @@ Verify all of these from the Vercel website:
 - Hà Nội and Hồ Chí Minh can be selected.
 - Categories and homepage services load.
 - A customer can sign in and create a booking.
-- A new customer receives real phone/email OTP messages and cannot register with a wrong, expired, or reused verification token.
+- A new customer and supplier receive a real six-digit email OTP through Resend and cannot register with a wrong, expired, or reused verification token.
 - The booking appears in **Tổng quan & Lịch hẹn**.
 - A PayOS payment opens on the hosted checkout and the booking becomes paid only after its webhook is received.
 - A supplier can sign in, edit its profile, create a service, and update a schedule.
@@ -193,9 +184,9 @@ Verify all of these from the Vercel website:
 
 ### The deployed catalog is empty
 
-- Confirm `DEMO_DATA_ENABLED=true` on the backend service.
-- Confirm `DEMO_ACCOUNT_PASSWORD` has at least eight characters.
-- Redeploy and inspect the backend startup logs.
+- Check real supplier verification status and active service listings.
+- Confirm reference categories load and inspect logs using read-only tools.
+- Do not enable demo seeders or delete data to repair the production catalog.
 
 ### Security reminders
 
@@ -204,4 +195,13 @@ Verify all of these from the Vercel website:
 - Do not expose the Railway MySQL service publicly unless external database access is specifically required.
 - Replace the demonstration password before any public deployment.
 - Never expose PayOS credentials in `VITE_` variables or frontend source code.
-- Keep Redis private, require TLS/auth where supported, and never expose Twilio, SMTP, or `OTP_PEPPER` values to the frontend.
+- Keep Redis private, require TLS/auth where supported, and never expose Resend credentials or `OTP_PEPPER` values to the frontend.
+
+## 9. Resend setup, smoke test and rollback
+
+1. In Resend, keep `beautylink.cloud` verified and create a restricted sending API key.
+2. Store the key as Railway `RESEND_API_KEY` and set `OTP_MAIL_FROM=no-reply@beautylink.cloud` on the backend service only. Do not add the key to Vercel or any `VITE_` variable.
+3. Redeploy the backend and request one OTP for a dedicated test account. Confirm the email arrives, the six-digit code works once, and wrong, expired and reused codes fail. Provider acceptance is not proof of Inbox delivery, so check Inbox and spam during the smoke test.
+4. Verify customer and supplier registration, login, booking creation and PayOS checkout after deployment.
+
+Automated tests use a local HTTP fake and never call Resend or a production database. If the OTP change must be rolled back, redeploy the previous application image/commit; there is no database migration to reverse. Keep `OTP_PEPPER` unchanged so existing unexpired challenges remain consistently hashed. The legacy `phone_code_hash` column remains populated for old MySQL `NOT NULL` compatibility and must not be dropped during rollback.

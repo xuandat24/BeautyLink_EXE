@@ -65,6 +65,8 @@ public class RegistrationVerificationService {
         challenge.setId(challengeId);
         challenge.setPhoneHash(hashing.hash("phone", phone));
         challenge.setEmailHash(hashing.hash("email", email));
+        // Production's legacy phone_code_hash column is NOT NULL. Keep writing a one-way
+        // compatibility value until a separately reviewed forward migration removes it.
         challenge.setPhoneCodeHash(hashing.hash("otp-phone-" + challengeId, otpCode));
         challenge.setEmailCodeHash(hashing.hash("otp-email-" + challengeId, otpCode));
         challenge.setVerificationChannel(VerificationChannel.EMAIL);

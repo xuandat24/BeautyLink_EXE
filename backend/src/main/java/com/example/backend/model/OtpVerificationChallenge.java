@@ -12,6 +12,8 @@ public class OtpVerificationChallenge {
     @Id @Column(length = 36) private String id;
     @Column(name = "phone_hash", nullable = false, length = 64) private String phoneHash;
     @Column(name = "email_hash", length = 64) private String emailHash;
+    // Retained for compatibility with production schemas where this legacy column is NOT NULL.
+    // Email-only registration writes a non-secret compatibility value; it is never verified.
     @Column(name = "phone_code_hash", nullable = false, length = 64) private String phoneCodeHash;
     @Column(name = "email_code_hash", length = 64) private String emailCodeHash;
     @Enumerated(EnumType.STRING) @Column(name = "verification_channel", length = 16) private DomainEnums.VerificationChannel verificationChannel;

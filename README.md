@@ -19,7 +19,7 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 - Added browser location handling with a clearly labelled approximate network fallback when device GPS is unavailable. Suppliers can still enter exact store coordinates manually.
 - Uses a server-created PayOS hosted checkout. A booking is marked paid only after the backend verifies the signed PayOS webhook or reconciles it directly with PayOS.
 - PayOS links expire after 15 minutes; expired pending links are marked `EXPIRED` and can be safely regenerated with a new order code.
-- Registration verifies ownership through one user-selected OTP channel (Twilio SMS or SMTP email); challenges and registration tokens are single-use and production refuses registration if the selected delivery channel is unavailable.
+- Registration verifies the email address with a six-digit OTP sent through the Resend HTTPS API; challenges and registration tokens are single-use and registration fails closed when delivery is unavailable.
 - Production authentication and OTP throttling is shared across replicas through Redis; local/test profiles use the in-memory backend.
 - Payment attempts are append-only. A retry keeps the old attempt for audit and reacquires the released slot under a database lock before creating a new PayOS order.
 - Added client- and server-side Vietnamese validation messages for customer and admin forms, including authentication, profiles, bookings, reviews, reports, and admin report resolution.
@@ -201,14 +201,8 @@ REGISTRATION_MAX_PER_IP=5
 REGISTRATION_RATE_WINDOW_SECONDS=3600
 RATE_LIMIT_BACKEND=memory
 REDIS_URL=redis://localhost:6379
-SPRING_MAIL_HOST=smtp.example.com
-SPRING_MAIL_PORT=587
-SPRING_MAIL_USERNAME=your_smtp_username
-SPRING_MAIL_PASSWORD=your_smtp_password
-OTP_MAIL_FROM=no-reply@example.com
-TWILIO_ACCOUNT_SID=your_twilio_account_sid
-TWILIO_AUTH_TOKEN=your_twilio_auth_token
-TWILIO_FROM_NUMBER=your_twilio_sender_number
+RESEND_API_KEY=your_resend_api_key
+OTP_MAIL_FROM=no-reply@beautylink.cloud
 PAYOS_CLIENT_ID=your_payos_client_id
 PAYOS_API_KEY=your_payos_api_key
 PAYOS_CHECKSUM_KEY=your_payos_checksum_key
@@ -230,7 +224,7 @@ The signed PayOS webhook is primary and server-to-server reconciliation is the f
 
 For one production replica, the bounded in-memory login limiter is the default so an unavailable Redis service never blocks valid database-account login. Before scaling to multiple replicas, set `RATE_LIMIT_BACKEND=redis` and point `REDIS_URL` at a private Redis service shared by every backend replica. If Redis becomes unavailable later, the backend logs the outage and retains the same bounded limiter locally rather than rejecting every login.
 
-For Railway registration, create an independent random `OTP_PEPPER` of at least 32 characters and configure at least one real delivery channel. Email OTP requires `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true`, `SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true`, and `OTP_MAIL_FROM`. SMS OTP requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER`. Gmail accounts must use an App Password after enabling 2-Step Verification; never use or commit the normal Gmail password. After changing Railway variables, redeploy the backend. Missing/short `OTP_PEPPER` returns `OTP_NOT_CONFIGURED`; an unavailable selected provider returns `OTP_CHANNEL_UNAVAILABLE`. OTP values, provider secrets, and raw contact identifiers are never stored or logged.
+For Railway registration, create an independent random `OTP_PEPPER` of at least 32 characters. Create a restricted Resend API key and configure `RESEND_API_KEY` plus `OTP_MAIL_FROM=no-reply@beautylink.cloud` only on the backend service. No Gmail SMTP password, Twilio account, SMS OTP or Zalo OTP is required. After changing Railway variables, redeploy the backend. Missing/short `OTP_PEPPER` returns `OTP_NOT_CONFIGURED`; missing or rejected Resend configuration makes only the OTP endpoint fail closed with a safe `503`, without crashing the rest of the website. OTP values, provider secrets, authorization headers and email bodies are never logged.
 
 On the first MySQL startup after this upgrade, an idempotent compatibility migration removes only the legacy unique indexes on `payment_transactions.booking_id` and the practitioner/date/time booking slot, then adds non-unique lookup indexes. It backfills missing merchant references from the original PayOS order code. Back up the database before deployment and treat the change as roll-forward once a booking has multiple attempts. Existing transaction rows and legacy columns are retained.
 
@@ -348,11 +342,11 @@ All application endpoints use the `/api/v1` prefix.
 
 | Area | Important endpoints |
 |---|---|
-| Authentication | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
+| Authentication | `POST /auth/registration-verification/start`, `POST /auth/registration-verification/confirm`, `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/me/phone` |
 | Supplier registration | `POST /auth/register-supplier` |
 | Catalog | `GET /locations`, `GET /categories`, `GET /categories/{slug}/services`, `GET /suppliers/{id}` |
 | Availability | `GET /services/{serviceId}/availability` |
-| Customer bookings | `POST /bookings`, `GET /bookings/mine`, `PATCH /bookings/{id}/cancel` |
+| Customer bookings | `POST /bookings`, `GET /bookings/mine`, `GET /bookings/mine/history-status`, `PATCH /bookings/{id}/cancel` |
 | Booking reviews | `PUT /bookings/{bookingId}/reviews/{SERVICE|SUPPLIER}` |
 | Supplier workspace | `GET/PUT /supplier/profile`, practitioner and schedule endpoints |
 | Supplier services | `GET/POST /supplier/services`, `PUT/DELETE /supplier/services/{id}` |
@@ -364,6 +358,10 @@ Protected requests send the JWT as:
 ```text
 Authorization: Bearer <access-token>
 ```
+
+`PATCH /auth/me/phone` accepts `{ "phone": "0912345678" }` for the authenticated account only and returns the existing `AuthResponse` contract with the persisted user and a replacement JWT. Invalid input returns `400`; an occupied phone returns `409 PHONE_ALREADY_IN_USE`; stale/anonymous authentication returns `401`. Same-phone requests are idempotent. `GET /bookings/mine/history-status` is CUSTOMER-only and returns `{ "hasPreviousBooking": true|false }`; cancelled bookings count as history.
+
+New JWTs remain phone-subject tokens for frontend compatibility, with signed account ID and existing `updatedAt` binding to prevent a reassigned phone from authenticating an old token. Account changes invalidate older JWTs. Legacy tokens remain accepted only when issued after the persisted account's last update; an ambiguous same-second legacy token requires login again. No schema migration is required. See [RELEASE_RESEND_BACKEND.md](RELEASE_RESEND_BACKEND.md) for the gated backend-first release.
 
 ## Seed data
 
