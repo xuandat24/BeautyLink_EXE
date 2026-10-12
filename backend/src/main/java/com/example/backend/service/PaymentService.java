@@ -129,7 +129,8 @@ public class PaymentService {
 
     @Transactional
     public PayOSPaymentResponse status(UserAccount customer, Long orderCode) {
-        PaymentTransaction payment = payments.findByOrderCodeForUpdate(orderCode).orElseThrow(this::notFound);
+        PaymentTransaction payment = lockByOrderCode(orderCode);
+        if (payment == null) throw notFound();
         if (!payment.getBooking().getCustomer().getId().equals(customer.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "PAYMENT_FORBIDDEN", "Bạn không có quyền xem giao dịch này");
         }
@@ -143,7 +144,7 @@ public class PaymentService {
         if (data == null || data.getOrderCode() == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PAYOS_INVALID_WEBHOOK", "Webhook PayOS thiếu dữ liệu giao dịch");
         }
-        PaymentTransaction payment = payments.findByOrderCodeForUpdate(data.getOrderCode()).orElse(null);
+        PaymentTransaction payment = lockByOrderCode(data.getOrderCode());
         if (payment == null) {
             log.info("PayOS signed verification webhook accepted for unknown orderCode={}", data.getOrderCode());
             return true;
@@ -152,6 +153,7 @@ public class PaymentService {
             log.info("PayOS duplicate paid webhook ignored orderCode={}", data.getOrderCode());
             return true;
         }
+        if (payment.getStatus() == PaymentTransactionStatus.REVIEW_REQUIRED) return true;
         if (!Boolean.TRUE.equals(webhook.getSuccess()) || !"00".equals(data.getCode())) {
             log.info("PayOS non-success webhook ignored orderCode={} code={}", data.getOrderCode(), data.getCode());
             return true;
@@ -185,9 +187,22 @@ public class PaymentService {
 
     @Transactional
     public void reconcileById(Long paymentId) {
+        Long bookingId = payments.findBookingIdByPaymentId(paymentId).orElse(null);
+        if (bookingId == null || bookings.findByIdForUpdate(bookingId).isEmpty()) return;
         PaymentTransaction payment = payments.findByIdForUpdate(paymentId).orElse(null);
+        if (payment != null && !bookingId.equals(payment.getBooking().getId())) throw notFound();
         if (payment == null || payment.getStatus() != PaymentTransactionStatus.PENDING) return;
         reconcileLocked(payment);
+    }
+
+    // Every writer serializes on the booking before touching any of its payment attempts.
+    // Do not rely on a fetch join implicitly locking joined rows (dialect-dependent).
+    private PaymentTransaction lockByOrderCode(Long orderCode) {
+        Long bookingId = payments.findBookingIdByOrderCode(orderCode).orElse(null);
+        if (bookingId == null || bookings.findByIdForUpdate(bookingId).isEmpty()) return null;
+        PaymentTransaction payment = payments.findByOrderCodeForUpdate(orderCode).orElse(null);
+        if (payment != null && !bookingId.equals(payment.getBooking().getId())) throw notFound();
+        return payment;
     }
 
     private void reconcileLocked(PaymentTransaction payment) {
@@ -259,7 +274,7 @@ public class PaymentService {
     }
 
     private void closeSupersededAttempts(PaymentTransaction paid) {
-        for (PaymentTransaction other : payments.findAllByBookingIdOrderByCreatedAtDesc(paid.getBooking().getId())) {
+        for (PaymentTransaction other : payments.findAllByBookingIdForUpdate(paid.getBooking().getId())) {
             if (other == paid || (paid.getId() != null && Objects.equals(other.getId(), paid.getId()))
                     || other.getStatus() != PaymentTransactionStatus.PENDING) continue;
             try { gateway.cancel(other.getOrderCode(), "Another payment attempt was completed"); }

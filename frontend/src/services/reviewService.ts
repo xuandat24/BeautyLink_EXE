@@ -26,10 +26,6 @@ export interface ServiceReviewItem {
 
 // Reviews are server-owned. Legacy localStorage entries are not verified bookings.
 export const reviewService = {
-  getReviewsForService(_serviceTitle: string, _serviceId?: number | string): ServiceReviewItem[] {
-    return [];
-  },
-
   // Generate realistic, step-by-step beauty workflows with photos
   getProcedureSteps(categorySlug?: string, serviceTitle?: string): ServiceStep[] {
     const slug = (categorySlug || '').toLowerCase();

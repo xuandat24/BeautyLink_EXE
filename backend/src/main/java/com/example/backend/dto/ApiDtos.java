@@ -125,6 +125,8 @@ public final class ApiDtos {
     public record PublicReviewResponse(Long id, ReviewTargetType targetType, int rating, String comment,
                                        String reviewerDisplayName, Long serviceId, String serviceName,
                                        Instant createdAt) {}
+    public record PublicReviewPageResponse(List<PublicReviewResponse> content, long totalElements,
+                                          int totalPages, int page, int size, double rating) {}
     public record PublicSupplierShopResponse(Long id, String name, String slug, String businessType,
                                              String description, String addressLine, String locationName,
                                              String imageUrl, Double latitude, Double longitude,

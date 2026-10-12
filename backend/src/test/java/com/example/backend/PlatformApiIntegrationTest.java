@@ -419,12 +419,12 @@ class PlatformApiIntegrationTest {
 
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.CsvSource({
-        "PENDING,UNPAID,false,false", "PENDING,PAID,false,false",
+        "PENDING,UNPAID,false,false", "PENDING,PARTIALLY_PAID,false,false", "PENDING,PAID,false,false", "PENDING,REFUNDED,false,false",
         "CONFIRMED,UNPAID,false,false", "CONFIRMED,PARTIALLY_PAID,false,true",
-        "CONFIRMED,PAID,false,true", "COMPLETED,UNPAID,false,false",
+        "CONFIRMED,PAID,false,true", "CONFIRMED,REFUNDED,false,false", "COMPLETED,UNPAID,false,false",
         "COMPLETED,PARTIALLY_PAID,true,false", "COMPLETED,PAID,true,false",
         "COMPLETED,REFUNDED,false,false", "CANCELLED,UNPAID,false,false",
-        "CANCELLED,PARTIALLY_PAID,false,false", "CANCELLED,PAID,false,false"
+        "CANCELLED,PARTIALLY_PAID,false,false", "CANCELLED,PAID,false,false", "CANCELLED,REFUNDED,false,false"
     })
     @org.springframework.transaction.annotation.Transactional
     void bookingReviewAndCompletionApiMatrix(BookingStatus state, PaymentStatus payment, boolean eligible, boolean completable) throws Exception {
@@ -463,11 +463,11 @@ class PlatformApiIntegrationTest {
             long publicReviewId = reviews.findByBookingIdAndTargetType(id, com.example.backend.model.DomainEnums.ReviewTargetType.SERVICE).orElseThrow().getId();
             mvc.perform(get("/api/v1/suppliers/" + offering.getSupplier().getId()))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.reviews[*].id", hasItem((int) publicReviewId)));
-            assertTrue(reviews.findBySupplierIdOrderByCreatedAtDesc(offering.getSupplier().getId()).stream()
+            assertTrue(reviews.findBySupplierIdOrderByCreatedAtDesc(offering.getSupplier().getId(), org.springframework.data.domain.PageRequest.of(0, 100)).stream()
                     .anyMatch(review -> review.getBooking().getId().equals(id)));
             // Old reviews on non-completed bookings must not remain publicly verified.
             booking.setStatus(BookingStatus.CONFIRMED); bookings.flush();
-            assertFalse(reviews.findBySupplierIdOrderByCreatedAtDesc(offering.getSupplier().getId()).stream()
+            assertFalse(reviews.findBySupplierIdOrderByCreatedAtDesc(offering.getSupplier().getId(), org.springframework.data.domain.PageRequest.of(0, 100)).stream()
                     .anyMatch(review -> review.getBooking().getId().equals(id)));
             mvc.perform(get("/api/v1/suppliers/" + offering.getSupplier().getId()))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.reviews[*].id", not(hasItem((int) publicReviewId))));

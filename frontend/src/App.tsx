@@ -45,6 +45,7 @@ import {
   SearchFilters,
 } from './types';
 import { beautyApi, DEFAULT_CATEGORIES, getAccessToken } from './services/beautyApi';
+import { serviceReviewSummary, supplierReviewSummary } from './lib/reviewScope';
 import { updateMetaTags } from './lib/seo';
 import { CheckCircle2 } from 'lucide-react';
 
@@ -96,6 +97,7 @@ const calculateDistanceKm = (
 const mapServiceToDeal = (item: BackendService, idx: number): HotDeal => ({
   id: `service-${item.id}`,
   serviceId: item.id,
+  supplierId: item.supplierId,
   title: item.name,
   brandName: item.supplierName,
   brandLogo: getInitials(item.supplierName),
@@ -107,8 +109,7 @@ const mapServiceToDeal = (item: BackendService, idx: number): HotDeal => ({
       ? Math.round((1 - item.price / item.originalPrice) * 100)
       : 0,
   isNew: idx < 4,
-  rating: item.rating,
-  reviewsCount: item.supplierReviewCount,
+  ...serviceReviewSummary(item),
   duration: `${item.durationMinutes} phút`,
   category: mapCategorySlug(item.categorySlug),
   highlightText: item.highlightText || item.description || '',
@@ -133,6 +134,7 @@ const mapServiceToSalon = (
   return {
     id: `supplier-${item.supplierId}`,
     serviceId: item.id,
+    supplierId: item.supplierId,
     name: item.supplierName,
     category: mapCategorySlug(item.categorySlug),
     categoryLabel: item.supplierBusinessType,
@@ -142,8 +144,7 @@ const mapServiceToSalon = (
       calculatedDist != null
         ? Number(calculatedDist.toFixed(1))
         : 0.8 + (idx % 8) * 0.7,
-    rating: item.rating,
-    reviewsCount: item.supplierReviewCount,
+    ...supplierReviewSummary(item),
     image: item.supplierImageUrl || item.imageUrl,
     logo: getInitials(item.supplierName),
     badge: 'Đã xác minh',
@@ -158,6 +159,7 @@ const mapServiceToPartner = (item: BackendService): NewPartner => ({
   id: `new-supplier-${item.supplierId}`,
   supplierId: item.supplierId,
   serviceId: item.id,
+  ...supplierReviewSummary(item),
   name: item.supplierName,
   subTitle: item.supplierBusinessType.toUpperCase(),
   address: item.supplierAddress,
@@ -1014,7 +1016,8 @@ export default function App() {
                     ? Math.round(((svc.originalPrice - svc.price) / svc.originalPrice) * 100)
                     : 0,
                 rating: svc.rating,
-                reviewsCount: svc.supplierReviewCount,
+                reviewsCount: svc.serviceReviewCount ?? 0,
+                supplierId: svc.supplierId,
                 image: svc.imageUrl,
                 category: svc.categorySlug,
                 duration: `${svc.durationMinutes} phút`,
@@ -1099,7 +1102,7 @@ export default function App() {
               onViewAll={() => openViewAll('new-partners')}
             />
 
-            <CustomerReviewsSection />
+            {import.meta.env.DEV && <CustomerReviewsSection />}
 
             <WhyChooseUs onBookService={handleBookDeal} />
           </>

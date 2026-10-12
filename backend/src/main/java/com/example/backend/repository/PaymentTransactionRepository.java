@@ -16,12 +16,20 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     Optional<PaymentTransaction> findFirstByBookingIdOrderByCreatedAtDesc(Long bookingId);
     Optional<PaymentTransaction> findFirstByBookingIdAndStatusOrderByCreatedAtDesc(Long bookingId, PaymentTransactionStatus status);
     List<PaymentTransaction> findAllByBookingIdOrderByCreatedAtDesc(Long bookingId);
-    Optional<PaymentTransaction> findByOrderCode(Long orderCode);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select p from PaymentTransaction p join fetch p.booking b join fetch b.customer where p.orderCode = :orderCode")
+    @Query("select p from PaymentTransaction p where p.booking.id = :bookingId order by p.id")
+    List<PaymentTransaction> findAllByBookingIdForUpdate(@Param("bookingId") Long bookingId);
+    Optional<PaymentTransaction> findByOrderCode(Long orderCode);
+    // Scalar lookups do not put stale payment/booking entities in the persistence context.
+    @Query("select p.booking.id from PaymentTransaction p where p.orderCode = :orderCode")
+    Optional<Long> findBookingIdByOrderCode(@Param("orderCode") Long orderCode);
+    @Query("select p.booking.id from PaymentTransaction p where p.id = :id")
+    Optional<Long> findBookingIdByPaymentId(@Param("id") Long id);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from PaymentTransaction p where p.orderCode = :orderCode")
     Optional<PaymentTransaction> findByOrderCodeForUpdate(@Param("orderCode") Long orderCode);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select p from PaymentTransaction p join fetch p.booking b join fetch b.customer where p.id = :id")
+    @Query("select p from PaymentTransaction p where p.id = :id")
     Optional<PaymentTransaction> findByIdForUpdate(@Param("id") Long id);
     List<PaymentTransaction> findByStatusAndExpiresAtBefore(PaymentTransactionStatus status, Instant expiresAt);
     @Query("select p from PaymentTransaction p where p.status = :status and p.createdAt <= :createdBefore " +

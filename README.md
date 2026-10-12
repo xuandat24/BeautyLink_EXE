@@ -542,6 +542,32 @@ The frontend displays a local BeautyLink placeholder when an external supplier i
 
 ## Contributing
 
+### Booking/review release checks
+
+The public review endpoints are `GET /api/v1/services/{id}/reviews` and `GET /api/v1/suppliers/{id}/reviews`.
+Both accept zero-based `page` and `size` (default 20, capped at 100) and return
+`content`, `totalElements`, `totalPages`, `page`, `size`, `rating`. Service and supplier
+ratings/counts use only completed, paid/deposit-paid bookings with ratings 1–5;
+legacy base ratings do not count. Completion is customer self-attestation, not independent attendance verification.
+
+Run full Maven verify and frontend npm ci/test/lint/build. CI additionally runs
+`BookingReviewReleaseTest` against a disposable loopback MySQL test database; never point tests at Railway MySQL.
+
+For integrated local browser smoke (no real payments/emails):
+
+1. In backend, run `mvn verify dependency:build-classpath -Dmdep.outputFile=target/test-classpath.txt -Dmdep.includeScope=test`.
+2. Start `com.example.backend.BookingReviewSmokeServer` with test-classes, classes and that test classpath (Java 21). It binds 127.0.0.1:8080 and creates only H2 in-memory fixtures. It is not packaged into the production JAR.
+3. In frontend, run `npm run dev -- --host 127.0.0.1`, then `node tests/bookingReviewSmoke.mjs` with an installed Playwright runtime. `PLAYWRIGHT_MODULE_PATH` may specify its module path; `SMOKE_BROWSER_CHANNEL=chrome` uses an installed Chrome in a separate headless test profile.
+4. Stop the test servers afterward. A fresh server is required for each run because the smoke test completes and reviews its fixture bookings. Test entry `tests/review-smoke.html` is not a production build entry.
+
+If this Windows Java installation cannot create AF_UNIX loopback pipes, use
+`-Djdk.net.unixdomain.tmpdir=<a non-existing temporary subdirectory>` only for the
+local test JVM to trigger its TCP pipe fallback. Do not modify the production JVM or Dockerfile for this machine-specific issue.
+
+Before release, verify exact-commit CI, a usable recent DB backup, and a controlled
+backend-first rollout. No schema migration is introduced. See `PR_DRAFT.md` for
+scope, test evidence, release gates and rollback baseline.
+
 1. Create a feature branch from the current main branch.
 2. Keep changes focused and do not commit secrets, `node_modules`, `dist`, or `target`.
 3. Run the backend tests and frontend checks.

@@ -32,7 +32,10 @@ import { HotDeal, Salon, NewPartner, HOT_DEALS, NEARBY_SALONS, NEW_PARTNERS } fr
 import { PriceRangeSlider, PriceRange } from './PriceRangeSlider';
 import { OptimizedImage } from './OptimizedImage';
 import { CurrentUser } from '../types';
-import { reviewService, ServiceStep, ServiceReviewItem } from '../services/reviewService';
+import { reviewService } from '../services/reviewService';
+import { useBookingReviews } from '../hooks/useBookingReviews';
+import { exploreReviewScope } from '../lib/reviewScope';
+import { ReviewListStatus } from './ReviewListStatus';
 import { FavoriteToast, FavoriteToastInfo } from './FavoriteToast';
 
 export type ExploreContext = 'deals' | 'nearby' | 'new-partners' | 'all';
@@ -52,6 +55,8 @@ export interface FilterExplorePageProps {
 
 export interface UnifiedExploreItem {
   id: string;
+  serviceId?: number;
+  supplierId?: number;
   type: 'deal' | 'salon' | 'partner';
   title: string;
   brandName: string;
@@ -78,9 +83,9 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
   onBookDeal,
   onAddToCart,
   onSelectPartner,
-  deals = HOT_DEALS,
-  salons = NEARBY_SALONS,
-  partners = NEW_PARTNERS,
+  deals = import.meta.env.DEV ? HOT_DEALS : [],
+  salons = import.meta.env.DEV ? NEARBY_SALONS : [],
+  partners = import.meta.env.DEV ? NEW_PARTNERS : [],
   currentUser,
 }) => {
   const [activeTab, setActiveTab] = useState<ExploreContext>(initialContext);
@@ -95,6 +100,8 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
   const [addedItemId, setAddedItemId] = useState<string | null>(null);
   const [activeStepsItem, setActiveStepsItem] = useState<UnifiedExploreItem | null>(null);
   const [activeReviewsItem, setActiveReviewsItem] = useState<UnifiedExploreItem | null>(null);
+  const reviewScope = exploreReviewScope(activeReviewsItem);
+  const reviewState = useBookingReviews(reviewScope?.targetType === 'SUPPLIER' ? reviewScope.id : undefined, reviewScope?.targetType === 'SERVICE' ? reviewScope.id : undefined, 0, activeReviewsItem?.type === 'deal' ? 'SERVICE' : 'SUPPLIER');
   const [favoriteToast, setFavoriteToast] = useState<FavoriteToastInfo | null>(null);
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
 
@@ -119,6 +126,8 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
     deals.forEach((d) => {
       list.push({
         id: `deal-${d.id}`,
+        serviceId: d.serviceId,
+        supplierId: d.supplierId,
         type: 'deal',
         title: d.title,
         brandName: d.brandName,
@@ -145,6 +154,8 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
       const discount = orig > sale ? Math.round(((orig - sale) / orig) * 100) : 0;
       list.push({
         id: `salon-${s.id}`,
+        serviceId: s.serviceId,
+        supplierId: s.supplierId,
         type: 'salon',
         title: `Dịch vụ tổng hợp tại ${s.name}`,
         brandName: s.name,
@@ -169,6 +180,8 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
     partners.forEach((p) => {
       list.push({
         id: `partner-${p.id}`,
+        serviceId: p.serviceId,
+        supplierId: p.supplierId,
         type: 'partner',
         title: p.specialty,
         brandName: p.name,
@@ -177,8 +190,8 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
         salePrice: 299000,
         originalPrice: 500000,
         discountPercent: 40,
-        rating: 4.9,
-        reviewsCount: 120,
+        rating: p.rating ?? 0,
+        reviewsCount: p.reviewsCount ?? 0,
         duration: '60 phút',
         category: 'spa',
         distanceKm: 1.5,
@@ -303,6 +316,8 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
   const handleAddToCartClick = (item: UnifiedExploreItem) => {
     const dealObj: HotDeal = {
       id: item.id,
+      serviceId: item.serviceId,
+      supplierId: item.supplierId,
       title: item.title,
       brandName: item.brandName,
       brandLogo: item.brandLogo,
@@ -697,7 +712,7 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
                           </span>
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded-md">
                             <Users className="w-3 h-3 text-[#be185d]" />
-                            <span>{(item.reviewsCount * 9 + 180).toLocaleString('vi-VN')}+ người đã trải nghiệm</span>
+                            <span>Khách hàng tự xác nhận hoàn thành</span>
                           </span>
                         </div>
 
@@ -904,18 +919,19 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
                 <div>
                   <div className="text-xl font-black text-amber-900 flex items-center gap-1.5">
                     <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
-                    <span>{activeReviewsItem.rating.toFixed(1)} / 5.0</span>
+                    <span>{reviewState.rating.toFixed(1)} / 5.0</span>
                   </div>
                   <p className="text-[11px] text-amber-800 mt-0.5">
-                    100% đánh giá từ khách hàng đã trải nghiệm dịch vụ tại {activeReviewsItem.brandName}
+                    Đánh giá từ lịch hẹn đã hoàn thành; khách hàng tự xác nhận hoàn thành.
                   </p>
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-amber-200 text-amber-900 text-xs font-bold">
-                  {activeReviewsItem.reviewsCount} lượt đánh giá
+                  {reviewState.total} lượt đánh giá
                 </span>
               </div>
 
-              {reviewService.getReviewsForService(activeReviewsItem.title).map((rev) => (
+              <ReviewListStatus {...reviewState} />
+              {reviewState.reviews.map((rev) => (
                 <div key={rev.id} className="p-3.5 rounded-2xl border border-pink-100 bg-white space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">

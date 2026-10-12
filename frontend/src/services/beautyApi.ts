@@ -33,13 +33,22 @@ import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 const TOKEN_KEY = 'beautylink_access_token';
 
+export interface PublicReviewPage {
+  content: Array<{ id: number; targetType: 'SERVICE' | 'SUPPLIER'; rating: number; comment: string | null; reviewerDisplayName: string; serviceId: number; serviceName: string; createdAt: string }>;
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+  rating: number;
+}
+
 // Local development uses Vite's /api proxy. Production supplies the Railway
 // backend URL at build time through VITE_API_BASE_URL.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '/api';
 // Offline sample data is useful only while developing locally. A production
 // bundle must always reflect the API and real database, even if an environment
 // variable was accidentally left enabled on the hosting provider.
-const DEMO_FALLBACK_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_FALLBACK === 'true';
+const DEMO_FALLBACK_ENABLED = import.meta.env?.DEV && import.meta.env?.VITE_ENABLE_DEMO_FALLBACK === 'true';
 
 type BackendDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
 type BackendScheduleRule = {
@@ -678,9 +687,15 @@ export const beautyApi = {
     return unwrap(apiClient.get('/v1/bookings/mine'));
   },
 
-  async publicBookingReviews(supplierId: number): Promise<Array<{ id: number; targetType: 'SERVICE' | 'SUPPLIER'; rating: number; comment: string | null; reviewerDisplayName: string; serviceId: number; serviceName: string; createdAt: string }>> {
-    const shop = await unwrap<{ reviews: Array<{ id: number; targetType: 'SERVICE' | 'SUPPLIER'; rating: number; comment: string | null; reviewerDisplayName: string; serviceId: number; serviceName: string; createdAt: string }> }>(apiClient.get(`/v1/suppliers/${supplierId}`));
-    return shop.reviews;
+  async publicBookingReviews(targetType: 'SERVICE' | 'SUPPLIER', id: number, page = 0): Promise<PublicReviewPage> {
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Không xác định được đối tượng đánh giá.');
+    const resource = targetType === 'SERVICE' ? 'services' : 'suppliers';
+    return unwrap(apiClient.get(`/v1/${resource}/${id}/reviews`, { params: { page, size: 20 } }));
+  },
+  async publicSupplierServices(id: number): Promise<BackendService[]> {
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Không xác định được nhà cung cấp.');
+    const shop = await unwrap<{ services: BackendService[] }>(apiClient.get(`/v1/suppliers/${id}`));
+    return shop.services;
   },
 
   async completeBooking(id: number): Promise<BackendBooking> {

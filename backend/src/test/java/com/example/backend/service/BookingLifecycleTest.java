@@ -23,12 +23,12 @@ class BookingLifecycleTest {
 
     @ParameterizedTest
     @CsvSource({
-        "PENDING,UNPAID,false,false", "PENDING,PAID,false,false",
+        "PENDING,UNPAID,false,false", "PENDING,PARTIALLY_PAID,false,false", "PENDING,PAID,false,false", "PENDING,REFUNDED,false,false",
         "CONFIRMED,UNPAID,false,false", "CONFIRMED,PARTIALLY_PAID,true,false",
-        "CONFIRMED,PAID,true,false", "COMPLETED,UNPAID,false,false",
+        "CONFIRMED,PAID,true,false", "CONFIRMED,REFUNDED,false,false", "COMPLETED,UNPAID,false,false",
         "COMPLETED,PARTIALLY_PAID,false,true", "COMPLETED,PAID,false,true",
         "COMPLETED,REFUNDED,false,false", "CANCELLED,UNPAID,false,false",
-        "CANCELLED,PARTIALLY_PAID,false,false", "CANCELLED,PAID,false,false"
+        "CANCELLED,PARTIALLY_PAID,false,false", "CANCELLED,PAID,false,false", "CANCELLED,REFUNDED,false,false"
     })
     void paymentDoesNotReplaceCompletion(BookingStatus status, PaymentStatus payment, boolean canComplete, boolean canReview) {
         Booking booking = booking(status, payment);
@@ -54,6 +54,14 @@ class BookingLifecycleTest {
         assertFalse(policy.canComplete(booking));
         booking.setAppointmentDate(LocalDate.of(2026, 10, 13));
         assertFalse(policy.canComplete(booking));
+    }
+    @Test void vietnamDateBoundaryDiffersFromUtcAndEndIsInclusive() {
+        Booking booking = booking(BookingStatus.CONFIRMED, PaymentStatus.PAID);
+        booking.setStartTime(LocalTime.of(23, 30)); booking.setEndTime(LocalTime.of(0, 30));
+        Instant end = Instant.parse("2026-10-12T17:30:00Z"); // October 13 00:30 in Vietnam
+        assertFalse(new BookingCompletionPolicy(Clock.fixed(end.minusNanos(1), ZoneOffset.UTC)).canComplete(booking));
+        assertTrue(new BookingCompletionPolicy(Clock.fixed(end, ZoneOffset.UTC)).canComplete(booking));
+        assertTrue(new BookingCompletionPolicy(Clock.fixed(end.plusNanos(1), ZoneOffset.UTC)).canComplete(booking));
     }
 
     @Test void overnightBookingCannotCompleteOnItsStartDate() {

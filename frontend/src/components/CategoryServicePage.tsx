@@ -36,7 +36,8 @@ import { BackendCategory, BackendService, CurrentUser } from '../types';
 import { beautyApi, getApiErrorMessage, DEFAULT_CATEGORIES } from '../services/beautyApi';
 import { BookingModal } from './BookingModal';
 import { OptimizedImage } from './OptimizedImage';
-import { reviewService, ServiceStep, ServiceReviewItem } from '../services/reviewService';
+import { reviewService } from '../services/reviewService';
+import { ReviewListStatus } from './ReviewListStatus';
 import { useBookingReviews } from '../hooks/useBookingReviews';
 import { ServiceReviewModal } from './ServiceReviewModal';
 
@@ -124,7 +125,8 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
   const [previewTab, setPreviewTab] = useState<'overview' | 'steps' | 'reviews'>('overview');
   const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
   const [reviewsUpdateTrigger, setReviewsUpdateTrigger] = useState<number>(0);
-  const { reviews: serviceReviews, error: reviewsError } = useBookingReviews(previewService?.supplierId, previewService?.id, reviewsUpdateTrigger);
+  const reviewState = useBookingReviews(previewService?.supplierId, previewService?.id, reviewsUpdateTrigger, 'SERVICE');
+  const { reviews: serviceReviews } = reviewState;
 
   // Booking modal state
   const [selectedServiceForBooking, setSelectedServiceForBooking] = useState<BackendService | null>(null);
@@ -257,7 +259,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
         if (sortBy === 'rating-desc') return b.rating - a.rating;
         if (sortBy === 'duration-asc') return a.durationMinutes - b.durationMinutes;
         // Default: popular / rating & review count
-        return (b.rating * (b.supplierReviewCount || 10)) - (a.rating * (a.supplierReviewCount || 10));
+        return (b.rating * (b.serviceReviewCount ?? 0)) - (a.rating * (a.serviceReviewCount ?? 0));
       });
   }, [allServices, searchQuery, selectedDistrict, priceRange, minRating, onlyAvailableToday, onlyDiscounted, sortBy]);
 
@@ -725,7 +727,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                           <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                           <span>{item.rating.toFixed(1)}</span>
                           <span className="text-[10px] text-slate-400 font-normal">
-                            ({item.supplierReviewCount || 10})
+                            ({item.serviceReviewCount ?? 0})
                           </span>
                         </span>
 
@@ -812,7 +814,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                           title="Xem nhận xét & đánh giá từ khách hàng"
                         >
                           <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
-                          <span className="truncate">Đánh giá ({item.supplierReviewCount || 10})</span>
+                          <span className="truncate">Đánh giá ({item.serviceReviewCount ?? 0})</span>
                         </button>
                       </div>
 
@@ -1143,7 +1145,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                           title="Xem đánh giá từ khách hàng"
                         >
                           <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
-                          <span>Xem đánh giá ({item.supplierReviewCount || 10})</span>
+                          <span>Xem đánh giá ({item.serviceReviewCount ?? 0})</span>
                         </button>
                       </div>
                     </div>
@@ -1423,7 +1425,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
 
                 <div className="absolute bottom-3 left-3 flex items-center gap-2 z-10">
                   <span className="rounded-full bg-white/95 px-3 py-1 text-xs font-bold text-slate-800 shadow">
-                    ⭐ {previewService.rating.toFixed(1)} ({serviceReviews.length} đánh giá)
+                    ⭐ {reviewState.rating.toFixed(1)} ({reviewState.total} đánh giá)
                   </span>
                   <span className="rounded-full bg-black/60 backdrop-blur-md px-3 py-1 text-xs font-bold text-white flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-pink-300" />
@@ -1470,7 +1472,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                   }`}
                 >
                   <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
-                  <span>Đánh giá khách hàng ({serviceReviews.length})</span>
+                  <span>Đánh giá khách hàng ({reviewState.total})</span>
                 </button>
               </div>
 
@@ -1608,7 +1610,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                     <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-pink-50 border border-amber-200/80 flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div className="flex items-center gap-3 text-center sm:text-left">
                         <div className="w-14 h-14 rounded-2xl bg-amber-400 text-white flex flex-col items-center justify-center font-black shadow-sm">
-                          <span className="text-xl leading-none">{previewService.rating.toFixed(1)}</span>
+                          <span className="text-xl leading-none">{reviewState.rating.toFixed(1)}</span>
                           <span className="text-[10px] leading-tight">★/5</span>
                         </div>
                         <div>
@@ -1621,7 +1623,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                             Đánh giá thực tế từ khách hàng
                           </span>
                           <span className="text-[11px] text-slate-500">
-                            {serviceReviews.length} lượt nhận xét có xác thực đặt lịch
+                            {reviewState.total} lượt nhận xét có xác thực đặt lịch
                           </span>
                         </div>
                       </div>
@@ -1636,8 +1638,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                       </button>
                     </div>
 
-                    {reviewsError && <p role="alert" className="text-rose-700">{reviewsError}</p>}
-                    {!reviewsError && serviceReviews.length === 0 && <p>Chưa có đánh giá sau hoàn thành dịch vụ.</p>}
+                    <ReviewListStatus {...reviewState} />
                     {/* List of customer reviews */}
                     <div className="space-y-3">
                       {serviceReviews.map((rev) => (
@@ -1662,7 +1663,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                                 <div className="flex items-center gap-1.5 mt-0.5">
                                   <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded font-bold flex items-center gap-0.5">
                                     <CheckCircle2 className="w-2.5 h-2.5" />
-                                    <span>Đã trải nghiệm</span>
+                                    <span>Khách tự xác nhận hoàn thành</span>
                                   </span>
                                   <span className="text-[10px] text-slate-400">· {rev.date}</span>
                                 </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft,
   Sparkles,
@@ -28,7 +28,10 @@ import {
   BadgeCheck,
 } from 'lucide-react';
 import { NewPartner } from '../data/mockData';
+import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { serviceReviewSummary, validDatabaseId } from '../lib/reviewScope';
 import { CurrentUser } from '../types';
+import { ReviewListStatus } from './ReviewListStatus';
 import { useBookingReviews } from '../hooks/useBookingReviews';
 import { ServiceReviewModal } from './ServiceReviewModal';
 import { FavoriteToast, FavoriteToastInfo } from './FavoriteToast';
@@ -62,7 +65,6 @@ interface PartnerServiceOffer {
   image: string;
   rating: number;
   reviewsCount: number;
-  experiencedCount: number;
 }
 
 export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
@@ -79,6 +81,25 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
   const [previewCert, setPreviewCert] = useState<PartnerCertificate | null>(null);
   const [favoriteToast, setFavoriteToast] = useState<FavoriteToastInfo | null>(null);
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
+  const [shopState, setShopState] = useState<{ supplierId?: number; services: PartnerServiceOffer[]; error: string; loading: boolean }>({ services: [], error: '', loading: true });
+  const [shopAttempt, setShopAttempt] = useState(0);
+  const shopServices = shopState.supplierId === partner.supplierId ? shopState.services : [];
+  useEffect(() => {
+    let active = true;
+    const empty = { supplierId: partner.supplierId, services: [], error: '', loading: true };
+    setShopState(empty);
+    if (!validDatabaseId(partner.supplierId)) {
+      setShopState({ ...empty, loading: false, error: 'Không xác định được nhà cung cấp.' });
+      return () => { active = false; };
+    }
+    beautyApi.publicSupplierServices(partner.supplierId).then((items) => {
+      if (active) setShopState({ ...empty, loading: false, services: items.map(item => ({ id: String(item.id), name: item.name, price: item.price,
+        originalPrice: item.originalPrice ?? item.price, durationMinutes: item.durationMinutes,
+        highlight: item.highlightText ?? '', category: item.categorySlug, image: item.imageUrl,
+        ...serviceReviewSummary(item) })) });
+    }).catch(err => { if (active) setShopState({ ...empty, loading: false, error: getApiErrorMessage(err, 'Không thể tải dịch vụ.') }); });
+    return () => { active = false; };
+  }, [partner.supplierId, shopAttempt, reviewsUpdateTrigger]);
 
   const handleToggleFavorite = (e: React.MouseEvent, svc: PartnerServiceOffer) => {
     e.stopPropagation();
@@ -107,9 +128,8 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
     logo: partner.logo,
     coverImage: partner.image,
     promoNotice: partner.promoNotice,
-    rating: 4.9,
-    reviewsCount: 168,
-    totalExperienced: '4,850+',
+    rating: partner.rating ?? 0,
+    reviewsCount: partner.reviewsCount ?? 0,
     establishedYear: '2021',
     description:
       `${partner.name} là không gian làm đẹp cao cấp được sáng lập với sứ mệnh mang đến trải nghiệm thẩm mỹ tự nhiên, chuẩn mực y khoa và bền vững. Chúng tôi sử dụng 100% dòng dược mỹ phẩm nhập khẩu sinh học, trang thiết bị công nghệ cao đạt chuẩn FDA Hoa Kỳ và CE Châu Âu, đảm bảo vô trùng tuyệt đối cho từng khách hàng.`,
@@ -158,64 +178,12 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
         description: 'Kỹ thuật viên trưởng và bác sĩ chuyên môn hoàn thành chương trình master ứng dụng laser sinh học.',
       },
     ],
-    services: [
-      {
-        id: 'svc-p1',
-        name: partner.specialty || 'Liệu trình Chăm sóc da chuyên sâu tái sinh tế bào gốc',
-        price: 350000,
-        originalPrice: 650000,
-        durationMinutes: 75,
-        highlight: partner.promoNotice || 'Tặng đắp mặt nạ vàng 24K nano',
-        category: 'Chăm sóc da',
-        image: partner.image,
-        rating: 4.9,
-        reviewsCount: 168,
-        experiencedCount: 1420,
-      },
-      {
-        id: 'svc-p2',
-        name: 'Trị mụn viêm & Làm sạch bã nhờn chuẩn Y khoa Aqua Peel',
-        price: 420000,
-        originalPrice: 750000,
-        durationMinutes: 90,
-        highlight: '100% dụng cụ tiệt trùng Autoclave dùng riêng',
-        category: 'Trị liệu da',
-        image: 'https://images.unsplash.com/photo-1512290900672-1f48644558e8?auto=format&fit=crop&w=600&q=80',
-        rating: 5.0,
-        reviewsCount: 94,
-        experiencedCount: 890,
-      },
-      {
-        id: 'svc-p3',
-        name: 'Gội đầu dưỡng sinh thảo mộc cổ truyền & Massage vai gáy',
-        price: 199000,
-        originalPrice: 350000,
-        durationMinutes: 60,
-        highlight: 'Nước bồ kết vỏ bưởi nấu tươi mỗi ngày',
-        category: 'Dưỡng sinh',
-        image: 'https://images.unsplash.com/photo-1519735777090-ec97162dc266?auto=format&fit=crop&w=600&q=80',
-        rating: 4.9,
-        reviewsCount: 215,
-        experiencedCount: 1650,
-      },
-      {
-        id: 'svc-p4',
-        name: 'Liệu pháp trẻ hóa nâng cơ RF Vi điểm xóa mờ nếp nhăn',
-        price: 890000,
-        originalPrice: 1500000,
-        durationMinutes: 80,
-        highlight: 'Bác sĩ trực tiếp điều trị & cam kết hiệu quả',
-        category: 'Công nghệ cao',
-        image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=600&q=80',
-        rating: 4.8,
-        reviewsCount: 82,
-        experiencedCount: 620,
-      },
-    ] as PartnerServiceOffer[],
+    services: shopServices,
   };
 
-  const { reviews, error: reviewsError } = useBookingReviews(partner.supplierId, undefined, reviewsUpdateTrigger);
-  const reviewRating = reviews.length ? (reviews.reduce((sum, item) => sum + item.rating, 0) / reviews.length).toFixed(1) : "—";
+  const reviewState = useBookingReviews(partner.supplierId, undefined, reviewsUpdateTrigger);
+  const { reviews } = reviewState;
+  const reviewRating = reviewState.total ? reviewState.rating.toFixed(1) : "—";
 
   return (
     <div className="min-h-screen bg-[#FFF9FA] text-slate-900 pb-16">
@@ -268,11 +236,11 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    <span>{reviewRating} ({reviews.length} đánh giá)</span>
+                    <span>{reviewRating} ({reviewState.total} đánh giá)</span>
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                     <Users className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>{partnerProfile.totalExperienced} khách đã trải nghiệm</span>
+                    <span>Thông tin liên hệ từ nhà cung cấp</span>
                   </span>
                 </div>
 
@@ -466,7 +434,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
             }`}
           >
             <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
-            <span>Đánh giá từ khách hàng ({reviews.length})</span>
+            <span>Đánh giá từ khách hàng ({reviewState.total})</span>
           </button>
         </div>
 
@@ -476,6 +444,8 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
         {/* ========================================================================= */}
         {(activeTab === 'all' || activeTab === 'services') && (
           <div id="services-section" className="space-y-6 mb-10 animate-in fade-in duration-200">
+            {shopState.loading && <p role="status">Đang tải dịch vụ…</p>}
+            {shopState.error && <div role="alert">{shopState.error}<button type="button" onClick={() => setShopAttempt(v => v + 1)}>Thử lại</button></div>}
             {/* Section Heading */}
             <div className="flex items-center justify-between">
               <div>
@@ -542,7 +512,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                           </span>
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
                             <Users className="w-3 h-3 text-[#e1146c]" />
-                            <span>{svc.experiencedCount.toLocaleString('vi-VN')}+ người đã trải nghiệm</span>
+                            <span>Đánh giá theo lịch hẹn đã hoàn thành</span>
                           </span>
                         </div>
 
@@ -694,7 +664,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                     Điểm đánh giá trải nghiệm thực tế
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {reviews.length} đánh giá từ khách hàng đã hoàn thành dịch vụ qua BeautyLink
+                    {reviewState.total} đánh giá từ khách hàng đã hoàn thành dịch vụ qua BeautyLink
                   </p>
                 </div>
               </div>
@@ -709,8 +679,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
               </button>
             </div>
 
-            {reviewsError && <p role="alert" className="text-rose-700">{reviewsError}</p>}
-            {!reviewsError && reviews.length === 0 && <p>Chưa có đánh giá nhà cung cấp sau hoàn thành dịch vụ.</p>}
+            <ReviewListStatus {...reviewState} />
             {/* Customer Reviews List */}
             <div className="space-y-3.5">
               {reviews.map((rev) => (

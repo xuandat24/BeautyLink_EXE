@@ -1,6 +1,22 @@
 # BeautyLink booking/review integration checkpoint
 
-Status: IMPLEMENTED_AND_VERIFIED — branch pushed; draft PR creation blocked by GitHub connector permissions. No merge/deployment performed.
+Status: CODE_VERIFIED — ready to commit/push; PR/CI/backup release gates still pending. Existing commits preserved.
+
+## Current release follow-up (2026-10-13)
+
+- Booking-first lock ordering added to PayOS status/webhook/reconciliation; payment locks no longer fetch-join booking. Other attempts use explicit locking reads to avoid stale MySQL repeatable-read snapshots.
+- Scoped, DB-paginated public SERVICE/SUPPLIER reviews and aggregates excluding legacy seed counts implemented. Old supplier shop reviews field retained, DB-limited.
+- Frontend scope IDs/mappings, zero counts, real Filter Explore reviews and paginated loading/error/retry states implemented. Partner service cards now load real API services. Static homepage demo review component excluded from production.
+- New H2 transactional concurrency tests pass. Invalid review target revealed HTTP 500; fixed typed parameter handling to HTTP 400.
+- Latest completed backend run: 157 passed, no failures/errors/skips; compile/package PASS. Includes 16 legacy-public matrix cases, Vietnam/UTC boundary, timestamp-tie pagination, legacy rating 0 and stale flags.
+- Frontend: npm ci, 27 tests, TypeScript/lint and production build PASS; jsdom added only as a dev dependency, lockfile synchronized.
+- Added isolated MySQL CI job for release transaction tests and push trigger for feature branch. MySQL URL guard restricts tests to loopback beautylink_review_test; never production.
+- Docker CLI available but daemon unavailable. No Docker build/MySQL container verification locally.
+- Final real Chrome/localhost Spring/H2 smoke PASS: completion, both target create/update, reload, Explore/service/partner detail; zero console/page errors and API 4xx/5xx. React key warning discovered by browser and fixed/tested; only test-JVM workaround for Windows AF_UNIX, no production runtime changes.
+- Next: commit/push, await Actions incl MySQL, create draft PR. PR draft and README updated; diff check passed. Docker build attempted but Docker daemon missing.
+- Production rollback baseline verified: main 5cdc5d3; Railway 12ca4eb6-d4ca-419c-9c99-2467b712cd03 SUCCESS; Vercel dpl_9VxMUwE9KkkN8fCT5a1HnvAMxftf READY. Railway categories and frontend GET returned HTTP 200. Backup unverified (mounted MySQL volume is not backup proof).
+- Merge/deployment now conditionally authorized by latest user task, ONLY after all gates, valid access and usable recent DB backup are verified. No production action yet.
+- Previous handoff entries below are historical; its old blanket no-merge condition is superseded by the latest user's conditional authorization.
 
 - Branch: `fix/completed-booking-reviews`; base: `5cdc5d3de0bc51bcc2358f6b1f0088ee933448ad`.
 - Integrated the supplied ZIP after a clean patch check. Preserved merged backend Resend/phone changes from main.

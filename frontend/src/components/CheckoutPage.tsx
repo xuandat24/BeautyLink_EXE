@@ -84,7 +84,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 ? Math.round(((directService.originalPrice - directService.price) / directService.originalPrice) * 100)
                 : 0,
             rating: directService.rating,
-            reviewsCount: directService.supplierReviewCount,
+            reviewsCount: directService.serviceReviewCount ?? 0,
+            supplierId: directService.supplierId,
             image: directService.imageUrl,
             category: directService.categorySlug,
             duration: `${directService.durationMinutes} phút`,

@@ -35,6 +35,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class) ResponseEntity<ErrorResponse> unreadable() {
         return ResponseEntity.badRequest().body(new ErrorResponse("INVALID_REQUEST", "Dữ liệu gửi lên sai định dạng hoặc chứa lựa chọn không hợp lệ", Map.of(), Instant.now()));
     }
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ErrorResponse> invalidParameter() {
+        return ResponseEntity.badRequest().body(new ErrorResponse("INVALID_REQUEST", "Tham số hoặc loại đánh giá không hợp lệ", Map.of(), Instant.now()));
+    }
     @ExceptionHandler(AccessDeniedException.class) ResponseEntity<ErrorResponse> denied() {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("FORBIDDEN", "Bạn không có quyền thực hiện thao tác này", Map.of(), Instant.now()));
     }

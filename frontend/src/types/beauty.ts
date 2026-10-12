@@ -57,6 +57,8 @@ export interface BackendService {
   featured?: boolean;
   rating: number;
   supplierId: number;
+  serviceReviewCount?: number;
+  supplierRating?: number;
   supplierName: string;
   supplierAddress: string;
   supplierImageUrl?: string;
@@ -180,6 +182,7 @@ export interface BackendReport {
 export interface HotDeal {
   id: string;
   serviceId?: number;
+  supplierId?: number;
   title: string;
   brandName: string;
   brandLogo: string;
@@ -200,6 +203,7 @@ export interface HotDeal {
 export interface Salon {
   id: string;
   serviceId?: number;
+  supplierId?: number;
   name: string;
   category: 'spa' | 'tham-my-vien' | 'clinic' | 'massage' | 'nail' | 'salon-toc' | string;
   categoryLabel: string;
@@ -221,6 +225,8 @@ export interface NewPartner {
   id: string;
   supplierId?: number;
   serviceId?: number;
+  rating?: number;
+  reviewsCount?: number;
   name: string;
   subTitle: string;
   address: string;
