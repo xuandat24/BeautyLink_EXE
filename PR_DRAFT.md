@@ -38,7 +38,7 @@ No schema/entity migration or automatic completion. Customer self-confirmation i
 - Concurrency tests use real H2 transactions/row locks: cancel vs webhook/reconciliation in both orders, duplicate paid callbacks, reconciliation vs webhook, complete vs cancel in both orders, duplicate completion, same/different target reviews.
 - Full 16-state matrix for service/API/public legacy filtering; time boundaries including Vietnam/UTC and overnight; 105 reviews per target with identical timestamps, stable pages and aggregate agreement; roles/ownership/anonymous/not-found/rating/comment boundaries/refunded/stale flags.
 - Real Chrome → localhost Spring/H2/JWT smoke PASS: completion, both review create/update, reload persistence and scoped Explore/service/partner detail; zero console/page errors and zero API 4xx/5xx in the final run.
-- GitHub Actions adds a separate disposable MySQL 8.4 job using the same release transaction/scope tests. Local Docker CLI exists but daemon is unavailable; **Docker build and local MySQL container unverified**. CI outcomes must be checked for the exact pushed commit.
+- GitHub Actions adds a separate disposable MySQL 8.4 job using the same release transaction/scope tests. The first pushed code commit 86054cd passed backend and frontend; MySQL's Maven verification step passed, with job cleanup initially still pending. Local Docker build could not run because Docker daemon is unavailable, so backend CI now also builds the real Docker image. Verify the latest commit's full Actions run before merge.
 - No production DB, real email or real payment write performed.
 
 ### Release gates and rollback

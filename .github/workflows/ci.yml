@@ -22,6 +22,8 @@ jobs:
           java-version: '21'
           cache: maven
       - run: mvn --batch-mode --no-transfer-progress verify
+      - name: Build backend Docker image
+        run: docker build -t beautylink-backend-review-fix .
 
   booking-review-mysql:
     runs-on: ubuntu-latest
