@@ -1,6 +1,6 @@
 # BeautyLink booking/review integration checkpoint
 
-Status: CODE_PUSHED — 86054cd pushed; final CI/Docker/PR/backup release gates pending. Existing commits preserved.
+Status: IMPLEMENTATION_COMPLETE_RELEASE_BLOCKED — code pushed and CI verified; draft PR access and usable-backup gates prevent merge/deployment. Existing commits preserved.
 
 ## Current release follow-up (2026-10-13)
 
@@ -14,10 +14,11 @@ Status: CODE_PUSHED — 86054cd pushed; final CI/Docker/PR/backup release gates 
 - Docker CLI available but daemon unavailable. No Docker build/MySQL container verification locally.
 - Final real Chrome/localhost Spring/H2 smoke PASS: completion, both target create/update, reload, Explore/service/partner detail; zero console/page errors and API 4xx/5xx. React key warning discovered by browser and fixed/tested; only test-JVM workaround for Windows AF_UNIX, no production runtime changes.
 - Code commit 86054cd7afb4d4fa9e2b833947973b6cc8b68236 pushed. Draft PR creation retried and blocked by GitHub connector 403; no PR exists. Use compare URL and PR_DRAFT.md if integration permissions remain unavailable.
-- First CI run https://github.com/xuandat24/BeautyLink_EXE/actions/runs/38303371748: backend/frontend success; MySQL Maven verification step success (initial snapshot awaiting final cleanup). Added a backend Docker image build step to CI to cover missing local daemon; wait for the newest commit's CI run, not only this older run.
-- Next: commit CI/evidence update, await exact-commit CI including Docker/MySQL. Backup not verified; user asked for backup timestamp/restore evidence. No merge/deployment until gates pass and PR/write access exist.
+- CI/quality commit 1c08995a539e3934a3aabd6914bf97d64324b477 pushed; https://github.com/xuandat24/BeautyLink_EXE/actions/runs/38303674498 PASS for all jobs: backend 157 tests + Docker image build, frontend 27 tests + lint/build, isolated MySQL 34 tests. Earlier 86054cd run also PASS. Local Docker daemon missing, covered by CI image build.
+- User reports backup at 20:00 today and selected that restoration has not been tested. Usable backup remains unverified. Do not merge/deploy until this gate, draft PR creation/review and current-HEAD CI are satisfied.
+- Next external steps: create draft PR via compare link or fix GitHub connection write permissions; validate backup on a separate database; coordinate backend-first release/promotion. No code implementation TODO remains for this scoped patch. Later documentation-only commits preserve tested runtime code, but verify their own CI before merge.
 - Production rollback baseline verified: main 5cdc5d3; Railway 12ca4eb6-d4ca-419c-9c99-2467b712cd03 SUCCESS; Vercel dpl_9VxMUwE9KkkN8fCT5a1HnvAMxftf READY. Railway categories and frontend GET returned HTTP 200. Backup unverified (mounted MySQL volume is not backup proof).
-- Merge/deployment now conditionally authorized by latest user task, ONLY after all gates, valid access and usable recent DB backup are verified. No production action yet.
+- Merge/deployment conditionally authorized by latest user task, ONLY after all gates, valid access and usable recent DB backup are verified. No production action. Local Spring/H2/Vite test servers stopped after smoke tests; test fixtures are excluded from production JAR/bundle.
 - Previous handoff entries below are historical; its old blanket no-merge condition is superseded by the latest user's conditional authorization.
 
 - Branch: `fix/completed-booking-reviews`; base: `5cdc5d3de0bc51bcc2358f6b1f0088ee933448ad`.
