@@ -21,11 +21,31 @@ public class JwtService {
     public String createToken(UserAccount user) {
         Instant now = Instant.now();
         return Jwts.builder().subject(user.getPhone()).claim("role", user.getRole().name())
+                .claim("accountId", user.getId())
+                .claim("accountUpdatedAt", user.getUpdatedAt().toEpochMilli())
                 .issuedAt(Date.from(now)).expiration(Date.from(now.plusMillis(expirationMs)))
                 .signWith(key).compact();
     }
     public String extractSubject(String token) {
-        return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().getSubject();
+        return extractClaims(token).getSubject();
+    }
+    public Claims extractClaims(String token) {
+        return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+    }
+    public boolean matchesAccount(Claims claims, UserAccount user) {
+        if (!user.getPhone().equals(claims.getSubject())) return false;
+        if (claims.containsKey("accountId") || claims.containsKey("accountUpdatedAt")) {
+            Long accountId = claims.get("accountId", Long.class);
+            Long updatedAt = claims.get("accountUpdatedAt", Long.class);
+            return user.getId().equals(accountId) && updatedAt != null
+                    && updatedAt == user.getUpdatedAt().toEpochMilli();
+        }
+        // Legacy tokens have only a phone subject. Accept them only when the
+        // persisted identity predates issuance; a phone reassignment updates it.
+        // JWT iat has second precision, so equality is rejected conservatively.
+        Date issuedAt = claims.getIssuedAt();
+        return issuedAt != null && issuedAt.toInstant().isAfter(user.getCreatedAt())
+                && issuedAt.toInstant().isAfter(user.getUpdatedAt());
     }
     public long getExpirationMs() { return expirationMs; }
 }

@@ -4,6 +4,7 @@ public final class DomainEnums {
     private DomainEnums() {}
     public enum Role { CUSTOMER, SUPPLIER, STAFF, ADMIN }
     public enum Gender { MALE, FEMALE, OTHER }
+    // PHONE remains deserializable so older clients receive OTP_EMAIL_ONLY instead of a 500.
     public enum VerificationChannel { PHONE, EMAIL }
     public enum AccountStatus { ACTIVE, SUSPENDED, DISABLED }
     public enum LocationType { PROVINCE_CITY, DISTRICT, WARD_COMMUNE }

@@ -18,4 +18,5 @@ public class AuthController {
     @PostMapping("/login") public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) { abuseGuard.checkLogin(http.getRemoteAddr(), request.identifier()); AuthResponse response = auth.login(request); abuseGuard.loginSucceeded(request.identifier()); return response; }
     @PostMapping("/register-supplier") @ResponseStatus(HttpStatus.CREATED) public SupplierRegistrationResponse registerSupplier(@Valid @RequestBody SupplierRegistrationRequest request) { return supplierAccounts.register(request); }
     @GetMapping("/me") public UserResponse me(Authentication authentication) { return auth.toUser(current.require(authentication)); }
+    @PatchMapping("/me/phone") public AuthResponse updatePhone(Authentication authentication, @Valid @RequestBody UpdatePhoneRequest request) { return auth.updatePhone(current.require(authentication), request); }
 }

@@ -44,6 +44,7 @@ class PlatformApiIntegrationTest {
     @Autowired SupplierVerificationRepository supplierVerifications;
     @Autowired BookingRepository bookings;
     @Autowired PaymentTransactionRepository paymentTransactions;
+    @Autowired com.example.backend.repository.UserAccountRepository users;
     @MockitoBean PayOSGateway payOSGateway;
     @MockitoBean RegistrationVerificationService registrationVerificationService;
 
@@ -154,6 +155,140 @@ class PlatformApiIntegrationTest {
     @Test
     void protectedEndpointRejectsAnonymousRequests() throws Exception {
         mvc.perform(get("/api/v1/bookings/mine"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(patch("/api/v1/auth/me/phone")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"0399999988\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void customerPhoneUpdatePersistsRefreshesJwtAndBookingHistoryIncludesCancelledBooking() throws Exception {
+        String registration = mvc.perform(post("/api/v1/auth/register")
+                        .with(request -> { request.setRemoteAddr("192.0.2.81"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Tran Linh","phone":"0388888877","email":"linh.phone@example.com",
+                                 "password":"StrongPass123!","gender":"FEMALE","dateOfBirth":"1994-05-20",
+                                 "verificationToken":"verified-test-token"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String initialToken = objectMapper.readTree(registration).path("accessToken").asText();
+
+        mvc.perform(get("/api/v1/bookings/mine/history-status")
+                        .header("Authorization", "Bearer " + initialToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasPreviousBooking", is(false)));
+
+        mvc.perform(patch("/api/v1/auth/me/phone")
+                        .header("Authorization", "Bearer " + initialToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"123\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(patch("/api/v1/auth/me/phone")
+                        .header("Authorization", "Bearer " + initialToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"0900000001\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code", is("PHONE_ALREADY_IN_USE")));
+
+        String updated = mvc.perform(patch("/api/v1/auth/me/phone")
+                        .header("Authorization", "Bearer " + initialToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"0399999988\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.phone", is("0399999988")))
+                .andExpect(jsonPath("$.accessToken", not(emptyString())))
+                .andReturn().getResponse().getContentAsString();
+        String refreshedToken = objectMapper.readTree(updated).path("accessToken").asText();
+        assertTrue(!initialToken.equals(refreshedToken));
+        org.junit.jupiter.api.Assertions.assertEquals("0399999988", users.findByEmailIgnoreCase("linh.phone@example.com").orElseThrow().getPhone());
+        mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + initialToken))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + refreshedToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.phone", is("0399999988")));
+        login("0399999988", "StrongPass123!");
+        login("linh.phone@example.com", "StrongPass123!");
+
+        String samePhone = mvc.perform(patch("/api/v1/auth/me/phone")
+                        .header("Authorization", "Bearer " + refreshedToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"0399999988\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String currentToken = objectMapper.readTree(samePhone).path("accessToken").asText();
+
+        JsonNode service = objectMapper.readTree(mvc.perform(get("/api/v1/homepage/services"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get(0);
+        long serviceId = service.path("id").asLong();
+        long practitionerId = service.path("practitioners").get(0).path("id").asLong();
+        LocalDate date = LocalDate.now().plusDays(1);
+        String slot = null;
+        for (int day = 1; day <= 30 && slot == null; day++) {
+            date = LocalDate.now().plusDays(day);
+            JsonNode availability = objectMapper.readTree(mvc.perform(get("/api/v1/services/" + serviceId + "/availability")
+                            .param("practitionerId", Long.toString(practitionerId)).param("date", date.toString()))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+            if (!availability.path("availableSlots").isEmpty()) slot = availability.path("availableSlots").get(0).asText();
+        }
+        assertNotNull(slot);
+        String bookingJson = mvc.perform(post("/api/v1/bookings")
+                        .header("Authorization", "Bearer " + currentToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"serviceId\":" + serviceId + ",\"practitionerId\":" + practitionerId
+                                + ",\"appointmentDate\":\"" + date + "\",\"startTime\":\"" + slot + "\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long bookingId = objectMapper.readTree(bookingJson).path("id").asLong();
+        mvc.perform(get("/api/v1/bookings/mine/history-status")
+                        .header("Authorization", "Bearer " + currentToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.hasPreviousBooking", is(true)));
+        mvc.perform(patch("/api/v1/bookings/" + bookingId + "/cancel")
+                        .header("Authorization", "Bearer " + currentToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status", is("CANCELLED")));
+        mvc.perform(get("/api/v1/bookings/mine/history-status")
+                        .header("Authorization", "Bearer " + currentToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasPreviousBooking", is(true)));
+    }
+
+    @Test
+    void roleGuardsRemainAndPhonePayloadCannotSelectAnotherAccount() throws Exception {
+        String customer = login("0900000001", "BeautyLinkTest123!");
+        String supplier = login("0900000002", "BeautyLinkTest123!");
+        String admin = login("0900000004", "BeautyLinkTest123!");
+        mvc.perform(get("/api/v1/bookings/mine/history-status")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/bookings/mine/history-status").header("Authorization", "Bearer " + supplier))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/bookings/mine/history-status").header("Authorization", "Bearer " + admin))
+                .andExpect(status().isForbidden());
+        long supplierId = users.findByPhone("0900000002").orElseThrow().getId();
+        mvc.perform(patch("/api/v1/auth/me/phone").header("Authorization", "Bearer " + customer)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"phone\":\"0900000001\",\"accountId\":" + supplierId + "}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.user.role", is("CUSTOMER")))
+                .andExpect(jsonPath("$.user.phone", is("0900000001")));
+        org.junit.jupiter.api.Assertions.assertEquals("0900000002", users.findById(supplierId).orElseThrow().getPhone());
+    }
+
+    @Test
+    void oldTokenCannotBecomeAnotherCustomersTokenWhenPhoneIsReassigned() throws Exception {
+        String first = mvc.perform(post("/api/v1/auth/register")
+                .with(request -> { request.setRemoteAddr("192.0.2.82"); return request; }).contentType(MediaType.APPLICATION_JSON).content("""
+                {"fullName":"First User","phone":"0391111111","email":"first.reassign@example.com","password":"StrongPass123!",
+                 "gender":"MALE","dateOfBirth":"1995-01-01","verificationToken":"verified-test-token"}
+                """))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String oldToken = objectMapper.readTree(first).path("accessToken").asText();
+        mvc.perform(patch("/api/v1/auth/me/phone").header("Authorization", "Bearer " + oldToken)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"phone\":\"0391111112\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/v1/auth/register")
+                .with(request -> { request.setRemoteAddr("192.0.2.82"); return request; }).contentType(MediaType.APPLICATION_JSON).content("""
+                {"fullName":"Second User","phone":"0391111111","email":"second.reassign@example.com","password":"StrongPass123!",
+                 "gender":"MALE","dateOfBirth":"1995-01-01","verificationToken":"verified-test-token"}
+                """))
+                .andExpect(status().isCreated());
+        mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + oldToken))
                 .andExpect(status().isUnauthorized());
     }
 

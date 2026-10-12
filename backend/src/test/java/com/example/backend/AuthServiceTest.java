@@ -3,6 +3,7 @@ package com.example.backend;
 import com.example.backend.auth.JwtService;
 import com.example.backend.dto.ApiDtos.LoginRequest;
 import com.example.backend.dto.ApiDtos.RegisterRequest;
+import com.example.backend.dto.ApiDtos.UpdatePhoneRequest;
 import com.example.backend.exception.ApiException;
 import com.example.backend.model.DomainEnums.AccountStatus;
 import com.example.backend.model.DomainEnums.Gender;
@@ -122,6 +123,26 @@ class AuthServiceTest {
         verify(users).saveAndFlush(saved.capture());
         assertTrue(saved.getValue().getPasswordHash().startsWith("$2a$"));
         assertTrue(encoder.matches(PASSWORD, saved.getValue().getPasswordHash()));
+    }
+
+    @Test
+    void uniqueConstraintRaceReturnsStablePhoneConflict() {
+        UserAccount user = activeUser(encoder.encode(PASSWORD));
+        when(users.findLockedById(user.getId())).thenReturn(Optional.of(user));
+        when(users.saveAndFlush(user)).thenThrow(new org.springframework.dao.DataIntegrityViolationException("simulated race"));
+        ApiException error = assertThrows(ApiException.class, () -> service.updatePhone(user, new UpdatePhoneRequest("0391111122")));
+        assertEquals(409, error.getStatus().value());
+        assertEquals("PHONE_ALREADY_IN_USE", error.getCode());
+    }
+
+    @Test
+    void samePhoneIsIdempotentAndInvalidPhoneDoesNotWrite() {
+        UserAccount user = activeUser(encoder.encode(PASSWORD));
+        when(users.findLockedById(user.getId())).thenReturn(Optional.of(user));
+        assertEquals(user.getPhone(), service.updatePhone(user, new UpdatePhoneRequest(user.getPhone())).user().phone());
+        ApiException error = assertThrows(ApiException.class, () -> service.updatePhone(user, new UpdatePhoneRequest("123")));
+        assertEquals(400, error.getStatus().value());
+        verify(users, never()).saveAndFlush(any());
     }
 
     private UserAccount activeUser(String passwordHash) {
