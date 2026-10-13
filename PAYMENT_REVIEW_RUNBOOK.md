@@ -76,9 +76,11 @@ The historical `last_reconciled_at` value alone is not proof the link was closed
    provider-confirmed no-money closure; handling a late payment with a separately agreed appointment;
    or a legally/operationally approved refund outside this app. **No option is authorized by this
    document, no automatic refund, no fake REFUNDED, no automatic revival of the cancelled booking.**
-6. There is no new admin payment mutation API in this MVP. Any application-state repair requires an
-   explicitly approved, reviewed and tested maintenance change, backup/restore evidence, exact target
-   and a rollback plan. Never resolve a case using an ad-hoc UPDATE or merely changing a status label.
+6. Use the guarded ADMIN preview/zero-money actions described below for cases their predicates permit.
+   Financial cases outside these predicates remain blocked. Any further application-state repair requires
+   a separately approved, reviewed and tested maintenance action: exact booking/attempt IDs, fresh provider
+   proof, preview, booking-first locking, audit and rollback. This release does not provide a financial
+   override/refund operation. Never use ad-hoc UPDATE or clear a manual flag to simulate resolution.
 7. Close the private case only after provider/bank evidence, customer contact, approved money handling,
    persisted state and read-only verification agree. Retain all attempts, evidence and approvals.
 
@@ -119,8 +121,10 @@ does not automatically resolve the support case or release its slot. REVIEW_REQU
   remains required. Unknown/missing provider orders can remain blocked, requiring an approved resolution.
 - Provider GET/cancel happens while locks are held; provider latency can increase wait time. Monitor
   timeout/lock contention. This patch does not introduce an outbox, refund engine or provider framework.
-- Generic availability uses host-local date/time in existing code; time-zone/window consistency there
-  is a separate follow-up. Completion and new interval guards explicitly use Asia/Ho_Chi_Minh.
+- Availability, new booking lead, retry, checkout cutoff and completion share a Vietnam-time clock policy.
+  New booking/retry require at least 30 minutes and at most one calendar month. Existing booking checkout
+  may continue strictly before start, not at start. Overnight slot iteration is bounded and adjacent-day
+  bookings block the full interval. Configuring new overnight supplier hours is not added in this patch.
 - Customer completion is MVP self-attestation, not independent attendance proof. Media/rewards remain absent.
 
 ## Release and rollback — not authorized in this task
@@ -141,3 +145,79 @@ does not automatically resolve the support case or release its slot. REVIEW_REQU
    actions under an approved incident plan. No blanket DB restore or SQL cleanup to fix a code regression.
 
 Production smoke and live PayOS: **NOT RUN for this release**. HTTP health checks are not feature acceptance.
+
+## Executable internal zero-money resolution
+
+Only authenticated ACTIVE **ADMIN** may use these endpoints. CUSTOMER/SUPPLIER/STAFF cannot operate them.
+Do not run write actions on production under the current task. The owner (`xuandat24`) operates and
+contacts customers; Gmail/web reminders and automatic phone calls are not introduced.
+
+1. `GET /api/v1/payments/payos/review/bookings/{bookingId}` is a read-only preview. It queries PayOS GET for
+   every attempt, returning app/provider identities, expected/received amounts, status, timestamps,
+   `fingerprint`, `canCloseZeroMoney`, `canCloseZeroSecondary`, `proposedRetryAllowed` and a blocker.
+   There are no customer contacts, bank details, checkout URLs, credentials or payment-authorizing tokens.
+2. Review the exact booking and all attempts against the authorized merchant dashboard and private case.
+   `paidAt` is an application observation, not independent bank/settlement proof. A mismatch/manual flag
+   alone does not set it. Exact signed PAID receipts/server-verified PAID preserve this timestamp even
+   when escalation leaves REVIEW_REQUIRED. Preview does not mutate statuses or call provider create/cancel.
+3. For unpaid bookings with **every** attempt identity-matching terminal CANCELLED/EXPIRED/FAILED and
+   known `amountPaid=0`, use `POST .../{bookingId}/close-zero-money` with
+   `{ "fingerprint": "<64 lowercase hex from preview>", "caseReference": "<private case identifier>" }`.
+   Case reference accepts 3–80 ASCII letters/digits/`_.-`; do not put customer data in it.
+   It refuses paid/refunded/completed bookings, local PAID/paidAt evidence, unknown amount, missing/mismatched
+   provider identity, pending or nonzero attempts. An orphan without local link ID may bind the trusted GET
+   identity only when orderCode and amount match. No history is deleted.
+4. The owner's option **1** approves a narrower alternative: `POST .../{bookingId}/close-zero-secondary`
+   with the same payload, only for CONFIRMED/COMPLETED paid/deposit-paid bookings containing exactly one
+   non-manual PAID primary whose provider identity and exact positive amountPaid are verified. All other
+   attempts must be terminal/zero with no conflicting local PAID/paidAt. Only secondary rows close; primary
+   amount, status, paidAt, timestamps and booking/payment state are preserved. This can restore completion/
+   review eligibility after blockers clear; it never completes a booking or upgrades PARTIALLY_PAID to PAID.
+   No authorization for late, duplicate, mismatched money or production execution follows from this choice.
+5. Apply rereads provider evidence under booking → all payments (ID order) → practitioner locks. A changed
+   preview returns `409 PAYMENT_REVIEW_STALE`; other unsafe proofs return a 409 blocker. Timeout/unknown
+   proof refuses closure. Financial/wrong-identity cases stay blocked. Repeated identical apply checks
+   provider proof again and returns the original audit ID with `alreadyApplied=true`, without duplicate audit.
+6. Every apply appends per-attempt provider snapshots and a summary in existing `support_reports` with
+   reserved `PMT-AUDIT:` reasons, operator, case reference and fingerprint. Generic report creation cannot
+   forge the namespace, and generic report updates cannot edit these records. This is application-level
+   append-only audit, not a cryptographic guarantee against a privileged database administrator.
+7. Zero-money whole-booking closure releases the slot by CANCELLED/UNPAID. Customer-cancelled bookings
+   remain nonretryable. Expired/failed bookings become retryable only if all attempts are safe and the
+   service/practitioner, schedule, 30-minute lead/month limit and complete interval are still available.
+   Reopening later rechecks the slot under the existing practitioner mutex; preview never reserves it.
+
+Money received, unknown amount, wrong order/link/amount or multiple paid attempts require the owner's
+case-specific financial decision and customer contact. Proposed SLA for approval: inspect at opening and
+every 30 minutes during monitored operating hours, acknowledge within two operating hours, record a plan
+within one business day. **Cadence/SLA, backup operator and late-money disposition are not yet approved**.
+Keep checkout/completion/review blocked; preserve evidence; arrange contact through private account/support
+records and record the call outcome. Do not treat the case as solved by a status change or external refund
+alone. A further controlled app-state action, if needed, must be separately specified/tested/approved.
+
+## Backup and rollout evidence (read-only, 13 October 2026)
+
+- Backup identifier: `beautylink_before_resend`; user reports 12 October at 20:42 (+07).
+  Metadata/marker were actually inspected: 70 files / 1,064,814 compressed bytes, all 16 listed chunks
+  present. Marker modification time is 12 October 20:38:37 (+07), raw begin/end are
+  `2026-10-12 13:37:49` / `2026-10-12 13:38:37` (raw strings have no zone).
+  Dumper metadata reports format 2.0.1, consistent=true, tzUtc=true, checksum=false.
+- SHA-256 of completion marker: `E26EBE30BFFB5B037C5A48500C2F9ABEDD7BA982E6CB49B42ECE0C55DB329239`.
+  Sorted relative-file-name + SHA-256 inventory digest (LF separators, UTF-8):
+  `6AF3CFB06A12753A6C2D3DF7FA0F1EB6862F783ABE253DE2A014F472E8EC385F`.
+  These hashes identify the current snapshot; they are **not** a prior integrity checksum or restore proof.
+  No decompression/content integrity verification or customer-row read was performed. Logical TSV byte
+  counts cannot be compared directly to compressed zstd file sizes.
+- Restore **BLOCKED**: no explicit isolated host/schema/approved restore target. Before any release, confirm
+  target is not Railway production; restore with compatible MySQL Shell in an approved isolated environment;
+  compare schema/table counts and booking/payment/review foreign-key integrity; inspect app reads with
+  ddl-auto=validate, seeders/schedulers/provider integrations disabled and read-only DB credentials.
+  Do not run create-drop automated tests on this restored customer dataset. Keep detailed results private.
+- Railway read-only inspection: production still follows `main`, root `/backend`, checkSuites=false,
+  one replica, health `/api/v1/categories`, latest deployment `12ca4eb6-d4ca-419c-9c99-2467b712cd03` SUCCESS.
+  This is not the feature release. Vercel project read returned 403 under connector scope `project-personal2`;
+  no CLI is installed, so frontend auto-promotion/current SHA cannot be confirmed. No alternate credentials.
+- **NO-GO merge** until exact release SHA CI/review, isolated restore, financial runbook approval and explicit
+  backend-first frontend-hold control are verified. No merge/deploy authorization in this task. Approve
+  rollback image/commit before rollout; old main may reopen known review/cancellation bugs. Roll back code/
+  image, never restore production DB to repair a code-only error. Webhook must remain receiving throughout.

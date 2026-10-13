@@ -561,7 +561,19 @@ ratings/counts use only completed, paid/deposit-paid bookings with ratings 1–5
 legacy base ratings do not count. Completion is customer self-attestation, not independent attendance verification.
 
 Run full Maven verify and frontend npm ci/test/lint/build. CI additionally runs
-`BookingReviewReleaseTest` against a disposable loopback MySQL test database; never point tests at Railway MySQL.
+`BookingReviewReleaseTest,PaymentCancellationSafetyTest` against a disposable loopback MySQL test database
+and a browser → Spring/JWT/H2 smoke with a test-only fake gateway; never point tests at Railway MySQL.
+
+Customer bookings expose `GET /api/v1/bookings/{id}` (owner/CUSTOMER only). `paymentEligible` and blocker
+reasons govern the **Tiếp tục thanh toán** action: reload/back navigation retains only `bookingPayment=<id>`,
+never browser prices/URLs/eligibility. The client rereads the booking and reuses its active option/voucher;
+it never creates a replacement booking to bypass reconciliation. Checkout is strictly before Vietnam start
+time. New booking/retry use Vietnam 30-minute lead and one-calendar-month limits, regardless of JVM zone.
+Provider links created by the new code request expiry no later than booking start. Withholding a URL does
+not prove an older/opened link closed: provider GET/confirmed closure governs slot release; verified money
+still persists after start without automatically completing or reviving cancelled appointments.
+Internal ADMIN preview and guarded zero-money/zero-secondary actions, evidence and release/restore gates:
+[PAYMENT_REVIEW_RUNBOOK.md](PAYMENT_REVIEW_RUNBOOK.md). They do not implement refunds or financial overrides.
 
 For integrated local browser smoke (no real payments/emails):
 

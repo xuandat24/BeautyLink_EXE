@@ -1,5 +1,42 @@
 # Require completed bookings before service and supplier reviews
 
+## Current follow-up: safe continuation, Vietnam time and operator zero-money resolution
+
+Continues baseline `4841be0` without rewriting any existing commit. No merge/deploy permission.
+
+- Owned booking GET/additive option-voucher fields, reusable payment-continuation dialog and minimal
+  App/Bookings/Checkout identifier restoration. Recheck backend before payment; no replacement booking,
+  no browser price/capability/checkout authority, active option/voucher preserved, stale/account/double-submit
+  guards and safe HTTPS/default-port PayOS URL. App change is navigation only, not authentication.
+- Shared controllable HCM clock/window/30-minute lead and finite overnight interval slots. Strict start
+  cutoff across DTO/create/reuse/status; new expiry no later than start, but provider confirmation remains
+  necessary for actual closure/release. Existing money receipts/reconciliation still accepted after start.
+- ADMIN read-only all-attempt preview and fingerprinted zero-money closure, booking→payment→practitioner
+  locks, repeat-safe application-level append-only audit in existing support_reports. Generic support API
+  cannot forge/edit this audit namespace. No schema/dependency/refund/financial override.
+- Owner option 1 authorizes the narrower secondary closure only with one fully provider-verified nonmanual
+  PAID main and all others terminal/zero. Preserve paid primary/booking/deposit state. Late/double/wrong
+  money stays blocked; production operation and financial disposition need separate approval.
+- New race exposed early webhook ignore for manual attempts; signed valid PAID/exact provider PAID
+  evidence now persists under escalation without clearing blockers or reviving cancellation. Existing
+  test expecting null paidAt for verified late exact PAID updated, not removed; mismatches still not proof.
+- Local Java 21 verify **236 PASS**, independent UTC JVM boundary **6 PASS**; npm ci/test/typecheck/build
+  **40 PASS**. Actual Chrome→Spring/JWT/H2 smoke PASS: reuse/expiry retry/reload/back without new booking,
+  actual App Account reload, paid/manual guards, completion and both review targets/reload/Explore/details.
+  Fixture overlap/early pre-seed login failures were harness issues, corrected without loosening production
+  assertions. Existing nonfatal Mockito/Zod/chunk warnings unchanged; fixture artifact scans PASS.
+- One CI browser gate (temporary test tooling, no repository runtime dependency), retained isolated MySQL
+  concurrency/Docker gates. Final commit's own CI evidence will be linked in the final report/handoff;
+  previous 4841be0 CI is not proof of this release.
+- Backup metadata/chunks/hash read-only checked; no restore target authorized, restore NOT RUN. Railway
+  main auto-deploy config observed; Vercel project read 403 and frontend promotion hold unverified. No
+  production mutation/payment/restore/config changes. Runbook includes exact proof/actions/SLA proposals,
+  private customer contact, rollback and separate financial/restore/rollout approval gates.
+
+See BOOKING_REVIEW_AUDIT.md for requirement→code→tests mapping and PAYMENT_REVIEW_RUNBOOK.md for
+controlled operation. Self-attestation remains MVP; attendance verification/media/Beauty Points absent.
+The sections below describe earlier baseline work, not current CI or release permission.
+
 ## Latest safety follow-up — supersedes historical release permissions/evidence below
 
 Continue existing branch and commits, no history rewrite. A–F payment/cancel/shop findings were

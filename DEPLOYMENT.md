@@ -218,6 +218,11 @@ Require exact final HEAD CI: full Java 21 regression, frontend tests/typecheck/b
 `BookingReviewReleaseTest,PaymentCancellationSafetyTest`, and backend Docker build. Local browser
 smoke uses real Spring/JWT/H2 with a test-only fake gateway and blocks PayOS network redirects;
 neither fixtures nor the fake provider belongs in the production JAR/bundle.
+The browser gate covers actual existing-booking continuation after reload/back navigation, reuse and expiry
+retry without a new booking; it is not a live PayOS test. Temporary CI-only browser tooling is not a runtime
+dependency. Internal ADMIN zero-money/zero-secondary operations require fresh all-attempt provider proof,
+preview fingerprint and append-only support-report audit; production use requires separate approval.
+Read-only backup metadata now exists, but restore into an approved isolated target remains BLOCKED.
 Book/payment DTO changes are additive; deploy backend before frontend after separate approval.
 Verify current image/commit and how frontend auto-promotion is held **before** merging main.
 No schema/entity mapping, DDL, secrets, webhook URL, CORS or domain changes are required.

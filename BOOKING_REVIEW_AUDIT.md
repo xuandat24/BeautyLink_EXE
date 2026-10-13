@@ -1,5 +1,46 @@
 # BeautyLink booking and verified-review audit
 
+## Fixed scope for continuation/review resolution (baseline 4841be0)
+
+Fetched main 5cdc5d3 and feature 4841be0, clean worktree, merge base main; no AGENTS.md found.
+Claims checked against current source before editing:
+
+| Gap | Call paths / invariant | Planned files | Proof |
+| --- | --- | --- | --- |
+| R1 confirmed: checkout booking ref disappears; bookings has no continue-payment action | Existing owned booking only; reread capabilities; same option/voucher reuses ledger; no browser proof | BookingsPage, CheckoutPage, small continuation dialog/navigation helper, booking DTO/read API/client | React + real browser reload/back-forward/account/stale/double/blocked tests |
+| R2 confirmed: pending reuse/status URL before start-time guard | Shared clock/policy, strict now < start, money reconciliation unaffected | CompletionPolicy (shared time helpers), PaymentPolicy, PaymentService, BookingService | Fixed-clock before/exact/after start DTO/create/reuse/status + post-start PAID |
+| R3 confirmed: availability host-local time and LocalTime wrap loop | HCM dates, >=30-minute lead, one calendar month, finite interval slots and adjacent-day overlaps | AvailabilityService, booking/payment policies, booking-only frontend date helper/validation | Fixed-clock UTC/HCM, lead/month/midnight/overnight + retained MySQL races |
+| R4 confirmed: runbook has no executable zero-money resolution | ADMIN preview, all-attempt provider proof reread under booking/payment locks; no financial automation | Small PaymentReviewService/controller/DTO, SupportReportRepository + targeted SupportService audit protection | Denied roles, dry-run zero writes, safe/idempotent closure, changed preview, mismatch/null/received/other attempts and race tests |
+| R5: browser gate currently local-only | Loopback test server/JWT/DB and fake gateway only; fixtures absent from artifacts | Existing smoke fixtures/script + small CI job | Local Chrome and exact-HEAD CI browser/MySQL/Docker gates |
+
+No new schema/dependency/notification/refund framework. Existing SupportReport is the available
+persistent audit mechanism (no AuditLog entity exists); internal payment-review records will be
+append-only through application APIs and reserved against customer forgery. Protecting those records
+in SupportService directly supports R4; it does not refactor report workflows.
+Money-received/conflicting cases remain blocked: operator preview exposes proof; owner decision and
+external money handling remain separate approvals, never forced PAID/REFUNDED or cancelled-booking revival.
+Older sections below are historical and are not current acceptance evidence.
+
+### Current acceptance mapping
+
+| Requirement | Code / evidence | Result |
+| --- | --- | --- |
+| Resume without new booking | PaymentContinuationDialog, identity-only navigation; owned booking GET; Bookings/Checkout/App | Component tests and actual App browser reload/back + reuse/expired retry PASS |
+| Strict checkout cutoff | Shared BookingCompletionPolicy in DTO/reserve/status; expiry cap in request/ledger | 2 pre-fix RED cases, fixed before/exact/after matrix + late provider-create response + post-start signed money PASS |
+| HCM window/finite slots | AvailabilityService + bookingTime helpers; existing practitioner mutex retained | Clock/zone/month/30-minute/midnight/adjacent interval tests PASS; independent UTC JVM 6 PASS |
+| Executable internal closure | ADMIN PaymentReviewService/controller, all-attempt identity/terminal/known-zero proof, fingerprint, SupportReport audit | Read-only preview, denied role, stale/change/money/null/other-attempt/idempotent/concurrent webhook tests PASS |
+| Preserve paid primary | Separate close-zero-secondary action, owner option 1 approved | FULL_100/DEPOSIT_50 primary unchanged; financial/multi-paid/manual cases refused; completion/review reopen only after blocker removed |
+| Money evidence race | Booking-first locking retained, signed PAID on manual attempt no longer ignored; exact late GET PAID observation kept | Concurrent closure/webhook and retained cancel/reconciliation/complete/review tests PASS; no booking revival |
+| Real reviews/regression | Existing scoped public queries/eligibility unchanged | Full Java 21 236 tests + frontend 40 + browser SERVICE/SUPPLIER upsert/reload/details PASS |
+| Artifact safety | Test-classpath fixture/fake gateway only, no runtime/test dependency changes | Production JAR/bundle fixture scan PASS; Docker/MySQL/final-HEAD browser await CI |
+
+App.tsx changes are restricted to restoring/clearing continuation navigation; they do not change auth.
+SupportService/SupportReportRepository changes directly protect/persist operator audit; no generic support
+workflow refactor. No entities/schema, OTP/auth/JWT/KYC, money/voucher/deposit formulas, supplier onboarding,
+new notifications or runtime dependencies changed. New scope inventory is fixed; no further feature work.
+Existing CI at 4841be0 is baseline only; final HEAD CI must independently pass before CODE READY.
+Production/PayOS live smoke NOT RUN. Restore metadata inspected, but isolated restore target/approval absent.
+
 ## Current safety follow-up (2026-10-13; supersedes historical cancellation policy below)
 
 Baseline main `5cdc5d3`, feature `e207040` was fetched and clean before this follow-up. Existing
