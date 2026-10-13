@@ -1,6 +1,24 @@
 # BeautyLink booking/review integration checkpoint
 
-Status: IMPLEMENTATION_COMPLETE_RELEASE_BLOCKED — code pushed and CI verified; draft PR access and usable-backup gates prevent merge/deployment. Existing commits preserved.
+Status: SAFETY_FOLLOWUP_LOCAL_VERIFIED_CI_PENDING — preserve all commits; inspect actual Git HEAD/status on resume.
+
+## Latest task — cancellation/payment safety (2026-10-13)
+
+- Authorization supersedes all historical release permissions below: feature-branch code/test/commit/push/draft PR ONLY. No merge, deploy, real payment, production DB write/restore, secret/config changes or force-push.
+- Fetched main `5cdc5d3de0bc51bcc2358f6b1f0088ee933448ad` and feature baseline `e207040885f3ab3950281c5429a22c2e4a5570f5`; merge base main, divergence 0/5, clean worktree. Existing commits preserved.
+- Reproduced A–F with eight failing isolated integration tests before fixing; README inconsistency G statically confirmed. No unverified finding repaired.
+- Backend commit `b770939`: booking-first locking/READ_COMMITTED, cancellation verifies GET/cancel identity/status/received amount; paid/manual evidence commits before HTTP conflict. Unknown cancellation withdraws checkout, keeps PENDING discoverable with manual flag and retains slot. Superseded unknown closures remain PENDING. Checkout order ledger commits before outbound create; timeout retains known order. Retry/new booking serialize on practitioner and check full/adjacent-day intervals. Manual/pending attempts block completion/reviews/public aggregates; supplier-shop array is SUPPLIER only. No entity/schema/dependency/money-formula changes.
+- Frontend commit `6d80b27364c0cc0a6d841570df229d80c49aaec1`: additive capabilities fail closed, paid/manual cancel controls/support, stale/double submit guards, refresh real bookings, retain booking across provider retry, server-only return verification and safe redirect. Partner review subtitle describes customer self-confirmation, not independent attendance. No OTP/auth/KYC/UI redesign.
+- Latest local backend Java 21 verify: **194 passed**, zero failures/errors/skips, compile/package PASS. Frontend npm ci, **32 passed**, TypeScript and production build PASS. Existing Maven agent/Zod/chunk warnings unchanged. New MySQL CI selection runs both release and cancellation-safety classes (72 tests expected, must verify exact final HEAD result).
+- Expanded real Chrome/Spring/JWT/H2 smoke PASS: paid/manual action guards, pending cancellation, completion, both targets create/update/reload, account, appointments, Explore/service/partner details, checkout to fake gateway; zero API/page/console errors. Test harness modal/navigation/UTF8 observation issues were corrected without changing production behavior. Test-only provider never makes outbound payment requests. Production JAR/bundle scans exclude new smoke fixtures/test credentials.
+- Railway read-only recheck: active backend deployment `12ca4eb6-d4ca-419c-9c99-2467b712cd03`, SUCCESS, commit main `5cdc5d3`; source remains main, no staged changes, health /api/v1/categories and one replica unchanged. Backend categories and homepage HTTP 200. Vercel deployment metadata read returned 403 for configured team/project; no CLI available, current frontend SHA/promotion settings unverified (historical Vercel ID below is not current evidence).
+- Local Docker daemon missing; no local Docker/MySQL test container. CI must verify MySQL/Docker, not historical CI.
+- Owner says they handle PayOS reconciliation/customer contact; late-money policy NOT approved. Gmail/web operator alerts requested but not implemented or authorized as part of this minimal patch; separate approved notification design required. PAYMENT_REVIEW_RUNBOOK.md contains read-only queries, evidence/contact workflow and approval gates, no UPDATE SQL or fake refunds.
+- Backup at 20:00 reported historically; restore unverified, no authorized isolated restore target supplied. No production database access used in tests.
+- Local Spring/Vite smoke servers stopped after final PASS. Temporary logs remain ignored; no fixture/secret/build output staged.
+- Next: commit docs group, push feature, try draft PR once (stop if 403), verify all CI jobs for exact final HEAD and report. Do not claim release completed. If interrupted, do not redo passed unchanged tests without a reason.
+
+Everything below is historical baseline, not final-HEAD evidence; older conditional merge/deploy permission is revoked by the latest task.
 
 ## Current release follow-up (2026-10-13)
 

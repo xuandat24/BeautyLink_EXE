@@ -10,7 +10,7 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 
 - Added a complete public supplier shop page inspired by marketplace storefronts. It includes the supplier banner and profile, verification and rating summaries, searchable/filterable services, customer reviews, store details, location map, sharing, and direct booking.
 - Supplier names and discovery cards now open the corresponding shop, and each shop has a shareable `#shop/{supplierId}` route.
-- Added database-backed service and supplier reviews from customer bookings. A paid, non-cancelled booking can hold one editable 0–5 star review for the service and one for the supplier.
+- Added database-backed service and supplier reviews. A completed booking with verified PAID/PARTIALLY_PAID payment and no unresolved payment blocker can hold one editable 1–5 star review per target.
 - Expanded profile booking cards with service imagery, supplier identity and address, practitioner/time/price details, and a direct review action without opening the full appointment page.
 - Added a dismissible discovery popup that lets guests and signed-in users choose Hà Nội or Thành phố Hồ Chí Minh and a service category before browsing.
 - Added Vietnamese/English switching across the primary homepage, authentication, discovery, service, and booking flows.
@@ -282,8 +282,8 @@ Guests do not have database accounts. They can browse the catalog but must regis
 
 1. Sign in as the customer who placed the booking.
 2. Open **Tổng quan & Lịch hẹn**.
-3. Select **Đánh giá** on a paid, non-cancelled booking.
-4. Submit separate 0–5 star scores and optional comments for the service and the supplier.
+3. After the appointment ends, confirm **Đã sử dụng dịch vụ** on a confirmed paid/deposit-paid booking. Pending/manual-review payments must be resolved first.
+4. Only after completion, submit separate 1–5 star scores and optional comments for the service and the supplier.
 5. Reopen **Xem / sửa đánh giá** if either review needs to be updated.
 
 The backend enforces booking ownership and payment eligibility; hiding or changing the frontend button cannot bypass these rules.
@@ -319,13 +319,23 @@ Uploaded JPG, PNG, and WEBP files are resized in the browser and stored with the
    prevents duplicate reviews. Deposits remain eligible because the remaining balance may be
    settled at the salon; completion does not invent an online balance payment.
 4. `PENDING`, `CONFIRMED`, `CANCELLED`, unpaid, and refunded bookings cannot be reviewed.
-   Completed bookings cannot be cancelled. Public review lists and aggregates exclude reviews
+   Paid/deposit-paid and completed bookings cannot be self-cancelled. Public review lists and aggregates exclude reviews
    whose booking does not satisfy the completed/paid rule, including legacy premature reviews.
 
-The API returns `completionEligible`, `reviewEligible`, `serviceReview`, and `supplierReview`.
+The API returns `completionEligible`, `reviewEligible`, `cancelEligible`, `paymentEligible`,
+`paymentBlockerReason`, `serviceReview`, and `supplierReview`.
 Customer actions use those server flags. Browser storage is not evidence of an appointment or
 review; customer screens no longer fabricate booking history or grant local review success.
 No existing booking is automatically marked completed by this change.
+
+Customer cancellation is allowed only for unpaid bookings, after any pending PayOS links are
+verified closed with matching identity/amount and zero received money. Unknown results keep
+the slot reserved and disable checkout; verified PAID results commit even when cancellation
+returns HTTP 409. Successful customer cancellation is idempotent and never reopens checkout.
+Provider-closed expiry/failure can allow retry only after all old links are checked and the
+active practitioner/service, working schedule, future time and entire interval remain valid.
+There is no automatic refund or balance collection. Browser return/cancel URLs are not payment proof.
+See [PAYMENT_REVIEW_RUNBOOK.md](PAYMENT_REVIEW_RUNBOOK.md) for unresolved attempts, support and approval gates.
 
 This MVP uses the customer's explicit declaration after the scheduled appointment, not proof
 of physical attendance. Photo/video attachments and reward-point issuance are not implemented

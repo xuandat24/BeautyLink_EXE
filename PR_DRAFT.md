@@ -1,5 +1,50 @@
 # Require completed bookings before service and supplier reviews
 
+## Latest safety follow-up — supersedes historical release permissions/evidence below
+
+Continue existing branch and commits, no history rewrite. A–F payment/cancel/shop findings were
+reproduced before fixes; stale README review rules were statically confirmed. Scope stays booking,
+PayOS payment verification/cancellation, review exposure, affected frontend controls and tests/docs.
+
+- Verify pending closure by PayOS identity/status/zero received amount before cancelling/releasing
+  a booking. Paid/deposit-paid cancellation returns 409 and support guidance, never fake refund.
+- Commit verified PAID/manual evidence even if customer receives a cancellation conflict. Persist
+  the order ledger before external create so timeout/finalization failure never loses the known order.
+- Keep unconfirmed superseded cancellation PENDING for reconciliation. Withdraw uncertain checkout;
+  any manual/unresolved payment blocks completion, review and public aggregates. Customer-cancelled
+  bookings never reuse a checkout, resurrect or automatically regain retry permission.
+- Booking-first locks and locking rereads; READ_COMMITTED where a scalar/read precedes lock waiting.
+  Retry and new creation share the practitioner mutex; full/overnight interval overlap checks, active
+  practitioner/service, valid time/schedule. No amount/voucher/deposit/signature changes.
+- Supplier shop array now SUPPLIER-only, matching rating/count; scoped SERVICE queries remain separate.
+- Frontend additive cancel/pay capabilities, backend-safe controls, support/error states, guarded
+  stale/double submits, reread after mutation, retained booking during checkout retry and no browser
+  callback-created PAID/CANCELLED state. Old frontend cannot bypass backend checks.
+
+Local evidence: Java 21 verify **194 passed**, compile/package PASS; npm ci, **32 frontend tests**,
+TypeScript and build PASS. Existing nonfatal warnings unchanged. MySQL/Docker/final browser evidence
+must be checked for actual final HEAD; baseline CI below is not the new gate. Test-only fake gateway
+and local fixtures are excluded from JAR/bundle. No live PayOS or production DB mutation.
+
+No schema/migration/dependency/OTP/auth/KYC/price math/attendance/media/points changes. Historical
+mocked same-start retry coverage is replaced by stronger real-DB same-start/different-start/overnight
+and concurrent create/retry cases; paid-cancel race assertions follow the newly approved MVP policy.
+No concurrency tests dropped.
+
+Owner is responsible for manual reconciliation/contact, but late-money procedure is not approved.
+Automatic Gmail/web operator reminders are requested follow-up work, not implemented in this PR.
+See PAYMENT_REVIEW_RUNBOOK.md for read-only audit, evidence, contact and approval workflow. Unknown
+provider orders, legacy false closure, provider latency under locks, backup restore and rollout order
+remain explicit risks/gates. Self-confirmation is not independent attendance proof.
+
+**Draft only. Current task forbids merge/deploy/payment/production DB writes or restores.**
+Before any separately approved rollout: usable isolated restore evidence, approved money procedure,
+exact-SHA CI/review and a controlled backend-first frontend promotion plan. No ad-hoc SQL repair.
+Rollback must preserve payment evidence; older main reopens known unsafe review/cancel behavior.
+Current final test/CI/SHA evidence is recorded in CODEX_HANDOFF.md and the final task report.
+
+The sections below are historical integration evidence only, not permission to release.
+
 Paid or deposit-paid bookings previously unlocked reviews before service completion, while no API transitioned confirmed bookings to completed. This change adds customer/owner-only completion after the appointment ends in Asia/Ho_Chi_Minh, including overnight appointments. Both review targets require COMPLETED plus PAID/PARTIALLY_PAID.
 
 Cancellation, completion and review writes lock the booking row. Completion is idempotent, preserves the payment status and does not collect a balance or issue rewards. Public review queries and aggregates exclude historical premature/ineligible reviews without deleting them.

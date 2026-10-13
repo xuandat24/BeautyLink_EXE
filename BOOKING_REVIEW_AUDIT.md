@@ -1,5 +1,34 @@
 # BeautyLink booking and verified-review audit
 
+## Current safety follow-up (2026-10-13; supersedes historical cancellation policy below)
+
+Baseline main `5cdc5d3`, feature `e207040` was fetched and clean before this follow-up. Existing
+commits are preserved; OTP/auth/KYC/voucher/deposit formulas and production configuration are untouched.
+Before-fix reproduction: 8 integration cases failed with zero test errors after fixture isolation.
+A–F were reproduced (cancelled checkout reuse, paid cancellation, manual-review bypass, false
+superseded closure, interval overlap, mixed supplier-shop reviews); G was statically confirmed in README.
+
+The safety patch verifies provider identity/status/received amount before customer cancellation,
+preserves verified payment evidence across HTTP conflicts and uncertain creates, uses booking-first
+locks, withholds unsafe checkout/completion/review, and checks retry/new-booking interval competition.
+Supplier-shop reviews now contain SUPPLIER only, matching their rating/count; all public review
+lists/aggregates hide bookings with pending/manual blockers as well as invalid lifecycle/payment.
+Frontend uses additive server cancel/payment capabilities, guards repeated/stale actions, refreshes
+real data after mutation, and retains the booking during provider retry instead of creating another.
+No schema migration or new dependencies. Customer completion remains self-attestation.
+
+Current local regression: Java 21 verify **194 tests passed**; frontend **32 tests passed**, TypeScript
+and production build passed. Baseline results below are historical, not evidence for final HEAD.
+MySQL/Docker must pass CI for final HEAD; local Docker daemon is unavailable. Final browser/CI results
+and current SHA are recorded in CODEX_HANDOFF.md and release report after verification.
+The old paid-cancel expectation is replaced by paid-cancel denial; no concurrency coverage is removed.
+The old mocked same-start retry test is superseded by real-DB same-start, different-start, overnight
+and concurrent retry/new-create tests (also selected by the MySQL CI job).
+
+Only feature push/draft PR is authorized. No merge/deploy/payment/production DB write or restore.
+Owner is responsible for manual review, but money procedure and notification design are not approved.
+See PAYMENT_REVIEW_RUNBOOK.md for current invariants, residual risks and explicit release gates.
+
 Reviewed main: `5cdc5d3de0bc51bcc2358f6b1f0088ee933448ad`.
 Plan read: 12 October 2026; its last modification was 12 October 2026 at 08:26 UTC.
 
