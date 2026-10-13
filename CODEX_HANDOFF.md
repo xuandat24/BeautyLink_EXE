@@ -1,6 +1,6 @@
 # BeautyLink booking/review integration checkpoint
 
-Status: SAFETY_FOLLOWUP_LOCAL_VERIFIED_CI_PENDING — preserve all commits; inspect actual Git HEAD/status on resume.
+Status: DONE_CODE_AND_TESTS — feature delivered; PR permission and production approval/backup gates remain blocked. Preserve commits and inspect actual Git HEAD/status on resume.
 
 ## Latest task — cancellation/payment safety (2026-10-13)
 
@@ -12,11 +12,12 @@ Status: SAFETY_FOLLOWUP_LOCAL_VERIFIED_CI_PENDING — preserve all commits; insp
 - Latest local backend Java 21 verify: **194 passed**, zero failures/errors/skips, compile/package PASS. Frontend npm ci, **32 passed**, TypeScript and production build PASS. Existing Maven agent/Zod/chunk warnings unchanged. New MySQL CI selection runs both release and cancellation-safety classes (72 tests expected, must verify exact final HEAD result).
 - Expanded real Chrome/Spring/JWT/H2 smoke PASS: paid/manual action guards, pending cancellation, completion, both targets create/update/reload, account, appointments, Explore/service/partner details, checkout to fake gateway; zero API/page/console errors. Test harness modal/navigation/UTF8 observation issues were corrected without changing production behavior. Test-only provider never makes outbound payment requests. Production JAR/bundle scans exclude new smoke fixtures/test credentials.
 - Railway read-only recheck: active backend deployment `12ca4eb6-d4ca-419c-9c99-2467b712cd03`, SUCCESS, commit main `5cdc5d3`; source remains main, no staged changes, health /api/v1/categories and one replica unchanged. Backend categories and homepage HTTP 200. Vercel deployment metadata read returned 403 for configured team/project; no CLI available, current frontend SHA/promotion settings unverified (historical Vercel ID below is not current evidence).
-- Local Docker daemon missing; no local Docker/MySQL test container. CI must verify MySQL/Docker, not historical CI.
+- Local Docker daemon missing; no local Docker/MySQL test container. Runtime/source HEAD `566939f9a4fc0f1992b840711ac1f4528f23037b` pushed and CI PASS: https://github.com/xuandat24/BeautyLink_EXE/actions/runs/38344332391 . All three jobs succeeded: backend 194 tests + Docker build; frontend npm ci / 32 tests / typecheck / build; isolated MySQL 8.4: release 34 + cancellation-safety 38 = **72 passed**, zero failures/errors/skips. These are actual new-HEAD results, not baseline reuse.
 - Owner says they handle PayOS reconciliation/customer contact; late-money policy NOT approved. Gmail/web operator alerts requested but not implemented or authorized as part of this minimal patch; separate approved notification design required. PAYMENT_REVIEW_RUNBOOK.md contains read-only queries, evidence/contact workflow and approval gates, no UPDATE SQL or fake refunds.
 - Backup at 20:00 reported historically; restore unverified, no authorized isolated restore target supplied. No production database access used in tests.
 - Local Spring/Vite smoke servers stopped after final PASS. Temporary logs remain ignored; no fixture/secret/build output staged.
-- Next: commit docs group, push feature, try draft PR once (stop if 403), verify all CI jobs for exact final HEAD and report. Do not claim release completed. If interrupted, do not redo passed unchanged tests without a reason.
+- Three scoped commits pushed: backend `b770939`, frontend `6d80b27`, docs `566939f`; working tree clean at that milestone. Draft PR creation attempted once for current head and again returned 403 Resource not accessible by integration; no PR exists. Stopped PR action, no alternate credential/bypass. Manual draft: https://github.com/xuandat24/BeautyLink_EXE/compare/main...fix/completed-booking-reviews?expand=1 using PR_DRAFT.md.
+- This final checkpoint is documentation-only and does not alter tested runtime. Verify its own final HEAD CI in the final report (Git cannot embed its own commit SHA); do not reuse parent CI as final-HEAD evidence. No code TODO remains in this scope. Production is NOT released. Follow-up requires draft PR/review permission, usable backup/isolated restore authorization, approved money procedure, exact-SHA release approval and controlled backend-first promotion; Gmail/web reminders need a separate approved notification scope. Never merge/deploy under this task.
 
 Everything below is historical baseline, not final-HEAD evidence; older conditional merge/deploy permission is revoked by the latest task.
 

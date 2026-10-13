@@ -21,10 +21,14 @@ PayOS payment verification/cancellation, review exposure, affected frontend cont
   stale/double submits, reread after mutation, retained booking during checkout retry and no browser
   callback-created PAID/CANCELLED state. Old frontend cannot bypass backend checks.
 
-Local evidence: Java 21 verify **194 passed**, compile/package PASS; npm ci, **32 frontend tests**,
-TypeScript and build PASS. Existing nonfatal warnings unchanged. MySQL/Docker/final browser evidence
-must be checked for actual final HEAD; baseline CI below is not the new gate. Test-only fake gateway
-and local fixtures are excluded from JAR/bundle. No live PayOS or production DB mutation.
+Evidence: Java 21 verify **194 passed**, compile/package PASS; npm ci, **32 frontend tests**,
+TypeScript and build PASS. New runtime/source HEAD `566939f9a4fc0f1992b840711ac1f4528f23037b`
+CI PASS: https://github.com/xuandat24/BeautyLink_EXE/actions/runs/38344332391 — backend/Docker,
+frontend, isolated MySQL **72 passed**. Documentation-only handoff commits still require their own
+HEAD CI check. Expanded Chrome → real Spring/JWT/H2 smoke PASS for pending cancel, paid/manual
+guards, account/appointments, completion, both review upserts/reload, Explore/details and checkout
+to a no-network fake gateway; zero API/page/console errors. Test-only gateway/fixtures are excluded
+from JAR/bundle. Existing nonfatal warnings unchanged. No live PayOS or production DB mutation.
 
 No schema/migration/dependency/OTP/auth/KYC/price math/attendance/media/points changes. Historical
 mocked same-start retry coverage is replaced by stronger real-DB same-start/different-start/overnight

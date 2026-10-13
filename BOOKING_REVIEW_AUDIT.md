@@ -19,8 +19,11 @@ No schema migration or new dependencies. Customer completion remains self-attest
 
 Current local regression: Java 21 verify **194 tests passed**; frontend **32 tests passed**, TypeScript
 and production build passed. Baseline results below are historical, not evidence for final HEAD.
-MySQL/Docker must pass CI for final HEAD; local Docker daemon is unavailable. Final browser/CI results
-and current SHA are recorded in CODEX_HANDOFF.md and release report after verification.
+Runtime/source HEAD `566939f` CI passed backend/Docker/frontend/MySQL (72 tests) at
+https://github.com/xuandat24/BeautyLink_EXE/actions/runs/38344332391; expanded Chrome/Spring/JWT/H2
+smoke passed account/appointments/checkout fake gateway/pending cancel and all review scopes with
+zero API/page/console errors. Local Docker daemon is unavailable. Documentation-only checkpoint
+commits must have their own HEAD CI verified; see CODEX_HANDOFF.md and the final report.
 The old paid-cancel expectation is replaced by paid-cancel denial; no concurrency coverage is removed.
 The old mocked same-start retry test is superseded by real-DB same-start, different-start, overnight
 and concurrent retry/new-create tests (also selected by the MySQL CI job).
