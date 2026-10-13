@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   ShieldCheck,
@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { useBeautyStore } from '../store/beautyStore';
 import { CurrentUser, BackendService, CartItem } from '../types';
-import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { beautyApi, getApiErrorMessage, getAccessToken } from '../services/beautyApi';
+import { canPayBooking, safeCheckout } from '../lib/bookingPolicy';
 import { OptimizedImage } from './OptimizedImage';
 import { bookingSchema, FieldErrors, voucherCodeSchema, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
@@ -144,6 +145,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // Submission state
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const submissionBusy = useRef(false);
+  const alive = useRef(false);
+  const reservedBooking = useRef<{ context: string; id: number } | null>(null);
+  const context = JSON.stringify([currentUser?.id, items[0]?.deal.serviceId, selectedDate, selectedTimeSlot]);
+  const latestContext = useRef(context); latestContext.current = context;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   // Calculations
   const subtotal = useMemo(() => {
     return items.reduce((sum, item) => sum + item.deal.salePrice * item.quantity, 0);
@@ -231,6 +238,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Submit & Complete Booking
   const handleFinalSubmit = async () => {
+    if (submissionBusy.current) return;
     setErrorMsg('');
     if (!currentUser) {
       onNeedLogin();
@@ -259,32 +267,45 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
 
     setSubmitting(true);
+    submissionBusy.current = true;
+    const token = getAccessToken();
+    const current = () => alive.current && context === latestContext.current && token === getAccessToken();
 
     try {
       const firstItem = items[0];
       if (!firstItem?.deal.serviceId) {
         throw new Error('Dịch vụ chưa được đồng bộ với hệ thống. Vui lòng chọn lại từ trang dịch vụ.');
       }
-      const booking = await beautyApi.createBooking({
+      // Retain the booking after a provider error. Retrying must never create another
+      // booking simply to bypass an unresolved payment on the first one.
+      const existingId = reservedBooking.current?.context === context ? reservedBooking.current.id : null;
+      const booking = existingId ? (await beautyApi.myBookings()).find(b => b.id === existingId) : await beautyApi.createBooking({
         serviceId: firstItem.deal.serviceId,
         practitionerId: directService?.practitioners?.[0]?.id,
         appointmentDate: selectedDate,
         startTime: selectedTimeSlot,
         note: `Thanh toán ${depositOption === 'deposit50' ? 'cọc 50%' : '100%'} qua PayOS`,
       });
+      if (!current()) return;
+      if (!booking) throw new Error('Không tải được lịch hẹn đã tạo. Vui lòng mở Lịch hẹn của tôi và làm mới.');
+      reservedBooking.current = { context, id: booking.id };
+      if (!canPayBooking(booking)) throw new Error('Lịch hẹn chưa được máy chủ cho phép thanh toán hoặc đang cần đối soát. Vui lòng kiểm tra Lịch hẹn của tôi; không thanh toán lại.');
       const payment = await beautyApi.createPayOSPayment(booking.id, {
         paymentOption: depositOption === 'deposit50' ? 'DEPOSIT_50' : 'FULL_100',
         voucherCode: appliedVoucher?.code,
       });
-      if (!payment.checkoutUrl) {
-        throw new Error('PayOS không trả về đường dẫn thanh toán hợp lệ.');
+      if (!current()) return;
+      const checkout = safeCheckout(payment, booking.id);
+      if (!checkout) {
+        throw new Error('Giao dịch chưa có checkout an toàn hoặc cần hỗ trợ đối soát. Không thanh toán lại; vui lòng kiểm tra lịch hẹn.');
       }
       sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
-      window.location.assign(payment.checkoutUrl);
-    } catch (err: any) {
-      setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng thử lại.'));
+      window.location.assign(checkout);
+    } catch (err: unknown) {
+      if (current()) setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng kiểm tra lịch hẹn trước khi thử lại.'));
     } finally {
-      setSubmitting(false);
+      submissionBusy.current = false;
+      if (alive.current) setSubmitting(false);
     }
   };
 

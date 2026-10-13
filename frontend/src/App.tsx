@@ -384,35 +384,39 @@ export default function App() {
       return;
     }
 
-    if (paymentResult === 'cancelled') {
-      showToast('Bạn đã hủy thanh toán PayOS. Hệ thống sẽ đối soát trạng thái trên máy chủ.');
-      return;
-    }
     if (!orderCode || !/^\d{1,19}$/.test(orderCode)) {
       showToast('Không tìm thấy mã giao dịch hợp lệ để xác minh.');
       return;
     }
 
     let stopped = false;
+    let timer: number | undefined;
     let attempts = 0;
     const verify = async () => {
+      if (stopped) return;
       attempts += 1;
       try {
         const payment = await beautyApi.payOSPaymentStatus(orderCode);
+        if (stopped) return;
+        window.dispatchEvent(new Event('beautylink-bookings-refresh'));
+        if (payment.requiresManualReview || payment.status === 'REVIEW_REQUIRED') {
+          showToast('Giao dịch cần hỗ trợ đối soát. Không thanh toán lại; vui lòng gửi Phản hồi trong lịch hẹn.');
+          return;
+        }
         if (payment.status === 'PAID') {
           sessionStorage.removeItem('beautylink_payos_order_code');
           if (!stopped) showToast('Thanh toán PayOS đã được máy chủ xác thực thành công.');
           return;
         }
-        if (payment.status === 'REVIEW_REQUIRED') {
-          if (!stopped) showToast('Giao dịch đang được kiểm tra an toàn. Vui lòng không thanh toán lại.');
+        if (['CANCELLED', 'EXPIRED', 'FAILED'].includes(payment.status)) {
+          showToast('Máy chủ đã xác minh phiên thanh toán kết thúc. Vui lòng kiểm tra trạng thái lịch hẹn.');
           return;
         }
       } catch {
         // The final message below covers temporary webhook/API propagation delays.
       }
       if (!stopped && attempts < 10) {
-        window.setTimeout(verify, 1500);
+        timer = window.setTimeout(verify, 1500);
       } else if (!stopped) {
         showToast('PayOS đang đối soát giao dịch. Trạng thái sẽ tự cập nhật trong lịch hẹn.');
       }
@@ -420,6 +424,7 @@ export default function App() {
     void verify();
     return () => {
       stopped = true;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [currentUser, showToast]);
 

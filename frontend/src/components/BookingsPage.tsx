@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ArrowLeft,
   Calendar,
@@ -12,13 +12,13 @@ import {
   Share2,
 } from 'lucide-react';
 import { BackendBooking } from '../types';
-import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { beautyApi, getApiErrorMessage, getAccessToken } from '../services/beautyApi';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { AppointmentShareModal } from './AppointmentShareModal';
 import { supportReportSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
 import { ServiceReviewModal } from './ServiceReviewModal';
-import { canCompleteBooking, canReviewBooking } from '../lib/bookingPolicy';
+import { canCancelBooking, canCompleteBooking, canReviewBooking, paymentSupportMessage } from '../lib/bookingPolicy';
 
 interface BookingsPageProps {
   embedded?: boolean;
@@ -53,6 +53,9 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
   const [reportSuccess, setReportSuccess] = useState<string>('');
   const [sharingBooking, setSharingBooking] = useState<BackendBooking | null>(null);
   const [reportErrors, setReportErrors] = useState<FieldErrors>({});
+  const alive = useRef(false);
+  const loadVersion = useRef(0);
+  const actionBusy = useRef(false);
 
   // Lock body scroll when report modal is open
   useBodyScrollLock(Boolean(reportBooking || confirmingBooking));
@@ -67,42 +70,56 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [reportBooking, confirmingBooking, completingId]);
 
-  const loadBookings = () => {
+  const loadBookings = useCallback(async (keepError = false) => {
+    const version = ++loadVersion.current;
+    const token = getAccessToken();
+    const current = () => alive.current && version === loadVersion.current && token === getAccessToken();
     setLoading(true);
-    setError('');
-    beautyApi
-      .myBookings()
-      .then((data) => setBookings(data))
-      .catch((err) => setError(getApiErrorMessage(err, 'Không thể tải danh sách lịch hẹn.')))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    loadBookings();
+    if (!keepError) setError('');
+    try { const data = await beautyApi.myBookings(); if (current()) setBookings(data); }
+    catch (err) { if (current()) { setBookings([]); setError(getApiErrorMessage(err, 'Không thể tải danh sách lịch hẹn.')); } }
+    finally { if (current()) setLoading(false); }
   }, []);
 
+  useEffect(() => {
+    alive.current = true;
+    void loadBookings();
+    return () => { alive.current = false; loadVersion.current += 1; };
+  }, [loadBookings]);
+  useEffect(() => {
+    const refresh = () => { void loadBookings(true); };
+    window.addEventListener('beautylink-bookings-refresh', refresh);
+    return () => window.removeEventListener('beautylink-bookings-refresh', refresh);
+  }, [loadBookings]);
+
   const handleCancelBooking = async (id: number) => {
+    if (actionBusy.current || !bookings.some(b => b.id === id && canCancelBooking(b))) return;
+    actionBusy.current = true; loadVersion.current += 1;
+    const token = getAccessToken();
+    const current = () => alive.current && token === getAccessToken();
     setCancellingId(id);
     setError('');
     try {
-      const updated = await beautyApi.cancelBooking(id);
-      setBookings((prev) => prev.map((b) => (b.id === id ? updated : b)));
+      await beautyApi.cancelBooking(id);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể hủy lịch hẹn.'));
+      if (current()) setError(getApiErrorMessage(err, 'Không thể hủy lịch hẹn.'));
     } finally {
-      setCancellingId(null);
+      if (current()) { await loadBookings(true); setCancellingId(null); }
+      actionBusy.current = false;
     }
   };
 
   const handleComplete = async () => {
-    if (!confirmingBooking || completingId !== null) return;
+    if (!confirmingBooking || actionBusy.current || !canCompleteBooking(confirmingBooking)) return;
+    actionBusy.current = true; loadVersion.current += 1;
+    const token = getAccessToken();
+    const current = () => alive.current && token === getAccessToken();
     setCompletingId(confirmingBooking.id); setError('');
     try {
-      const updated = await beautyApi.completeBooking(confirmingBooking.id);
-      setBookings((prev) => prev.map((item) => item.id === updated.id ? updated : item));
-      setConfirmingBooking(null);
-    } catch (err) { setError(getApiErrorMessage(err, 'Không thể xác nhận hoàn thành.')); }
-    finally { setCompletingId(null); }
+      await beautyApi.completeBooking(confirmingBooking.id);
+      if (current()) setConfirmingBooking(null);
+    } catch (err) { if (current()) setError(getApiErrorMessage(err, 'Không thể xác nhận hoàn thành.')); }
+    finally { if (current()) { await loadBookings(true); setCompletingId(null); } actionBusy.current = false; }
   };
 
   const handleSendReport = async () => {
@@ -166,7 +183,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
 
         <div className="mt-4 flex flex-wrap gap-2">
           {(['all', 'upcoming', 'history'] as const).map((value) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className="rounded-xl border px-3 py-2 text-sm">{{all: 'Tất cả', upcoming: 'Sắp tới', history: 'Lịch sử'}[value]}</button>)}
-          <button type="button" onClick={loadBookings} disabled={loading} className="rounded-xl border px-3 py-2 text-sm">Làm mới</button>
+          <button type="button" onClick={() => void loadBookings()} disabled={loading || cancellingId !== null || completingId !== null} className="rounded-xl border px-3 py-2 text-sm">Làm mới</button>
           {embedded && <button type="button" onClick={onBookNew} className="rounded-xl bg-pink-600 px-3 py-2 text-sm text-white">Đặt lịch mới</button>}
         </div>
         {loading && (
@@ -272,7 +289,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
                     </button>
                     {canCompleteBooking(item) && <button type="button" disabled={completingId !== null || cancellingId !== null} onClick={() => setConfirmingBooking(item)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Đã sử dụng dịch vụ</button>}
                     {canReviewBooking(item) && <button type="button" onClick={() => setReviewingBooking(item)} className="rounded-xl bg-pink-600 px-3 py-2 text-xs font-bold text-white">{item.serviceReview || item.supplierReview ? 'Xem / sửa đánh giá' : 'Đánh giá dịch vụ / nhà cung cấp'}</button>}
-                    {!['CANCELLED', 'COMPLETED'].includes(item.status) && (
+                    {canCancelBooking(item) && (
                       <button
                         disabled={cancellingId !== null || completingId !== null}
                         onClick={() => handleCancelBooking(item.id)}
@@ -287,6 +304,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
                       </button>
                     )}
                   </div>
+                  {paymentSupportMessage(item) && <p role="status" className="mt-3 max-w-sm text-xs text-amber-800">{paymentSupportMessage(item)}</p>}
                 </div>
               </div>
             </article>
@@ -302,7 +320,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
           <div className="flex justify-end gap-3"><button type="button" disabled={completingId !== null} onClick={() => setConfirmingBooking(null)}>Quay lại</button><button type="button" disabled={completingId !== null} onClick={handleComplete} className="rounded-xl bg-emerald-600 p-3 text-white">{completingId !== null ? 'Đang xác nhận...' : 'Xác nhận hoàn thành'}</button></div>
         </div>
       </div>}
-      {reviewingBooking && <ServiceReviewModal isOpen booking={reviewingBooking} serviceTitle={reviewingBooking.serviceName} salonName={reviewingBooking.supplierName} onClose={() => setReviewingBooking(null)} onSuccess={loadBookings} />}
+      {reviewingBooking && <ServiceReviewModal isOpen booking={reviewingBooking} serviceTitle={reviewingBooking.serviceName} salonName={reviewingBooking.supplierName} onClose={() => setReviewingBooking(null)} onSuccess={() => void loadBookings()} />}
 
       {/* Support Report Modal */}
       {reportBooking && (

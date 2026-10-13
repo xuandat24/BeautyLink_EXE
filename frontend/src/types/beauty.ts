@@ -117,6 +117,9 @@ export interface BackendBooking {
   paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'REFUNDED';
   reviewEligible?: boolean;
   completionEligible?: boolean;
+  cancelEligible?: boolean;
+  paymentEligible?: boolean;
+  paymentBlockerReason?: string | null;
   serviceReview?: BookingReview | null;
   supplierReview?: BookingReview | null;
 }
@@ -136,7 +139,7 @@ export interface PayOSPayment {
   bookingCode: string;
   orderCode: number;
   paymentLinkId?: string | null;
-  checkoutUrl: string;
+  checkoutUrl: string | null;
   amount: number;
   remainingAmount: number;
   paymentOption: 'DEPOSIT_50' | 'FULL_100';

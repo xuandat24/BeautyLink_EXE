@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { canCompleteBooking, canReviewBooking, eligibleReviewBookings } from '../src/lib/bookingPolicy';
-import type { BackendBooking } from '../src/types';
+import { canCancelBooking, canPayBooking, canCompleteBooking, canReviewBooking, eligibleReviewBookings, safeCheckout } from '../src/lib/bookingPolicy';
+import type { BackendBooking, PayOSPayment } from '../src/types';
 for (const status of ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] as const) {
   for (const paymentStatus of ['UNPAID', 'PARTIALLY_PAID', 'PAID', 'REFUNDED'] as const) {
     test(`${status}/${paymentStatus}: state and server flags both required`, () => {
@@ -17,6 +17,30 @@ for (const status of ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] as const
 test('missing flags never allow either action', () => {
   assert.equal(canReviewBooking({ status: 'COMPLETED', paymentStatus: 'PAID' } as BackendBooking), false);
   assert.equal(canCompleteBooking({ status: 'CONFIRMED', paymentStatus: 'PAID' } as BackendBooking), false);
+});
+test('cancel and checkout fail closed without flags, paid/refunded cannot cancel or pay', () => {
+  for (const paymentStatus of ['UNPAID', 'PARTIALLY_PAID', 'PAID', 'REFUNDED'] as const) {
+    const b = { status: 'PENDING', paymentStatus } as BackendBooking;
+    assert.equal(canCancelBooking(b), false); assert.equal(canPayBooking(b), false);
+    assert.equal(canCancelBooking({ ...b, cancelEligible: true }), paymentStatus === 'UNPAID');
+    assert.equal(canPayBooking({ ...b, paymentEligible: true }), paymentStatus === 'UNPAID');
+  }
+});
+test('manual-review/reconciling server reasons override stale eligibility', () => {
+  for (const paymentBlockerReason of ['PAYMENT_REVIEW_REQUIRED', 'PAYMENT_RECONCILING', 'PAYMENT_STATE_CONFLICT']) {
+    const b = { status: 'COMPLETED', paymentStatus: 'PAID', reviewEligible: true, completionEligible: true, paymentEligible: true, cancelEligible: true, paymentBlockerReason } as BackendBooking;
+    assert.equal(canReviewBooking(b), false); assert.equal(canCompleteBooking({ ...b, status: 'CONFIRMED' }), false);
+    assert.equal(canPayBooking({ ...b, paymentStatus: 'UNPAID' }), false);
+  }
+});
+test('checkout rejects manual, terminal, missing flags, wrong booking and unsafe URL', () => {
+  const p = { bookingId: 1, status: 'PENDING', requiresManualReview: false, checkoutUrl: 'https://pay.payos.vn/web/test' } as PayOSPayment;
+  assert.equal(safeCheckout(p, 1), p.checkoutUrl);
+  assert.equal(safeCheckout(p, 2), null);
+  for (const status of ['PAID', 'CANCELLED', 'EXPIRED', 'FAILED', 'REVIEW_REQUIRED'] as const) assert.equal(safeCheckout({ ...p, status }, 1), null);
+  assert.equal(safeCheckout({ ...p, requiresManualReview: true }, 1), null);
+  assert.equal(safeCheckout({ ...p, requiresManualReview: undefined } as unknown as PayOSPayment, 1), null);
+  for (const checkoutUrl of [null, 'http://pay.payos.vn/web/test', 'https://pay.payos.vn.evil.test', 'https://user@pay.payos.vn/web/test', 'bad']) assert.equal(safeCheckout({ ...p, checkoutUrl }, 1), null);
 });
 
 const reviewBookings = [

@@ -456,7 +456,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Từng dịch vụ đều có đánh giá sao riêng biệt và số lượng khách hàng thực tế đã trải nghiệm
+                  Đánh giá riêng theo dịch vụ, từ lịch hẹn đã thanh toán và được khách hàng xác nhận hoàn thành
                 </p>
               </div>
             </div>
