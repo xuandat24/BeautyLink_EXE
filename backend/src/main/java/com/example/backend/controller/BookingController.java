@@ -16,6 +16,7 @@ public class BookingController {
     public BookingController(BookingService bookings, CurrentAccountService current) { this.bookings = bookings; this.current = current; }
     @PostMapping @ResponseStatus(HttpStatus.CREATED) @PreAuthorize("hasRole('CUSTOMER')") public BookingResponse create(Authentication auth, @Valid @RequestBody CreateBookingRequest request) { return bookings.create(current.require(auth), request); }
     @GetMapping("/mine") @PreAuthorize("hasRole('CUSTOMER')") public List<BookingResponse> mine(Authentication auth) { return bookings.customerBookings(current.require(auth)); }
+    @GetMapping("/{id}") @PreAuthorize("hasRole('CUSTOMER')") public BookingResponse one(Authentication auth, @PathVariable Long id) { return bookings.customerBooking(current.require(auth), id); }
     @GetMapping("/mine/history-status") @PreAuthorize("hasRole('CUSTOMER')") public BookingHistoryStatusResponse historyStatus(Authentication auth) { return bookings.bookingHistoryStatus(current.require(auth)); }
     @PatchMapping("/{id}/cancel") @PreAuthorize("hasRole('CUSTOMER')") public BookingResponse cancel(Authentication auth, @PathVariable Long id) { return bookings.cancel(current.require(auth), id); }
     @GetMapping("/supplier") @PreAuthorize("hasRole('SUPPLIER')") public List<BookingResponse> supplier(Authentication auth) { return bookings.supplierBookings(current.require(auth)); }

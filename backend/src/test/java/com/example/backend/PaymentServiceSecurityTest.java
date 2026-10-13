@@ -52,7 +52,7 @@ class PaymentServiceSecurityTest {
 
     @BeforeEach
     void setUp() {
-        service = new PaymentService(payments, bookings, practitioners, gateway, mock(com.example.backend.service.AvailabilityService.class), mock(org.springframework.transaction.PlatformTransactionManager.class),
+        service = new PaymentService(payments, bookings, practitioners, gateway, mock(com.example.backend.service.AvailabilityService.class), mock(org.springframework.transaction.PlatformTransactionManager.class), new com.example.backend.service.BookingCompletionPolicy(),
                 "https://frontend/success", "https://frontend/cancel", 60, 120);
     }
 

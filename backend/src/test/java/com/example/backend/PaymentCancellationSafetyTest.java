@@ -30,6 +30,7 @@ import static org.mockito.Mockito.*;
     "spring.datasource.username=${REVIEW_TEST_USERNAME:sa}", "spring.datasource.password=${REVIEW_TEST_PASSWORD:}"
 })
 @ActiveProfiles("test")
+@org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 class PaymentCancellationSafetyTest {
     @org.junit.jupiter.api.BeforeAll static void protectProduction() {
         String url = System.getenv("REVIEW_TEST_JDBC_URL");
@@ -46,7 +47,13 @@ class PaymentCancellationSafetyTest {
     @Autowired CatalogService catalog;
     @Autowired PlatformTransactionManager manager;
     @Autowired BookingReviewRepository reviews;
+    @Autowired PaymentReviewService operatorReview;
+    @Autowired SupportReportRepository reports;
+    @Autowired SupportService support;
+    @Autowired com.example.backend.auth.JwtService jwt;
+    @Autowired org.springframework.test.web.servlet.MockMvc mvc;
     @MockitoBean PayOSGateway gateway;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean BookingCompletionPolicy time;
     @org.junit.jupiter.api.BeforeEach void isolateFixtures() {
         tx(() -> { reviews.deleteAllInBatch(); payments.deleteAllInBatch(); bookings.deleteAllInBatch(); return null; });
     }
@@ -87,6 +94,193 @@ class PaymentCancellationSafetyTest {
         return w;
     }
     private CreatePayOSPaymentRequest request() { return new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_50, null); }
+    private UserAccount admin() { return users.findAll().stream().filter(u -> u.getRole() == Role.ADMIN).findFirst().orElseThrow(); }
+    private void proof(PaymentTransaction p, PaymentLinkStatus state) { var result = provider(p, state); when(gateway.get(p.getOrderCode())).thenReturn(result); }
+    private CloseZeroMoneyRequest resolution(Booking b) { return new CloseZeroMoneyRequest(operatorReview.preview(admin(), b.getId()).fingerprint(), "TEST-CASE-1"); }
+    @ParameterizedTest @CsvSource({"-1,UTC", "0,UTC", "1,UTC", "-1,Asia/Ho_Chi_Minh", "0,Asia/Ho_Chi_Minh", "1,Asia/Ho_Chi_Minh"})
+    void bookingCapabilitiesReuseAndStatusAgreeAtExactStart(long offset, String zone) {
+        {
+            // Do not change JVM timezone after JDBC initializes its date conversion calendar.
+            // The full suite also runs in a separate UTC JVM; clock zones must yield the same Instant.
+            var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID);
+            Instant start = Instant.parse("2030-05-01T03:00:00Z");
+            doReturn(Clock.fixed(start.plusMillis(offset), ZoneId.of(zone)).instant()).when(time).now();
+            tx(() -> { bookings.findByIdForUpdate(b.getId()).orElseThrow().setAppointmentDate(LocalDate.of(2030, 5, 1)); return null; });
+            var p = attempt(b, PaymentTransactionStatus.PENDING); p.setExpiresAt(start.plusSeconds(300)); p.setProviderCreatedAt(start.minusSeconds(1)); p.setLastReconciledAt(start.minusSeconds(1)); payments.saveAndFlush(p);
+            var dto = bookingService.customerBooking(customer(), b.getId()); assertEquals(offset < 0, dto.paymentEligible(), zone + " " + offset + " " + dto.appointmentDate() + " " + dto.startTime() + " " + dto.paymentBlockerReason());
+            assertEquals(offset < 0, paymentService.status(customer(), p.getOrderCode()).checkoutUrl() != null);
+            if (offset < 0) assertEquals(p.getOrderCode(), paymentService.create(customer(), b.getId(), request()).orderCode());
+            else assertEquals("SLOT_UNAVAILABLE", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request())).getCode());
+            assertEquals(PaymentTransactionStatus.PENDING, payments.findById(p.getId()).orElseThrow().getStatus());
+            assertEquals(BookingStatus.PENDING, bookings.findById(b.getId()).orElseThrow().getStatus()); verify(gateway, never()).cancel(any(), any());
+        }
+    }
+    @Test void newLinkExpiryIsCappedAtStartAndLateCreateResponseNeverExposesUrl() {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var start = BookingCompletionPolicy.startsAt(b);
+        doReturn(start.minusSeconds(60)).when(time).now();
+        when(gateway.create(any())).thenAnswer(invocation -> {
+            CreatePaymentLinkRequest input = invocation.getArgument(0); assertEquals(start.getEpochSecond(), input.getExpiredAt());
+            assertEquals(1, payments.count(), "ledger committed before provider"); doReturn(start).when(time).now(); return created(input);
+        });
+        var response = paymentService.create(customer(), b.getId(), request()); assertNull(response.checkoutUrl());
+        assertEquals(start, payments.findByOrderCode(response.orderCode()).orElseThrow().getExpiresAt());
+        assertEquals(PaymentTransactionStatus.PENDING, payments.findByOrderCode(response.orderCode()).orElseThrow().getStatus());
+        verify(gateway, never()).cancel(any(), any());
+    }
+    @Test void verifiedMoneyAfterStartStillPersistsWithoutAutoCompletion() {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.PENDING);
+        doReturn(BookingCompletionPolicy.startsAt(b).plusSeconds(1)).when(time).now();
+        assertTrue(paymentService.handleWebhook(paidWebhook(p)));
+        assertEquals(PaymentTransactionStatus.PAID, payments.findById(p.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.PARTIALLY_PAID, bookings.findById(b.getId()).orElseThrow().getPaymentStatus());
+        assertEquals(BookingStatus.CONFIRMED, bookings.findById(b.getId()).orElseThrow().getStatus());
+    }
+    @Test void operatorPreviewIsReadOnlyAndClosureIsAuditedIdempotent() {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
+        proof(p, PaymentLinkStatus.CANCELLED); long before = reports.count();
+        var preview = operatorReview.preview(admin(), b.getId());
+        assertTrue(preview.canCloseZeroMoney()); assertFalse(preview.canCloseZeroSecondary());
+        assertEquals(preview, operatorReview.preview(admin(), b.getId()));
+        assertEquals(before, reports.count()); assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, payments.findById(p.getId()).orElseThrow().getStatus());
+        var input = new CloseZeroMoneyRequest(preview.fingerprint(), "TEST-CASE-1");
+        var result = operatorReview.closeZeroMoney(admin(), b.getId(), input);
+        assertFalse(result.alreadyApplied()); assertEquals(BookingStatus.CANCELLED, result.bookingStatus()); assertFalse(result.retryAllowed());
+        assertEquals(PaymentTransactionStatus.CANCELLED, payments.findById(p.getId()).orElseThrow().getStatus());
+        assertNull(payments.findById(p.getId()).orElseThrow().getCheckoutUrl()); assertEquals(before + 2, reports.count());
+        assertTrue(operatorReview.closeZeroMoney(admin(), b.getId(), input).alreadyApplied()); assertEquals(before + 2, reports.count());
+        assertEquals("PAYMENT_AUDIT_IMMUTABLE", assertThrows(ApiException.class, () -> support.update(admin(), result.auditId(), new UpdateReportRequest(ReportStatus.REJECTED, "tamper"))).getCode());
+        verify(gateway, never()).cancel(any(), any()); verify(gateway, never()).create(any());
+    }
+    @ParameterizedTest @CsvSource({"ORDER", "LINK", "AMOUNT", "NULL_PAID", "MONEY", "PENDING", "TIMEOUT", "PAID"})
+    void operatorMustNotCloseUnknownMismatchedOrMoneyAttempts(String fault) {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
+        var result = provider(p, fault.equals("PAID") ? PaymentLinkStatus.PAID : fault.equals("PENDING") ? PaymentLinkStatus.PENDING : PaymentLinkStatus.CANCELLED);
+        switch (fault) {
+            case "ORDER" -> when(result.getOrderCode()).thenReturn(p.getOrderCode() + 1);
+            case "LINK" -> when(result.getId()).thenReturn("wrong");
+            case "AMOUNT" -> when(result.getAmount()).thenReturn(1L);
+            case "NULL_PAID" -> when(result.getAmountPaid()).thenReturn(null);
+            case "MONEY" -> when(result.getAmountPaid()).thenReturn(1L);
+        }
+        when(gateway.get(p.getOrderCode())).thenReturn(result);
+        if (fault.equals("TIMEOUT")) when(gateway.get(p.getOrderCode())).thenThrow(timeout());
+        var preview = operatorReview.preview(admin(), b.getId()); assertFalse(preview.canCloseZeroMoney()); assertFalse(preview.canCloseZeroSecondary());
+        long before = reports.count(); assertThrows(ApiException.class, () -> operatorReview.closeZeroMoney(admin(), b.getId(), new CloseZeroMoneyRequest(preview.fingerprint(), "TEST-CASE-1")));
+        assertEquals(before, reports.count()); assertEquals(BookingStatus.PENDING, bookings.findById(b.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, payments.findById(p.getId()).orElseThrow().getStatus());
+    }
+    @Test void oneSafeAttemptDoesNotHideAnotherAndStalePreviewIsRejected() {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
+        proof(p, PaymentLinkStatus.CANCELLED); var input = resolution(b);
+        var second = attempt(b, PaymentTransactionStatus.PENDING); proof(second, PaymentLinkStatus.PENDING);
+        assertThrows(ApiException.class, () -> operatorReview.closeZeroMoney(admin(), b.getId(), input));
+        proof(second, PaymentLinkStatus.CANCELLED);
+        assertEquals("PAYMENT_REVIEW_STALE", assertThrows(ApiException.class, () -> operatorReview.closeZeroMoney(admin(), b.getId(), input)).getCode());
+        assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, payments.findById(p.getId()).orElseThrow().getStatus());
+    }
+    @Test void expiryResolutionPermitsRetryOnlyWithValidFullIntervalAndRechecksChangedProof() {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
+        proof(p, PaymentLinkStatus.EXPIRED); var preview = operatorReview.preview(admin(), b.getId()); assertTrue(preview.proposedRetryAllowed());
+        var input = new CloseZeroMoneyRequest(preview.fingerprint(), "TEST-CASE-1"); proof(p, PaymentLinkStatus.PAID);
+        assertThrows(ApiException.class, () -> operatorReview.closeZeroMoney(admin(), b.getId(), input));
+        assertEquals(BookingStatus.PENDING, bookings.findById(b.getId()).orElseThrow().getStatus());
+        proof(p, PaymentLinkStatus.EXPIRED); assertTrue(operatorReview.closeZeroMoney(admin(), b.getId(), input).retryAllowed());
+        assertTrue(operatorReview.closeZeroMoney(admin(), b.getId(), input).alreadyApplied());
+        assertTrue(bookingService.customerBooking(customer(), b.getId()).paymentEligible());
+        var occupied = booking(BookingStatus.CONFIRMED, PaymentStatus.PAID);
+        tx(() -> { var row = bookings.findByIdForUpdate(occupied.getId()).orElseThrow(); row.setStartTime(LocalTime.of(9, 30)); row.setEndTime(LocalTime.of(10, 30)); return null; });
+        assertFalse(bookingService.customerBooking(customer(), b.getId()).paymentEligible());
+        assertEquals("SLOT_UNAVAILABLE", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request())).getCode());
+    }
+    @Test void zeroClosureDoesNotPermitRetryInsideThirtyMinuteLead() {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
+        proof(p, PaymentLinkStatus.EXPIRED); doReturn(BookingCompletionPolicy.startsAt(b).minusSeconds(1799)).when(time).now();
+        assertFalse(operatorReview.preview(admin(), b.getId()).proposedRetryAllowed());
+        assertFalse(operatorReview.closeZeroMoney(admin(), b.getId(), resolution(b)).retryAllowed());
+    }
+    @Test void zeroMoneyClosureDoesNotReopenCustomerCancelledBookingAndCanBindOrphanIdentity() {
+        var b = booking(BookingStatus.CANCELLED, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
+        var closed = provider(p, PaymentLinkStatus.EXPIRED); when(gateway.get(p.getOrderCode())).thenReturn(closed);
+        tx(() -> { payments.findById(p.getId()).orElseThrow().setPaymentLinkId(null); return null; });
+        assertFalse(operatorReview.closeZeroMoney(admin(), b.getId(), resolution(b)).retryAllowed());
+        assertEquals(p.getPaymentLinkId(), payments.findById(p.getId()).orElseThrow().getPaymentLinkId());
+        assertFalse(bookings.findById(b.getId()).orElseThrow().isPaymentRetryAllowed());
+    }
+    @ParameterizedTest @CsvSource({"PAID,FULL_100", "PARTIALLY_PAID,DEPOSIT_50"})
+    void adminCanCloseZeroSecondaryPreservingPrimaryAndReopeningReview(PaymentStatus payment, PaymentOption option) {
+        var b = booking(BookingStatus.COMPLETED, payment); var primary = attempt(b, PaymentTransactionStatus.PAID);
+        primary.setPaymentOption(option); primary.setPaidAt(Instant.parse("2026-01-01T00:00:00Z")); payments.saveAndFlush(primary);
+        var secondary = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED); proof(primary, PaymentLinkStatus.PAID); proof(secondary, PaymentLinkStatus.CANCELLED);
+        assertFalse(bookingService.customerBooking(customer(), b.getId()).reviewEligible());
+        var preview = operatorReview.preview(admin(), b.getId()); assertTrue(preview.canCloseZeroSecondary()); assertFalse(preview.canCloseZeroMoney());
+        var original = payments.findById(primary.getId()).orElseThrow(); var input = new CloseZeroMoneyRequest(preview.fingerprint(), "TEST-CASE-1");
+        assertEquals(BookingStatus.COMPLETED, operatorReview.closeZeroSecondary(admin(), b.getId(), input).bookingStatus());
+        assertTrue(operatorReview.closeZeroSecondary(admin(), b.getId(), input).alreadyApplied());
+        var saved = payments.findById(primary.getId()).orElseThrow();
+        assertEquals(original.getUpdatedAt(), saved.getUpdatedAt()); assertEquals(original.getPaidAt(), saved.getPaidAt());
+        assertEquals(original.getAmount(), saved.getAmount()); assertEquals(PaymentTransactionStatus.PAID, saved.getStatus());
+        assertEquals(payment, bookings.findById(b.getId()).orElseThrow().getPaymentStatus());
+        assertTrue(bookingService.customerBooking(customer(), b.getId()).reviewEligible());
+        reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, "verified secondary closure"));
+        reviewService.upsert(customer(), b.getId(), ReviewTargetType.SUPPLIER, new UpsertBookingReviewRequest(4, "verified secondary closure"));
+        proof(secondary, PaymentLinkStatus.PAID);
+        assertThrows(ApiException.class, () -> operatorReview.closeZeroSecondary(admin(), b.getId(), input));
+    }
+    @ParameterizedTest @CsvSource({"PRIMARY_MISMATCH", "SECONDARY_MONEY", "SECONDARY_NULL", "PRIMARY_MANUAL", "PRIMARY_MISSING_LINK", "CANCELLED", "REFUNDED", "TWO_PAID"})
+    void secondaryClosureNeverClearsFinancialConflict(String fault) {
+        var b = booking(fault.equals("CANCELLED") ? BookingStatus.CANCELLED : BookingStatus.CONFIRMED, fault.equals("REFUNDED") ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_PAID);
+        var primary = attempt(b, PaymentTransactionStatus.PAID); primary.setPaidAt(Instant.now()); primary.setRequiresManualReview(fault.equals("PRIMARY_MANUAL")); payments.saveAndFlush(primary);
+        var secondary = attempt(b, fault.equals("TWO_PAID") ? PaymentTransactionStatus.PAID : PaymentTransactionStatus.REVIEW_REQUIRED);
+        var mainProof = provider(primary, PaymentLinkStatus.PAID); var otherProof = provider(secondary, PaymentLinkStatus.CANCELLED);
+        if (fault.equals("PRIMARY_MISSING_LINK")) { primary.setPaymentLinkId(null); payments.saveAndFlush(primary); }
+        if (fault.equals("PRIMARY_MISMATCH")) when(mainProof.getAmountPaid()).thenReturn(1L);
+        if (fault.equals("SECONDARY_MONEY")) when(otherProof.getAmountPaid()).thenReturn(1L);
+        if (fault.equals("SECONDARY_NULL")) when(otherProof.getAmountPaid()).thenReturn(null);
+        when(gateway.get(primary.getOrderCode())).thenReturn(mainProof); when(gateway.get(secondary.getOrderCode())).thenReturn(otherProof);
+        var preview = operatorReview.preview(admin(), b.getId()); assertFalse(preview.canCloseZeroSecondary());
+        assertThrows(ApiException.class, () -> operatorReview.closeZeroSecondary(admin(), b.getId(), new CloseZeroMoneyRequest(preview.fingerprint(), "TEST-CASE-1")));
+    }
+    @Test void operatorEndpointRequiresAdminAndAuditCannotBeForged() throws Exception {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED); proof(p, PaymentLinkStatus.CANCELLED);
+        String url = "/api/v1/payments/payos/review/bookings/" + b.getId();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(url)).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isUnauthorized());
+        for (Role role : List.of(Role.CUSTOMER, Role.SUPPLIER, Role.STAFF)) {
+            var account = customer(); account.setRole(role);
+            assertThrows(ApiException.class, () -> operatorReview.preview(account, b.getId()));
+        }
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(url).header("Authorization", "Bearer " + jwt.createToken(customer())))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(url).header("Authorization", "Bearer " + jwt.createToken(admin())))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+        for (String reason : List.of("PMT-AUDIT:ZERO-MONEY", "  pmt-audit:fake"))
+            assertEquals("RESERVED_REPORT_REASON", assertThrows(ApiException.class, () -> support.create(customer(), new CreateReportRequest(ReportTargetType.BOOKING, b.getId(), reason, "fake"))).getCode());
+    }
+    @Test void operatorAndPaidWebhookSerializeWithoutLosingMoney() throws Exception {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED); proof(p, PaymentLinkStatus.CANCELLED);
+        var input = resolution(b); var webhook = paidWebhook(p); var gate = new java.util.concurrent.CyclicBarrier(2);
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var close = pool.submit(() -> { gate.await(); return outcome(() -> operatorReview.closeZeroMoney(admin(), b.getId(), input)); });
+            var paid = pool.submit(() -> { gate.await(); return paymentService.handleWebhook(webhook); });
+            close.get(10, java.util.concurrent.TimeUnit.SECONDS); assertTrue(paid.get(10, java.util.concurrent.TimeUnit.SECONDS));
+        }
+        var saved = payments.findById(p.getId()).orElseThrow(); assertTrue(saved.isRequiresManualReview());
+        assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, saved.getStatus()); assertNotNull(saved.getPaidAt());
+        assertFalse(bookingService.customerBooking(customer(), b.getId()).reviewEligible());
+    }
+    @Test void pastPendingCheckoutCannotBeReusedEvenWhenLinkHasNotExpired() {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); attempt(b, PaymentTransactionStatus.PENDING);
+        tx(() -> { bookings.findByIdForUpdate(b.getId()).orElseThrow().setAppointmentDate(LocalDate.of(2000, 1, 1)); return null; });
+        var dto = bookingService.customerBookings(customer()).stream().filter(x -> x.id().equals(b.getId())).findFirst().orElseThrow();
+        assertFalse(dto.paymentEligible()); assertEquals("SLOT_UNAVAILABLE", dto.paymentBlockerReason());
+        assertEquals("SLOT_UNAVAILABLE", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request())).getCode());
+    }
+    @Test void pastPendingCheckoutStatusDoesNotExposeStillLiveProviderUrl() {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.PENDING);
+        tx(() -> { bookings.findByIdForUpdate(b.getId()).orElseThrow().setAppointmentDate(LocalDate.of(2000, 1, 1)); return null; });
+        assertNull(paymentService.status(customer(), p.getOrderCode()).checkoutUrl());
+        assertEquals(PaymentTransactionStatus.PENDING, payments.findById(p.getId()).orElseThrow().getStatus());
+        verify(gateway, never()).cancel(any(), any());
+    }
     private ApiException timeout() { return new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY, "PAYOS_RECONCILIATION_FAILED", "test network timeout"); }
 
     @Test void customerCancelledPendingCheckoutMustNotBeReturned() {
@@ -224,7 +418,7 @@ class PaymentCancellationSafetyTest {
         assertEquals(PaymentTransactionStatus.PAID, payments.findById(main.getId()).orElseThrow().getStatus());
         assertNotNull(payments.findById(main.getId()).orElseThrow().getPaidAt());
         assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, payments.findById(secondary.getId()).orElseThrow().getStatus());
-        assertNull(payments.findById(secondary.getId()).orElseThrow().getPaidAt());
+        assertNotNull(payments.findById(secondary.getId()).orElseThrow().getPaidAt(), "exact provider PAID evidence must survive escalation; mismatch/manual flag alone is not receipt proof");
         assertEquals(BookingStatus.CONFIRMED, bookings.findById(b.getId()).orElseThrow().getStatus());
         assertEquals("PAYMENT_REVIEW_REQUIRED", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request())).getCode());
     }

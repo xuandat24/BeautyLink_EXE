@@ -58,19 +58,20 @@ public class BookingReviewSmokeServer {
                 b.setPaymentStatus(i == 0 ? PaymentStatus.UNPAID : i == 6 ? PaymentStatus.REFUNDED : i == 1 || i == 3 ? PaymentStatus.PARTIALLY_PAID : PaymentStatus.PAID);
                 bookings.save(b);
             }
-            for (int i = 0; i < 2; i++) {
-                Booking b = new Booking(); b.setBookingCode(i == 0 ? "SMOKE-PENDING-LINK" : "SMOKE-MANUAL");
+            for (int i = 0; i < 4; i++) {
+                Booking b = new Booking(); b.setBookingCode(new String[]{"SMOKE-PENDING-LINK", "SMOKE-MANUAL", "SMOKE-RESUME", "SMOKE-RETRY"}[i]);
                 b.setCustomer(users.findByPhone("0900000001").orElseThrow()); b.setService(offering); b.setSupplier(offering.getSupplier());
                 b.setPractitioner(people.findBySupplierIdAndActiveTrue(offering.getSupplier().getId()).get(0));
                 b.setAppointmentDate(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusDays(7).with(java.time.temporal.TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY)));
-                b.setStartTime(LocalTime.of(15, 0)); b.setEndTime(LocalTime.of(16, 0)); b.setTotalAmount(offering.getPrice());
-                b.setStatus(i == 0 ? BookingStatus.PENDING : BookingStatus.COMPLETED); b.setPaymentStatus(i == 0 ? PaymentStatus.UNPAID : PaymentStatus.PAID); bookings.saveAndFlush(b);
+                b.setStartTime(LocalTime.of(i == 2 ? 9 : i == 3 ? 17 : 15, 0)); b.setEndTime(b.getStartTime().plusMinutes(offering.getDurationMinutes())); b.setTotalAmount(offering.getPrice());
+                b.setStatus(i == 1 ? BookingStatus.COMPLETED : i == 3 ? BookingStatus.CANCELLED : BookingStatus.PENDING);
+                b.setPaymentRetryAllowed(i == 3); b.setPaymentStatus(i == 1 ? PaymentStatus.PAID : PaymentStatus.UNPAID); bookings.saveAndFlush(b);
                 PaymentTransaction p = new PaymentTransaction(); p.setBooking(b); p.setOrderCode(9100000L + i); p.setPaymentLinkId("smoke-" + p.getOrderCode());
                 p.setAmount(offering.getPrice()); p.setRemainingAmount(java.math.BigDecimal.ZERO); p.setPaymentOption(PaymentOption.FULL_100);
-                p.setExpiresAt(Instant.now().plusSeconds(900)); p.setCheckoutUrl("https://pay.payos.vn/web/" + p.getPaymentLinkId());
-                p.setStatus(i == 0 ? PaymentTransactionStatus.PENDING : PaymentTransactionStatus.REVIEW_REQUIRED); p.setRequiresManualReview(i == 1); payments.save(p);
+                p.setExpiresAt(Instant.now().plusSeconds(i == 3 ? -60 : 900)); p.setCheckoutUrl("https://pay.payos.vn/web/" + p.getPaymentLinkId());
+                p.setStatus(i == 1 ? PaymentTransactionStatus.REVIEW_REQUIRED : i == 3 ? PaymentTransactionStatus.EXPIRED : PaymentTransactionStatus.PENDING); p.setRequiresManualReview(i == 1); payments.save(p);
                 var link = new PaymentLink(); link.setId(p.getPaymentLinkId()); link.setOrderCode(p.getOrderCode()); link.setAmount(p.getAmount().longValueExact());
-                link.setAmountPaid(0L); link.setStatus(PaymentLinkStatus.PENDING); links.put(p.getOrderCode(), link);
+                link.setAmountPaid(0L); link.setStatus(i == 3 ? PaymentLinkStatus.EXPIRED : PaymentLinkStatus.PENDING); links.put(p.getOrderCode(), link);
             }
             return null;
         });

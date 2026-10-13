@@ -8,8 +8,9 @@ import static com.example.backend.model.DomainEnums.*;
 /** Shared capabilities; provider verification and locking remain in PaymentService. */
 public final class BookingPaymentPolicy {
     private BookingPaymentPolicy() {}
+    public static boolean manualAttempt(PaymentTransaction p) { return p.isRequiresManualReview() || p.getStatus() == PaymentTransactionStatus.REVIEW_REQUIRED; }
     public static boolean manual(List<PaymentTransaction> attempts) {
-        return attempts.stream().anyMatch(p -> p.isRequiresManualReview() || p.getStatus() == PaymentTransactionStatus.REVIEW_REQUIRED);
+        return attempts.stream().anyMatch(BookingPaymentPolicy::manualAttempt);
     }
     public static boolean unresolved(List<PaymentTransaction> attempts) {
         return manual(attempts) || attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PENDING);
@@ -20,18 +21,18 @@ public final class BookingPaymentPolicy {
                 && b.getPaymentStatus() == PaymentStatus.UNPAID && !manual(attempts)
                 && attempts.stream().noneMatch(p -> p.getStatus() == PaymentTransactionStatus.PAID);
     }
-    public static String reason(Booking b, List<PaymentTransaction> attempts) {
+    public static String reason(Booking b, List<PaymentTransaction> attempts, java.time.Instant now) {
         if (manual(attempts)) return "PAYMENT_REVIEW_REQUIRED";
-        if (unresolved(attempts) && (paid(b) || b.getStatus() == BookingStatus.CANCELLED
-                || attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).count() > 1
-                || attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PENDING && (p.getCheckoutUrl() == null
-                    || (p.getExpiresAt() != null && !p.getExpiresAt().isAfter(java.time.Instant.now())))))) return "PAYMENT_RECONCILING";
         if (b.getPaymentStatus() == PaymentStatus.REFUNDED) return "BOOKING_REFUNDED";
         if (paid(b)) return "PAYMENT_ALREADY_PAID";
         if (attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PAID)) return "PAYMENT_STATE_CONFLICT";
         if (b.getStatus() == BookingStatus.COMPLETED) return "BOOKING_COMPLETED";
         if (b.getStatus() == BookingStatus.CANCELLED && !b.isPaymentRetryAllowed()) return "BOOKING_CANCELLED";
-        if (!b.getAppointmentDate().atTime(b.getStartTime()).atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant().isAfter(java.time.Instant.now())) return "SLOT_UNAVAILABLE";
+        if (!now.isBefore(BookingCompletionPolicy.startsAt(b))) return "SLOT_UNAVAILABLE";
+        if (unresolved(attempts) && (b.getStatus() == BookingStatus.CANCELLED
+                || attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).count() > 1
+                || attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PENDING && (p.getCheckoutUrl() == null
+                    || (p.getExpiresAt() != null && !p.getExpiresAt().isAfter(now)))))) return "PAYMENT_RECONCILING";
         return null;
     }
 }

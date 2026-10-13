@@ -48,7 +48,7 @@ public class BookingService {
         List<LocalTime> slots = availability.availability(service.getId(), practitioner.getId(), request.appointmentDate()).availableSlots();
         if (!slots.contains(request.startTime())) throw new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Khung giờ này không còn khả dụng");
         var start = request.appointmentDate().atTime(request.startTime());
-        if (!start.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant().isAfter(Instant.now()))
+        if (!completion.hasBookingLead(start))
             throw new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Lịch hẹn đã bắt đầu hoặc không còn hợp lệ.");
         var end = start.plusMinutes(service.getDurationMinutes());
         // Practitioner mutex + READ_COMMITTED avoids an old snapshot after waiting on a competing create/retry.
@@ -62,6 +62,11 @@ public class BookingService {
         return response(bookings.save(booking));
     }
     @Transactional(readOnly = true) public List<BookingResponse> customerBookings(UserAccount customer) { return bookings.findByCustomerIdOrderByAppointmentDateDescStartTimeDesc(customer.getId()).stream().map(this::response).toList(); }
+    @Transactional(readOnly = true) public BookingResponse customerBooking(UserAccount customer, Long id) {
+        Booking b = bookings.findById(id).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "Không tìm thấy lịch hẹn"));
+        if (!b.getCustomer().getId().equals(customer.getId())) throw new ApiException(HttpStatus.FORBIDDEN, "BOOKING_FORBIDDEN", "Bạn không có quyền xem lịch hẹn này");
+        return response(b);
+    }
     @Transactional(readOnly = true) public BookingHistoryStatusResponse bookingHistoryStatus(UserAccount customer) { return new BookingHistoryStatusResponse(bookings.existsByCustomerId(customer.getId())); }
     @Transactional(readOnly = true) public List<BookingResponse> supplierBookings(UserAccount owner) {
         Supplier supplier = suppliers.findByOwnerId(owner.getId()).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND", "Không tìm thấy nhà cung cấp"));
@@ -101,7 +106,14 @@ public class BookingService {
     private BookingResponse response(Booking b) {
         var attempts = paymentTransactions.findAllByBookingIdOrderByCreatedAtDesc(b.getId());
         boolean blocked = BookingPaymentPolicy.unresolved(attempts);
-        String reason = BookingPaymentPolicy.reason(b, attempts);
+        String reason = BookingPaymentPolicy.reason(b, attempts, completion.now());
+        if (reason == null && b.getStatus() == BookingStatus.CANCELLED && b.isPaymentRetryAllowed()) {
+            try {
+                if (!availability.availability(b.getService().getId(), b.getPractitioner().getId(), b.getAppointmentDate()).availableSlots().contains(b.getStartTime())) reason = "SLOT_UNAVAILABLE";
+            } catch (ApiException error) { reason = "SLOT_UNAVAILABLE"; }
+        }
+        var last = attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).findFirst()
+                .orElse(attempts.isEmpty() ? null : attempts.getFirst());
         BookingReviewResponse serviceReview = reviews.findByBookingIdAndTargetType(b.getId(), ReviewTargetType.SERVICE).map(this::reviewResponse).orElse(null);
         BookingReviewResponse supplierReview = reviews.findByBookingIdAndTargetType(b.getId(), ReviewTargetType.SUPPLIER).map(this::reviewResponse).orElse(null);
         return new BookingResponse(b.getId(), b.getBookingCode(), b.getService().getId(), b.getService().getName(),
@@ -109,7 +121,9 @@ public class BookingService {
                 b.getSupplier().getImageUrl(), b.getSupplier().getAddressLine(), b.getPractitioner().getDisplayName(),
                 b.getAppointmentDate(), b.getStartTime(), b.getEndTime(), b.getTotalAmount(), b.getStatus(),
                 b.getPaymentStatus(), !blocked && ReviewService.isEligible(b), serviceReview, supplierReview, !blocked && completion.canComplete(b),
-                BookingPaymentPolicy.canCancel(b, attempts), reason == null && (b.getStatus() != BookingStatus.CANCELLED || b.isPaymentRetryAllowed()), reason);
+                BookingPaymentPolicy.canCancel(b, attempts), reason == null && (b.getStatus() != BookingStatus.CANCELLED || b.isPaymentRetryAllowed()), reason,
+                last == null ? null : last.getPaymentOption(), last == null ? null : last.getVoucherCode(),
+                attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PENDING));
     }
     private BookingReviewResponse reviewResponse(BookingReview review) {
         return new BookingReviewResponse(review.getId(), review.getBooking().getId(), review.getTargetType(), review.getRating(), review.getComment(), review.getCreatedAt(), review.getUpdatedAt());
