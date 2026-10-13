@@ -232,7 +232,7 @@ class PaymentCancellationSafetyTest {
         var primary = attempt(b, PaymentTransactionStatus.PAID); primary.setPaidAt(Instant.now()); primary.setRequiresManualReview(fault.equals("PRIMARY_MANUAL")); payments.saveAndFlush(primary);
         var secondary = attempt(b, fault.equals("TWO_PAID") ? PaymentTransactionStatus.PAID : PaymentTransactionStatus.REVIEW_REQUIRED);
         var mainProof = provider(primary, PaymentLinkStatus.PAID); var otherProof = provider(secondary, PaymentLinkStatus.CANCELLED);
-        if (fault.equals("PRIMARY_MISSING_LINK")) { primary.setPaymentLinkId(null); payments.saveAndFlush(primary); }
+        if (fault.equals("PRIMARY_MISSING_LINK")) tx(() -> { payments.findByIdForUpdate(primary.getId()).orElseThrow().setPaymentLinkId(null); return null; });
         if (fault.equals("PRIMARY_MISMATCH")) when(mainProof.getAmountPaid()).thenReturn(1L);
         if (fault.equals("SECONDARY_MONEY")) when(otherProof.getAmountPaid()).thenReturn(1L);
         if (fault.equals("SECONDARY_NULL")) when(otherProof.getAmountPaid()).thenReturn(null);
