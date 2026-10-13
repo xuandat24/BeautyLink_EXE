@@ -120,6 +120,9 @@ export interface BackendBooking {
   cancelEligible?: boolean;
   paymentEligible?: boolean;
   paymentBlockerReason?: string | null;
+  paymentOption?: 'DEPOSIT_50' | 'FULL_100' | null;
+  paymentVoucherCode?: string | null;
+  paymentAttemptActive?: boolean;
   serviceReview?: BookingReview | null;
   supplierReview?: BookingReview | null;
 }

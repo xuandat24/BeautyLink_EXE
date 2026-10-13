@@ -25,6 +25,9 @@ import { canPayBooking, safeCheckout } from '../lib/bookingPolicy';
 import { OptimizedImage } from './OptimizedImage';
 import { bookingSchema, FieldErrors, voucherCodeSchema, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
+import { bookingDay, bookingMaxDate } from '../lib/bookingTime';
+import { paymentBookingId, setPaymentBookingId } from '../lib/paymentNavigation';
+import { PaymentContinuationDialog } from './PaymentContinuationDialog';
 
 interface CheckoutPageProps {
   currentUser: CurrentUser | null;
@@ -108,9 +111,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Default Tomorrow's date
   const tomorrow = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
+    return bookingDay(1);
   }, []);
 
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -145,6 +146,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // Submission state
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [resumeId, setResumeId] = useState<number | null>(() => paymentBookingId());
+  useEffect(() => { const pop = () => setResumeId(paymentBookingId()); window.addEventListener('popstate', pop); return () => window.removeEventListener('popstate', pop); }, []);
   const submissionBusy = useRef(false);
   const alive = useRef(false);
   const reservedBooking = useRef<{ context: string; id: number } | null>(null);
@@ -289,6 +292,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       if (!current()) return;
       if (!booking) throw new Error('Không tải được lịch hẹn đã tạo. Vui lòng mở Lịch hẹn của tôi và làm mới.');
       reservedBooking.current = { context, id: booking.id };
+      setPaymentBookingId(booking.id); // identity only; reload still fetches ownership/capabilities from server
       if (!canPayBooking(booking)) throw new Error('Lịch hẹn chưa được máy chủ cho phép thanh toán hoặc đang cần đối soát. Vui lòng kiểm tra Lịch hẹn của tôi; không thanh toán lại.');
       const payment = await beautyApi.createPayOSPayment(booking.id, {
         paymentOption: depositOption === 'deposit50' ? 'DEPOSIT_50' : 'FULL_100',
@@ -312,6 +316,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // =========================================================================
   // VIEW: EMPTY CART
   // =========================================================================
+  if (resumeId !== null) return <PaymentContinuationDialog bookingId={resumeId} onClose={() => { setPaymentBookingId(null); setResumeId(null); onViewBookings(); }} />;
   if (items.length === 0) {
     return (
       <div className="min-h-screen bg-[#FFF8F9] py-12 px-4 sm:px-6">
@@ -561,14 +566,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     </label>
                     <div className="flex gap-2 flex-wrap mb-2.5">
                       {[
-                        { label: 'Hôm nay', val: new Date().toISOString().split('T')[0] },
+                        { label: 'Hôm nay', val: bookingDay() },
                         { label: 'Ngày mai', val: tomorrow },
                         {
                           label: 'Ngày kia',
                           val: (() => {
-                            const d = new Date();
-                            d.setDate(d.getDate() + 2);
-                            return d.toISOString().split('T')[0];
+                            return bookingDay(2);
                           })(),
                         },
                       ].map((item) => (
@@ -589,7 +592,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                     <input
                       type="date"
-                      min={new Date().toISOString().split('T')[0]}
+                      min={bookingDay()}
+                      max={bookingMaxDate()}
                       value={selectedDate}
                       onChange={(e) => { setSelectedDate(e.target.value); setScheduleErrors((value) => ({ ...value, appointmentDate: '' })); }}
                       aria-invalid={Boolean(scheduleErrors.appointmentDate)}

@@ -686,6 +686,10 @@ export const beautyApi = {
   async myBookings(): Promise<BackendBooking[]> {
     return unwrap(apiClient.get('/v1/bookings/mine'));
   },
+  async myBooking(id: number): Promise<BackendBooking> {
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Không xác định được lịch hẹn.');
+    return unwrap(apiClient.get(`/v1/bookings/${id}`));
+  },
 
   async publicBookingReviews(targetType: 'SERVICE' | 'SUPPLIER', id: number, page = 0): Promise<PublicReviewPage> {
     if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Không xác định được đối tượng đánh giá.');

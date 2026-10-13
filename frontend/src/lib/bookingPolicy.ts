@@ -13,7 +13,7 @@ export function safeCheckout(payment: PayOSPayment, bookingId: number): string |
   if (payment.bookingId !== bookingId || payment.status !== 'PENDING' || payment.requiresManualReview !== false || !payment.checkoutUrl) return null;
   try {
     const url = new URL(payment.checkoutUrl);
-    return url.protocol === 'https:' && url.hostname === 'pay.payos.vn' && !url.username && !url.password ? payment.checkoutUrl : null;
+    return url.protocol === 'https:' && url.hostname === 'pay.payos.vn' && !url.port && !url.username && !url.password ? payment.checkoutUrl : null;
   } catch { return null; }
 }
 

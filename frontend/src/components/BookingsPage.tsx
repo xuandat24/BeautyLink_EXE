@@ -18,7 +18,10 @@ import { AppointmentShareModal } from './AppointmentShareModal';
 import { supportReportSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
 import { ServiceReviewModal } from './ServiceReviewModal';
-import { canCancelBooking, canCompleteBooking, canReviewBooking, paymentSupportMessage } from '../lib/bookingPolicy';
+import { canCancelBooking, canPayBooking, canCompleteBooking, canReviewBooking, paymentSupportMessage } from '../lib/bookingPolicy';
+import { PaymentContinuationDialog } from './PaymentContinuationDialog';
+import { paymentBookingId, setPaymentBookingId } from '../lib/paymentNavigation';
+import { useBeautyStore } from '../store/beautyStore';
 
 interface BookingsPageProps {
   embedded?: boolean;
@@ -38,6 +41,14 @@ const formatCurrency = (val: number) => {
 };
 
 export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, embedded = false }) => {
+  const { currentUser } = useBeautyStore();
+  const [paymentId, setPaymentId] = useState<number | null>(() => paymentBookingId());
+  const [sessionRevision, setSessionRevision] = useState(0);
+  const sessionToken = getAccessToken();
+  const priorSession = useRef(sessionToken);
+  useEffect(() => {
+    if (priorSession.current !== sessionToken) { setPaymentId(null); setPaymentBookingId(null); priorSession.current = sessionToken; }
+  }, [sessionToken]);
   const [bookings, setBookings] = useState<BackendBooking[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
@@ -83,9 +94,16 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
 
   useEffect(() => {
     alive.current = true;
+    setBookings([]); setReviewingBooking(null); setConfirmingBooking(null);
     void loadBookings();
     return () => { alive.current = false; loadVersion.current += 1; };
-  }, [loadBookings]);
+  }, [loadBookings, sessionToken, currentUser?.id, sessionRevision]);
+  useEffect(() => {
+    const pop = () => setPaymentId(paymentBookingId());
+    const changed = () => { setPaymentId(null); setPaymentBookingId(null); setSessionRevision(n => n + 1); };
+    window.addEventListener('popstate', pop); window.addEventListener('storage', changed);
+    return () => { window.removeEventListener('popstate', pop); window.removeEventListener('storage', changed); };
+  }, []);
   useEffect(() => {
     const refresh = () => { void loadBookings(true); };
     window.addEventListener('beautylink-bookings-refresh', refresh);
@@ -289,6 +307,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
                     </button>
                     {canCompleteBooking(item) && <button type="button" disabled={completingId !== null || cancellingId !== null} onClick={() => setConfirmingBooking(item)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Đã sử dụng dịch vụ</button>}
                     {canReviewBooking(item) && <button type="button" onClick={() => setReviewingBooking(item)} className="rounded-xl bg-pink-600 px-3 py-2 text-xs font-bold text-white">{item.serviceReview || item.supplierReview ? 'Xem / sửa đánh giá' : 'Đánh giá dịch vụ / nhà cung cấp'}</button>}
+                    {canPayBooking(item) && <button type="button" disabled={loading || cancellingId !== null || completingId !== null} onClick={() => { setPaymentBookingId(item.id, true); setPaymentId(item.id); }} className="rounded-xl bg-pink-600 px-3 py-2 text-xs font-bold text-white">Tiếp tục thanh toán</button>}
                     {canCancelBooking(item) && (
                       <button
                         disabled={cancellingId !== null || completingId !== null}
@@ -321,6 +340,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
         </div>
       </div>}
       {reviewingBooking && <ServiceReviewModal isOpen booking={reviewingBooking} serviceTitle={reviewingBooking.serviceName} salonName={reviewingBooking.supplierName} onClose={() => setReviewingBooking(null)} onSuccess={() => void loadBookings()} />}
+      {paymentId !== null && <PaymentContinuationDialog bookingId={paymentId} onClose={() => { setPaymentBookingId(null); setPaymentId(null); void loadBookings(); }} />}
 
       {/* Support Report Modal */}
       {reportBooking && (

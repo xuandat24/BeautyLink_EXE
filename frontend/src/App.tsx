@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { FeaturedCategories } from './components/FeaturedCategories';
@@ -19,6 +19,7 @@ import { ReportsPage } from './components/ReportsPage';
 import { AuthPage } from './components/AuthPage';
 import { AccountPage } from './components/AccountPage';
 import { CheckoutPage } from './components/CheckoutPage';
+import { continuationDestination, setPaymentBookingId } from './lib/paymentNavigation';
 import { FilterExplorePage, ExploreContext } from './components/FilterExplorePage';
 import { PartnerDetailPage } from './components/PartnerDetailPage';
 
@@ -258,6 +259,11 @@ export default function App() {
 
   // Page Routing & Hash Navigation
   const [currentPage, setCurrentPage] = useState<AppView>('home');
+  const continuationAccount = useRef(currentUser?.id);
+  useEffect(() => {
+    if (continuationAccount.current !== undefined && continuationAccount.current !== currentUser?.id) setPaymentBookingId(null);
+    continuationAccount.current = currentUser?.id;
+  }, [currentUser?.id]);
   const [selectedCategory, setSelectedCategory] = useState<BackendCategory | null>(null);
   const [serviceCategories, setServiceCategories] = useState<BackendCategory[]>([]);
   const [returnTarget, setReturnTarget] = useState<string>('home');
@@ -281,6 +287,7 @@ export default function App() {
   // Listen to hash changes
   useEffect(() => {
     const handleHash = () => {
+      if (continuationDestination()) { setCurrentPage('bookings'); return; }
       const hash = window.location.hash.toLowerCase();
       if (hash === '#login') {
         setCurrentPage('login');
@@ -309,7 +316,8 @@ export default function App() {
 
     handleHash();
     window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
+    window.addEventListener('popstate', handleHash);
+    return () => { window.removeEventListener('hashchange', handleHash); window.removeEventListener('popstate', handleHash); };
   }, []);
 
   const navigateTo = (view: AppView, fallbackReturn = 'home') => {
@@ -332,6 +340,7 @@ export default function App() {
   };
 
   const handleBackToHome = () => {
+    setPaymentBookingId(null);
     setCurrentPage('home');
     const hashes = [
       '#login',

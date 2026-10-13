@@ -81,6 +81,23 @@ try {
     const response = await route.fetch(); observedPayment = await response.json();
     await route.fulfill({ response });
   });
+  await page.getByRole('button', { name: 'Bookings', exact: true }).click();
+  let newBookings = 0;
+  const trackBookings = request => { if (new URL(request.url()).pathname === '/api/v1/bookings' && request.method() === 'POST') newBookings++; };
+  page.on('request', trackBookings);
+  for (const [code, oldOrder, reuse] of [['SMOKE-RESUME', 9100002, true], ['SMOKE-RETRY', 9100003, false]]) {
+    await card(code).getByRole('button', { name: 'Tiếp tục thanh toán', exact: true }).click();
+    const resumeUrl = page.url(); assert.match(resumeUrl, /bookingPayment=\d+/);
+    await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Tiếp tục tới PayOS', exact: true }).waitFor();
+    const continued = page.waitForResponse(r => r.url().includes('/payments/payos/bookings/') && r.request().method() === 'POST');
+    await page.getByRole('dialog').getByRole('button', { name: 'Tiếp tục tới PayOS', exact: true }).click();
+    assert.equal((await continued).status(), 200); assert.equal(observedPayment.orderCode === oldOrder, reuse);
+    await page.getByText('FAKE GATEWAY — NO MONEY TRANSFER', { exact: true }).waitFor(); assert.equal(newBookings, 0);
+    await page.goBack(); await page.getByRole('dialog').getByRole('button', { name: 'Tiếp tục tới PayOS', exact: true }).waitFor();
+    await page.getByRole('dialog').getByRole('button', { name: 'Quay lại', exact: true }).click();
+    assert.doesNotMatch(page.url(), /bookingPayment=/); assert.equal(newBookings, 0);
+  }
+  page.off('request', trackBookings);
   await page.getByRole('button', { name: 'Checkout', exact: true }).click();
   await page.getByRole('button', { name: /Tiếp tục: Chọn hình thức/ }).click();
   await page.getByRole('button', { name: /Tiếp tục: Tóm tắt/ }).click();
@@ -89,8 +106,15 @@ try {
   const paymentResponse = await paymentCreated; assert.equal(paymentResponse.status(), 200);
   assert.equal(observedPayment.status, 'PENDING'); assert.equal(observedPayment.requiresManualReview, false);
   await page.getByText('FAKE GATEWAY — NO MONEY TRANSFER', { exact: true }).waitFor();
+  // Actual App router (not the harness) restores checkout even from an account/home route.
+  await page.goto(`http://localhost:5173/?bookingPayment=${observedPayment.bookingId}#account`);
+  await page.getByRole('dialog').getByRole('button', { name: 'Tiếp tục tới PayOS', exact: true }).waitFor();
+  assert.equal(await page.getByRole('dialog').getByLabel('Hình thức thanh toán').isDisabled(), true);
+  await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Tiếp tục tới PayOS', exact: true }).waitFor();
+  await page.getByRole('dialog').getByRole('button', { name: 'Quay lại', exact: true }).click();
+  assert.doesNotMatch(page.url(), /bookingPayment=/);
   assert.deepEqual(failures, []);
-  console.log('PASS: Chrome -> Spring/JWT/H2; paid/manual action guards, pending cancellation, completion, both review upserts/reload, account, appointments, Explore/details, checkout -> fake gateway; no API/page/console errors.');
+  console.log('PASS: browser -> Spring/JWT/H2; continuation reload/back navigation/reuse/safe expiry retry without new booking; paid/manual guards, pending cancellation, completion, review upserts/reload, account/appointments/Explore/details, checkout -> fake gateway; no API/page/console errors.');
 } catch (error) {
   console.error('Local smoke diagnostic:', failures, await page.locator('[role="alert"]').allTextContents());
   throw error;

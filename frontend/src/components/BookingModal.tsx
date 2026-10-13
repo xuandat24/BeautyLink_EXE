@@ -5,6 +5,7 @@ import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { BookingShareFeature } from './BookingShareFeature';
 import { bookingSchema } from '../lib/validation';
+import { bookingDay, bookingMaxDate } from '../lib/bookingTime';
 
 interface BookingModalProps {
   service: BackendService;
@@ -23,15 +24,11 @@ const formatCurrency = (val: number) => {
 };
 
 const getTodayString = (offsetDays = 0) => {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().split('T')[0];
+  return bookingDay(offsetDays);
 };
 
 const getMaxDateString = () => {
-  const d = new Date();
-  d.setDate(d.getDate() + 30);
-  return d.toISOString().split('T')[0];
+  return bookingMaxDate();
 };
 
 export const BookingModal: React.FC<BookingModalProps> = ({
