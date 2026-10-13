@@ -97,6 +97,167 @@ class PaymentCancellationSafetyTest {
     private UserAccount admin() { return users.findAll().stream().filter(u -> u.getRole() == Role.ADMIN).findFirst().orElseThrow(); }
     private void proof(PaymentTransaction p, PaymentLinkStatus state) { var result = provider(p, state); when(gateway.get(p.getOrderCode())).thenReturn(result); }
     private CloseZeroMoneyRequest resolution(Booking b) { return new CloseZeroMoneyRequest(operatorReview.preview(admin(), b.getId()).fingerprint(), "TEST-CASE-1"); }
+    private void observePayment(String path, PaymentTransaction p, Webhook webhook) {
+        // Make both scheduler age and status throttle eligible without sleeps.
+        doReturn(time.now().plusSeconds(181)).when(time).now();
+        switch (path) {
+            case "WEBHOOK" -> assertTrue(paymentService.handleWebhook(webhook));
+            case "STATUS" -> assertTrue(paymentService.status(customer(), p.getOrderCode()).requiresManualReview());
+            case "SCHEDULER" -> new PaymentReconciliationScheduler(paymentService).reconcilePendingAttempts();
+            default -> throw new IllegalArgumentException(path);
+        }
+    }
+    private void assertManualReceipt(Booking b, PaymentTransaction p, BookingStatus expected, boolean received) {
+        var saved = payments.findById(p.getId()).orElseThrow();
+        assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, saved.getStatus()); assertTrue(saved.isRequiresManualReview());
+        assertEquals(received, saved.getPaidAt() != null); assertNotNull(saved.getLastReconciledAt());
+        assertEquals(p.getOrderCode(), saved.getOrderCode()); assertEquals(p.getPaymentLinkId(), saved.getPaymentLinkId());
+        assertEquals(0, p.getAmount().compareTo(saved.getAmount()));
+        var booking = bookings.findById(b.getId()).orElseThrow(); assertEquals(expected, booking.getStatus());
+        assertEquals(b.getPaymentStatus(), booking.getPaymentStatus()); assertFalse(booking.isPaymentRetryAllowed());
+        var dto = bookingService.customerBooking(customer(), b.getId());
+        assertFalse(dto.completionEligible()); assertFalse(dto.reviewEligible()); assertFalse(dto.paymentEligible()); assertFalse(dto.cancelEligible());
+        assertEquals("PAYMENT_REVIEW_REQUIRED", dto.paymentBlockerReason());
+        assertEquals("PAYMENT_REVIEW_REQUIRED", assertThrows(ApiException.class, () -> bookingService.complete(customer(), b.getId())).getCode());
+        for (var target : ReviewTargetType.values()) assertThrows(ApiException.class,
+                () -> reviewService.upsert(customer(), b.getId(), target, new UpsertBookingReviewRequest(5, "must remain blocked")));
+        assertNull(paymentService.status(customer(), p.getOrderCode()).checkoutUrl());
+    }
+    @ParameterizedTest @CsvSource({
+        "WEBHOOK,SCHEDULER,PENDING", "WEBHOOK,STATUS,PENDING", "SCHEDULER,WEBHOOK,PENDING", "STATUS,WEBHOOK,PENDING",
+        "WEBHOOK,SCHEDULER,CANCELLED", "SCHEDULER,WEBHOOK,CANCELLED", "STATUS,WEBHOOK,CANCELLED"
+    })
+    void uncertainCancellationPaidEvidenceConvergesRegardlessOfDeliveryOrder(String first, String second, BookingStatus state) {
+        var b = booking(state, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.PENDING);
+        tx(() -> { payments.findByIdForUpdate(p.getId()).orElseThrow().setRequiresManualReview(true); return null; });
+        doReturn(BookingCompletionPolicy.startsAt(b).plusSeconds(7200)).when(time).now();
+        proof(p, PaymentLinkStatus.PAID); var webhook = paidWebhook(p);
+        when(gateway.verify(webhook).getReference()).thenReturn("verified-reference"); long auditBefore = reports.count();
+        observePayment(first, p, webhook); assertManualReceipt(b, p, state, true);
+        Instant receipt = payments.findById(p.getId()).orElseThrow().getPaidAt();
+        observePayment(second, p, webhook); observePayment(first, p, webhook); observePayment(second, p, webhook);
+        assertManualReceipt(b, p, state, true);
+        assertEquals(receipt, payments.findById(p.getId()).orElseThrow().getPaidAt());
+        assertEquals("verified-reference", payments.findById(p.getId()).orElseThrow().getPaymentReference());
+        var preview = operatorReview.preview(admin(), b.getId()); assertFalse(preview.canCloseZeroMoney());
+        assertFalse(preview.canCloseZeroSecondary()); assertTrue(preview.attempts().getFirst().identityMatches());
+        assertEquals(p.getAmount().longValueExact(), preview.attempts().getFirst().amountPaid());
+        assertEquals(auditBefore, reports.count(), "Automatic observations must not fabricate operator resolution/audit");
+    }
+    @ParameterizedTest @CsvSource({"CANCELLED", "EXPIRED", "FAILED", "PENDING"})
+    void manualZeroMoneyObservationNeverClosesOrResetsAttempt(PaymentLinkStatus state) {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
+        doReturn(BookingCompletionPolicy.startsAt(b).plusSeconds(7200)).when(time).now(); proof(p, state);
+        long before = reports.count(); observePayment("SCHEDULER", p, null); observePayment("STATUS", p, null);
+        assertManualReceipt(b, p, BookingStatus.PENDING, false); assertEquals(before, reports.count());
+        if (state != PaymentLinkStatus.PENDING) {
+            var input = resolution(b); var result = operatorReview.closeZeroMoney(admin(), b.getId(), input);
+            assertEquals(BookingStatus.CANCELLED, result.bookingStatus()); assertFalse(result.retryAllowed());
+            assertEquals(before + 2, reports.count()); assertTrue(operatorReview.closeZeroMoney(admin(), b.getId(), input).alreadyApplied());
+        }
+    }
+    @ParameterizedTest @CsvSource({"ORDER", "LINK", "AMOUNT", "NULL_PAID", "WRONG_PAID", "NULL_STATUS", "NULL_RESPONSE", "TIMEOUT"})
+    void manualReconciliationRejectsUnverifiedProofThenStillCapturesLaterPaid(String fault) {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
+        doReturn(BookingCompletionPolicy.startsAt(b).plusSeconds(7200)).when(time).now(); var result = provider(p, PaymentLinkStatus.PAID);
+        switch (fault) {
+            case "ORDER" -> when(result.getOrderCode()).thenReturn(p.getOrderCode() + 1);
+            case "LINK" -> when(result.getId()).thenReturn("wrong-link");
+            case "AMOUNT" -> when(result.getAmount()).thenReturn(1L);
+            case "NULL_PAID" -> when(result.getAmountPaid()).thenReturn(null);
+            case "WRONG_PAID" -> when(result.getAmountPaid()).thenReturn(1L);
+            case "NULL_STATUS" -> when(result.getStatus()).thenReturn(null);
+        }
+        when(gateway.get(p.getOrderCode())).thenReturn(fault.equals("NULL_RESPONSE") ? null : result);
+        if (fault.equals("TIMEOUT")) when(gateway.get(p.getOrderCode())).thenThrow(timeout());
+        observePayment("SCHEDULER", p, null); assertManualReceipt(b, p, BookingStatus.PENDING, false);
+        var valid = provider(p, PaymentLinkStatus.PAID); doReturn(valid).when(gateway).get(p.getOrderCode());
+        observePayment("STATUS", p, null); assertManualReceipt(b, p, BookingStatus.PENDING, true);
+    }
+    @Test void mismatchedWebhookCannotOverwritePreviouslyVerifiedReference() {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
+        var good = paidWebhook(p); when(gateway.verify(good).getReference()).thenReturn("verified-reference");
+        paymentService.handleWebhook(good); Instant receipt = payments.findById(p.getId()).orElseThrow().getPaidAt();
+        var wrong = paidWebhook(p); when(gateway.verify(wrong).getAmount()).thenReturn(1L);
+        when(gateway.verify(wrong).getReference()).thenReturn("unverified-reference");
+        assertFalse(paymentService.handleWebhook(wrong));
+        assertEquals(receipt, payments.findById(p.getId()).orElseThrow().getPaidAt());
+        assertEquals("verified-reference", payments.findById(p.getId()).orElseThrow().getPaymentReference());
+    }
+    @Test void manualSchedulerAndWebhookRacePreservesBlockerAndBothEvidenceSources() throws Exception {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.PENDING);
+        tx(() -> { payments.findByIdForUpdate(p.getId()).orElseThrow().setRequiresManualReview(true); return null; });
+        proof(p, PaymentLinkStatus.PAID); var webhook = paidWebhook(p); when(gateway.verify(webhook).getReference()).thenReturn("race-reference");
+        var gate = new java.util.concurrent.CyclicBarrier(2); long before = reports.count();
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var get = pool.submit(() -> { gate.await(); paymentService.reconcileById(p.getId()); return true; });
+            var callback = pool.submit(() -> { gate.await(); return paymentService.handleWebhook(webhook); });
+            assertTrue(get.get(10, java.util.concurrent.TimeUnit.SECONDS)); assertTrue(callback.get(10, java.util.concurrent.TimeUnit.SECONDS));
+        }
+        assertManualReceipt(b, p, BookingStatus.PENDING, true);
+        assertEquals("race-reference", payments.findById(p.getId()).orElseThrow().getPaymentReference()); assertEquals(before, reports.count());
+    }
+    @ParameterizedTest @CsvSource({"WEBHOOK", "STATUS", "SCHEDULER"})
+    void actualCancelTimeoutThenPaidNeverConfirmsBooking(String path) {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.PENDING);
+        proof(p, PaymentLinkStatus.PENDING); when(gateway.cancel(eq(p.getOrderCode()), any())).thenThrow(timeout());
+        assertEquals("PAYMENT_RECONCILING", assertThrows(ApiException.class, () -> bookingService.cancel(customer(), b.getId())).getCode());
+        assertTrue(payments.findById(p.getId()).orElseThrow().isRequiresManualReview());
+        proof(p, PaymentLinkStatus.PAID); observePayment(path, p, paidWebhook(p));
+        assertManualReceipt(b, p, BookingStatus.PENDING, true);
+        // A later contradictory zero response must never erase an already observed receipt.
+        var receipt = payments.findById(p.getId()).orElseThrow().getPaidAt(); proof(p, PaymentLinkStatus.CANCELLED);
+        observePayment("SCHEDULER", p, null); assertManualReceipt(b, p, BookingStatus.PENDING, true);
+        assertEquals(receipt, payments.findById(p.getId()).orElseThrow().getPaidAt());
+        var preview = operatorReview.preview(admin(), b.getId()); assertFalse(preview.canCloseZeroMoney());
+        assertThrows(ApiException.class, () -> operatorReview.closeZeroMoney(admin(), b.getId(), new CloseZeroMoneyRequest(preview.fingerprint(), "CONTRADICTORY-PROOF")));
+    }
+    @ParameterizedTest @CsvSource({"WEBHOOK,FULL_100,PAID", "STATUS,FULL_100,PAID", "SCHEDULER,FULL_100,PAID",
+            "WEBHOOK,DEPOSIT_50,PARTIALLY_PAID", "STATUS,DEPOSIT_50,PARTIALLY_PAID", "SCHEDULER,DEPOSIT_50,PARTIALLY_PAID"})
+    void normalPaidStillConfirmsThroughEverySource(String path, PaymentOption option, PaymentStatus paid) {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.PENDING);
+        p.setPaymentOption(option); payments.saveAndFlush(p); proof(p, PaymentLinkStatus.PAID); var webhook = paidWebhook(p);
+        doReturn(BookingCompletionPolicy.startsAt(b).plusSeconds(7200)).when(time).now();
+        if (path.equals("WEBHOOK")) assertTrue(paymentService.handleWebhook(webhook));
+        else if (path.equals("STATUS")) assertFalse(paymentService.status(customer(), p.getOrderCode()).requiresManualReview());
+        else new PaymentReconciliationScheduler(paymentService).reconcilePendingAttempts();
+        var saved = payments.findById(p.getId()).orElseThrow(); assertEquals(PaymentTransactionStatus.PAID, saved.getStatus());
+        assertFalse(saved.isRequiresManualReview()); assertNotNull(saved.getPaidAt());
+        assertTrue(paymentService.handleWebhook(webhook)); paymentService.reconcileById(p.getId());
+        var dto = bookingService.customerBooking(customer(), b.getId()); assertEquals(BookingStatus.CONFIRMED, dto.status());
+        assertEquals(paid, dto.paymentStatus()); assertTrue(dto.completionEligible()); assertFalse(dto.reviewEligible());
+        assertEquals(BookingStatus.COMPLETED, bookingService.complete(customer(), b.getId()).status());
+        assertEquals(saved.getPaidAt(), payments.findById(p.getId()).orElseThrow().getPaidAt());
+    }
+    @ParameterizedTest @CsvSource({"PAID", "CANCELLED"})
+    void secondaryObservationPreservesPrimaryAndRequiresAdminForZero(PaymentLinkStatus providerState) {
+        var b = booking(BookingStatus.CONFIRMED, PaymentStatus.PARTIALLY_PAID); var primary = attempt(b, PaymentTransactionStatus.PAID);
+        primary.setPaidAt(Instant.parse("2026-01-01T00:00:00Z")); payments.saveAndFlush(primary);
+        var secondary = attempt(b, PaymentTransactionStatus.PENDING);
+        tx(() -> { payments.findByIdForUpdate(secondary.getId()).orElseThrow().setRequiresManualReview(true); return null; });
+        proof(primary, PaymentLinkStatus.PAID); proof(secondary, providerState);
+        doReturn(BookingCompletionPolicy.startsAt(b).plusSeconds(7200)).when(time).now();
+        var before = payments.findById(primary.getId()).orElseThrow(); long auditBefore = reports.count();
+        observePayment("SCHEDULER", secondary, null); observePayment("STATUS", secondary, null);
+        assertManualReceipt(b, secondary, BookingStatus.CONFIRMED, providerState == PaymentLinkStatus.PAID);
+        var after = payments.findById(primary.getId()).orElseThrow(); assertEquals(before.getUpdatedAt(), after.getUpdatedAt());
+        assertEquals(before.getPaidAt(), after.getPaidAt()); assertEquals(before.getStatus(), after.getStatus());
+        assertEquals(auditBefore, reports.count()); var preview = operatorReview.preview(admin(), b.getId());
+        assertEquals(providerState == PaymentLinkStatus.CANCELLED, preview.canCloseZeroSecondary());
+        if (providerState == PaymentLinkStatus.CANCELLED) {
+            operatorReview.closeZeroSecondary(admin(), b.getId(), new CloseZeroMoneyRequest(preview.fingerprint(), "SECONDARY-ZERO"));
+            assertEquals(auditBefore + 3, reports.count()); assertTrue(bookingService.customerBooking(customer(), b.getId()).completionEligible());
+            assertEquals(PaymentStatus.PARTIALLY_PAID, bookingService.complete(customer(), b.getId()).paymentStatus());
+        }
+    }
+    @Test void validReceiptOnDifferentAttemptCannotBypassExistingManualBlocker() {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var blocked = attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
+        var other = attempt(b, PaymentTransactionStatus.PENDING); proof(other, PaymentLinkStatus.PAID);
+        paymentService.handleWebhook(paidWebhook(other)); paymentService.reconcileById(other.getId());
+        assertManualReceipt(b, other, BookingStatus.PENDING, true);
+        assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, payments.findById(blocked.getId()).orElseThrow().getStatus());
+        verify(gateway, never()).cancel(any(), any());
+    }
     @ParameterizedTest @CsvSource({"-1,UTC", "0,UTC", "1,UTC", "-1,Asia/Ho_Chi_Minh", "0,Asia/Ho_Chi_Minh", "1,Asia/Ho_Chi_Minh"})
     void bookingCapabilitiesReuseAndStatusAgreeAtExactStart(long offset, String zone) {
         {

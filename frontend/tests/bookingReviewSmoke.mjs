@@ -13,11 +13,15 @@ const card = code => page.locator('article').filter({ hasText: code });
 try {
   await page.goto('http://localhost:5173/tests/review-smoke.html');
   await card('SMOKE-UNPAID').waitFor();
-  for (const code of ['SMOKE-FUTURE-DEPOSIT', 'SMOKE-FUTURE-FULL', 'SMOKE-PAST-DEPOSIT', 'SMOKE-PAST-FULL', 'SMOKE-MANUAL']) {
+  for (const code of ['SMOKE-FUTURE-DEPOSIT', 'SMOKE-FUTURE-FULL', 'SMOKE-PAST-DEPOSIT', 'SMOKE-PAST-FULL', 'SMOKE-MANUAL', 'SMOKE-UNCERTAIN-PAID']) {
     assert.equal(await card(code).getByRole('button', { name: 'Hủy lịch', exact: true }).count(), 0);
   }
   assert.equal(await card('SMOKE-MANUAL').getByRole('button', { name: /đánh giá/i }).count(), 0);
   assert.equal(await card('SMOKE-MANUAL').getByRole('button', { name: 'Đã sử dụng dịch vụ' }).count(), 0);
+  for (const name of [/đánh giá/i, 'Đã sử dụng dịch vụ', /tiếp tục thanh toán/i]) {
+    assert.equal(await card('SMOKE-UNCERTAIN-PAID').getByRole('button', { name }).count(), 0);
+  }
+  assert.ok((await card('SMOKE-UNCERTAIN-PAID').textContent()).includes('đối soát'));
   await card('SMOKE-PENDING-LINK').getByRole('button', { name: 'Hủy lịch', exact: true }).click();
   await page.waitForFunction(() => [...document.querySelectorAll('article')].some(a => a.textContent.includes('SMOKE-PENDING-LINK') && a.textContent.includes('Đã hủy')));
   for (const code of ['SMOKE-UNPAID', 'SMOKE-FUTURE-DEPOSIT', 'SMOKE-FUTURE-FULL', 'SMOKE-CANCELLED', 'SMOKE-REFUNDED']) {

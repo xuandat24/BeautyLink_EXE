@@ -191,6 +191,8 @@ class PaymentServiceSecurityTest {
         assertEquals(false, service.handleWebhook(amountWebhook));
         assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, amountMismatch.getStatus());
         assertTrue(amountMismatch.isRequiresManualReview());
+        org.junit.jupiter.api.Assertions.assertNull(amountMismatch.getPaymentReference());
+        org.junit.jupiter.api.Assertions.assertNull(amountMismatch.getPaidAt());
 
         PaymentTransaction linkMismatch = pendingPayment();
         linkMismatch.setOrderCode(610000052L);
@@ -198,12 +200,15 @@ class PaymentServiceSecurityTest {
         lockPayment(linkMismatch);
         assertEquals(false, service.handleWebhook(linkWebhook));
         assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, linkMismatch.getStatus());
+        org.junit.jupiter.api.Assertions.assertNull(linkMismatch.getPaymentReference());
+        org.junit.jupiter.api.Assertions.assertNull(linkMismatch.getPaidAt());
     }
 
     @Test
     void duplicatePaidWebhookIsIdempotent() {
         PaymentTransaction payment = pendingPayment();
         Webhook webhook = successfulWebhook(payment, payment.getAmount().longValueExact(), payment.getPaymentLinkId());
+        when(gateway.verify(webhook).getReference()).thenReturn("BANK-REF");
         lockPayment(payment);
         when(payments.findAllByBookingIdForUpdate(payment.getBooking().getId())).thenReturn(List.of(payment));
         assertTrue(service.handleWebhook(webhook));
@@ -214,6 +219,7 @@ class PaymentServiceSecurityTest {
         Instant firstPaidAt = payment.getPaidAt();
         assertTrue(service.handleWebhook(webhook));
         assertEquals(firstPaidAt, payment.getPaidAt());
+        assertEquals("BANK-REF", payment.getPaymentReference());
         assertEquals(PaymentTransactionStatus.PAID, payment.getStatus());
     }
 
@@ -316,7 +322,6 @@ class PaymentServiceSecurityTest {
         when(data.getOrderCode()).thenReturn(payment.getOrderCode());
         when(data.getAmount()).thenReturn(amount);
         org.mockito.Mockito.lenient().when(data.getPaymentLinkId()).thenReturn(paymentLinkId);
-        when(data.getReference()).thenReturn("BANK-REF");
         when(data.getCode()).thenReturn("00");
         when(gateway.verify(webhook)).thenReturn(data);
         return webhook;

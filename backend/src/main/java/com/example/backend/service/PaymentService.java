@@ -167,11 +167,11 @@ public class PaymentService {
         if (provider == null || !Objects.equals(provider.getOrderCode(), transaction.getOrderCode())
                 || provider.getAmount() == null || provider.getAmount() != transaction.getAmount().longValueExact()
                 || provider.getPaymentLinkId() == null || provider.getPaymentLinkId().isBlank()) {
-            requireManualReview(transaction, null, "create-response-identity-mismatch");
+            requireManualReview(transaction, "create-response-identity-mismatch");
             return new CreationResult(null, manualError());
         }
         if (transaction.getPaymentLinkId() != null && !transaction.getPaymentLinkId().equals(provider.getPaymentLinkId())) {
-            requireManualReview(transaction, null, "create-response-link-mismatch");
+            requireManualReview(transaction, "create-response-link-mismatch");
             return new CreationResult(null, manualError());
         }
         transaction.setPaymentLinkId(provider.getPaymentLinkId());
@@ -197,7 +197,7 @@ public class PaymentService {
         if (!payment.getBooking().getCustomer().getId().equals(customer.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "PAYMENT_FORBIDDEN", "Bạn không có quyền xem giao dịch này");
         }
-        if (payment.getStatus() == PaymentTransactionStatus.PENDING && shouldReconcile(payment)) reconcileLocked(payment);
+        if (needsReconciliation(payment) && shouldReconcile(payment)) reconcileLocked(payment);
         return response(payment);
     }
 
@@ -217,32 +217,16 @@ public class PaymentService {
             return true;
         }
         if (data.getAmount() == null || payment.getAmount().longValueExact() != data.getAmount()) {
-            requireManualReview(payment, data.getReference(), "webhook-amount-mismatch");
+            requireManualReview(payment, "webhook-amount-mismatch");
             return false;
         }
-        if (data.getPaymentLinkId() == null || (payment.getPaymentLinkId() != null
+        if (data.getPaymentLinkId() == null || data.getPaymentLinkId().isBlank() || (payment.getPaymentLinkId() != null
                 && !payment.getPaymentLinkId().equals(data.getPaymentLinkId()))) {
-            requireManualReview(payment, data.getReference(), "webhook-link-mismatch");
+            requireManualReview(payment, "webhook-link-mismatch");
             return false;
         }
-        if (BookingPaymentPolicy.manualAttempt(payment)) {
-            // Preserve verified inbound evidence, but never resolve an operator case automatically.
-            if (payment.getPaymentLinkId() == null) payment.setPaymentLinkId(data.getPaymentLinkId());
-            if (payment.getPaidAt() == null) payment.setPaidAt(time.now());
-            payment.setLastReconciledAt(time.now());
-            requireManualReview(payment, data.getReference(), "verified-money-on-unresolved-attempt");
-            return true;
-        }
-        if (payment.getStatus() == PaymentTransactionStatus.PAID) return true;
         if (payment.getPaymentLinkId() == null) payment.setPaymentLinkId(data.getPaymentLinkId());
-        if (payment.getPaidAt() == null) payment.setPaidAt(time.now());
-        payment.setLastReconciledAt(time.now());
-        if (payment.getBooking().getStatus() == BookingStatus.CANCELLED || payment.getBooking().getStatus() == BookingStatus.COMPLETED
-                || payment.getBooking().getPaymentStatus() == PaymentStatus.REFUNDED || isPaid(payment.getBooking())) {
-            requireManualReview(payment, data.getReference(), "late-or-conflicting-webhook");
-        } else {
-            markPaid(payment, data.getReference(), time.now(), "webhook");
-        }
+        acceptVerifiedPaid(payment, data.getReference(), "webhook");
         return true;
     }
 
@@ -261,7 +245,7 @@ public class PaymentService {
         if (bookingId == null || bookings.findByIdForUpdate(bookingId).isEmpty()) return;
         PaymentTransaction payment = payments.findByIdForUpdate(paymentId).orElse(null);
         if (payment != null && !bookingId.equals(payment.getBooking().getId())) throw notFound();
-        if (payment == null || payment.getStatus() != PaymentTransactionStatus.PENDING) return;
+        if (payment == null || !needsReconciliation(payment)) return;
         reconcileLocked(payment);
     }
 
@@ -277,6 +261,8 @@ public class PaymentService {
 
     private boolean reconcileLocked(PaymentTransaction payment) {
         payment.setLastReconciledAt(time.now());
+        // Canonicalize legacy PENDING/manual rows without treating provider GET as operator approval.
+        if (BookingPaymentPolicy.manualAttempt(payment)) requireManualReview(payment, "unresolved-provider-observation");
         PaymentLink provider;
         try {
             provider = gateway.get(payment.getOrderCode());
@@ -290,42 +276,61 @@ public class PaymentService {
         switch (providerStatus) {
             case PAID -> {
                 if (provider.getAmountPaid() == null || provider.getAmountPaid() != payment.getAmount().longValueExact()) {
-                    requireManualReview(payment, null, "reconciliation-paid-amount-mismatch");
-                } else if (payment.getBooking().getStatus() == BookingStatus.CANCELLED || payment.getBooking().getStatus() == BookingStatus.COMPLETED
-                        || payment.getBooking().getPaymentStatus() == PaymentStatus.REFUNDED || isPaid(payment.getBooking())) {
-                    if (payment.getPaidAt() == null) payment.setPaidAt(time.now());
-                    requireManualReview(payment, null, "late-or-conflicting-reconciliation");
+                    requireManualReview(payment, "reconciliation-paid-amount-mismatch");
                 } else {
-                    markPaid(payment, null, time.now(), "server-reconciliation");
+                    acceptVerifiedPaid(payment, null, "server-reconciliation");
                 }
             }
             case EXPIRED, CANCELLED, FAILED -> {
                 if (provider.getAmountPaid() == null || provider.getAmountPaid() != 0) {
-                    requireManualReview(payment, null, "closed-link-has-unknown-or-received-money");
+                    requireManualReview(payment, "closed-link-has-unknown-or-received-money");
                     return false;
                 }
+                if (BookingPaymentPolicy.manualAttempt(payment)) return false; // ADMIN all-attempt closure only
                 closeAndRelease(payment, PaymentTransactionStatus.valueOf(providerStatus.name()), "server-reconciliation");
             }
             default -> {
-                if (provider.getAmountPaid() != null && provider.getAmountPaid() != 0) requireManualReview(payment, null, "incomplete-provider-payment");
-                else payment.setStatus(PaymentTransactionStatus.PENDING);
-                return provider.getStatus() == PaymentLinkStatus.PENDING && provider.getAmountPaid() != null && provider.getAmountPaid() == 0;
+                if (provider.getAmountPaid() != null && provider.getAmountPaid() != 0) requireManualReview(payment, "incomplete-provider-payment");
+                else if (!BookingPaymentPolicy.manualAttempt(payment)) payment.setStatus(PaymentTransactionStatus.PENDING);
+                return !BookingPaymentPolicy.manualAttempt(payment) && provider.getStatus() == PaymentLinkStatus.PENDING
+                        && provider.getAmountPaid() != null && provider.getAmountPaid() == 0;
             }
         }
-        return true;
+        return !BookingPaymentPolicy.manualAttempt(payment);
+    }
+
+    private boolean needsReconciliation(PaymentTransaction payment) {
+        return payment.getStatus() == PaymentTransactionStatus.PENDING || BookingPaymentPolicy.manualAttempt(payment);
+    }
+
+    /** Identity and exact received amount must be verified before calling, under the booking lock. */
+    private void acceptVerifiedPaid(PaymentTransaction payment, String reference, String source) {
+        if (payment.getPaidAt() == null) payment.setPaidAt(time.now());
+        if (payment.getPaymentReference() == null && reference != null) payment.setPaymentReference(reference);
+        payment.setLastReconciledAt(time.now());
+        // Duplicates must preserve an established primary, even while a secondary is being reviewed.
+        if (payment.getStatus() == PaymentTransactionStatus.PAID && !BookingPaymentPolicy.manualAttempt(payment)) return;
+        Booking booking = payment.getBooking();
+        if (BookingPaymentPolicy.manualAttempt(payment) || BookingPaymentPolicy.manual(payments.findAllByBookingIdForUpdate(booking.getId()))
+                || booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.COMPLETED
+                || booking.getPaymentStatus() == PaymentStatus.REFUNDED || isPaid(booking)) {
+            requireManualReview(payment, "verified-money-on-unresolved-or-conflicting-attempt");
+            return;
+        }
+        markPaid(payment, reference, payment.getPaidAt(), source);
     }
 
     private boolean validateProviderIdentity(PaymentTransaction payment, PaymentLink provider) {
         if (provider == null || provider.getOrderCode() == null || !payment.getOrderCode().equals(provider.getOrderCode())) {
-            requireManualReview(payment, null, "reconciliation-order-mismatch");
+            requireManualReview(payment, "reconciliation-order-mismatch");
             return false;
         }
         if (provider.getId() == null || provider.getId().isBlank() || (payment.getPaymentLinkId() != null && !payment.getPaymentLinkId().equals(provider.getId()))) {
-            requireManualReview(payment, null, "reconciliation-link-mismatch");
+            requireManualReview(payment, "reconciliation-link-mismatch");
             return false;
         }
         if (provider.getAmount() == null || provider.getAmount() != payment.getAmount().longValueExact()) {
-            requireManualReview(payment, null, "reconciliation-amount-mismatch");
+            requireManualReview(payment, "reconciliation-amount-mismatch");
             return false;
         }
         if (payment.getPaymentLinkId() == null) payment.setPaymentLinkId(provider.getId());
@@ -334,7 +339,6 @@ public class PaymentService {
 
     private void markPaid(PaymentTransaction payment, String reference, Instant paidAt, String source) {
         payment.setStatus(PaymentTransactionStatus.PAID);
-        payment.setRequiresManualReview(false);
         if (reference != null) payment.setPaymentReference(reference);
         payment.setPaidAt(paidAt == null ? time.now() : paidAt);
         Booking booking = payment.getBooking();
@@ -345,11 +349,11 @@ public class PaymentService {
         log.info("PayOS payment verified orderCode={} paymentLinkId={} source={}", payment.getOrderCode(), payment.getPaymentLinkId(), source);
     }
 
-    private void requireManualReview(PaymentTransaction payment, String reference, String reason) {
+    private void requireManualReview(PaymentTransaction payment, String reason) {
         if (payment.getStatus() != PaymentTransactionStatus.PAID) payment.setStatus(PaymentTransactionStatus.REVIEW_REQUIRED);
         payment.setRequiresManualReview(true);
-        if (reference != null) payment.setPaymentReference(reference);
         payment.getBooking().setPaymentRetryAllowed(false);
+        payment.setCheckoutUrl(null);
         log.error("PayOS payment requires manual review orderCode={} bookingId={} reason={}",
                 payment.getOrderCode(), payment.getBooking().getId(), reason);
     }
@@ -357,7 +361,7 @@ public class PaymentService {
     private void closeSupersededAttempts(PaymentTransaction paid) {
         for (PaymentTransaction other : payments.findAllByBookingIdForUpdate(paid.getBooking().getId())) {
             if (other == paid || (paid.getId() != null && Objects.equals(other.getId(), paid.getId()))
-                    || other.getStatus() != PaymentTransactionStatus.PENDING) continue;
+                    || other.getStatus() != PaymentTransactionStatus.PENDING || BookingPaymentPolicy.manualAttempt(other)) continue;
             try {
                 PaymentLink result = gateway.cancel(other.getOrderCode(), "Another payment attempt was completed");
                 if (result == null || result.getStatus() == null) continue;
@@ -367,8 +371,9 @@ public class PaymentService {
                     other.setLastReconciledAt(time.now());
                 } else if (result.getStatus() == PaymentLinkStatus.PAID || (result.getAmountPaid() != null && result.getAmountPaid() != 0)) {
                     if (result.getStatus() == PaymentLinkStatus.PAID && result.getAmountPaid() != null
-                            && result.getAmountPaid() == other.getAmount().longValueExact() && other.getPaidAt() == null) other.setPaidAt(time.now());
-                    requireManualReview(other, null, "superseded-link-received-money");
+                            && result.getAmountPaid() == other.getAmount().longValueExact())
+                        acceptVerifiedPaid(other, null, "superseded-cancellation");
+                    else requireManualReview(other, "superseded-link-received-money");
                 }
                 // Unknown or pending result stays PENDING and remains a scheduler candidate.
             }
@@ -506,13 +511,13 @@ public class PaymentService {
                     if (closed == null || closed.getStatus() == null) return uncertainCancellation(p);
                     if (!validateProviderIdentity(p, closed)) return manualError();
                     if (closed.getStatus() == PaymentLinkStatus.PAID) {
-                        if (closed.getAmountPaid() != null && closed.getAmountPaid() == p.getAmount().longValueExact()
-                                && booking.getStatus() != BookingStatus.CANCELLED) markPaid(p, null, time.now(), "cancel-reconciliation");
-                        else requireManualReview(p, null, "cancel-raced-with-payment");
+                        if (closed.getAmountPaid() != null && closed.getAmountPaid() == p.getAmount().longValueExact())
+                            acceptVerifiedPaid(p, null, "cancel-reconciliation");
+                        else requireManualReview(p, "cancel-raced-with-payment");
                         return BookingPaymentPolicy.manual(attempts) ? manualError() : paidCancellationError();
                     }
                     if (closed.getStatus() != PaymentLinkStatus.CANCELLED || closed.getAmountPaid() == null) return uncertainCancellation(p);
-                    if (closed.getAmountPaid() != 0) { requireManualReview(p, null, "cancel-link-received-money"); return manualError(); }
+                    if (closed.getAmountPaid() != 0) { requireManualReview(p, "cancel-link-received-money"); return manualError(); }
                     p.setStatus(PaymentTransactionStatus.CANCELLED); p.setLastReconciledAt(time.now());
                 } catch (ApiException error) { return uncertainCancellation(p); }
             }

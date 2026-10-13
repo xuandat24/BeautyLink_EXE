@@ -35,8 +35,9 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     @Query("select p from PaymentTransaction p where p.id = :id")
     Optional<PaymentTransaction> findByIdForUpdate(@Param("id") Long id);
     List<PaymentTransaction> findByStatusAndExpiresAtBefore(PaymentTransactionStatus status, Instant expiresAt);
-    @Query("select p from PaymentTransaction p where p.status = :status and p.createdAt <= :createdBefore " +
-            "and (p.lastReconciledAt is null or p.lastReconciledAt <= :reconciledBefore) order by p.createdAt")
+    @Query("select p from PaymentTransaction p where (p.status = :status or p.requiresManualReview = true " +
+            "or p.status = :#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).REVIEW_REQUIRED}) and p.createdAt <= :createdBefore " +
+            "and (p.lastReconciledAt is null or p.lastReconciledAt <= :reconciledBefore) order by p.createdAt, p.id")
     List<PaymentTransaction> findReconciliationCandidates(@Param("status") PaymentTransactionStatus status,
             @Param("createdBefore") Instant createdBefore, @Param("reconciledBefore") Instant reconciledBefore,
             Pageable pageable);
