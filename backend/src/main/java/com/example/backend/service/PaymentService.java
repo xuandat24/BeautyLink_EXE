@@ -16,6 +16,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
 import vn.payos.model.v2.paymentRequests.PaymentLink;
@@ -47,9 +50,12 @@ public class PaymentService {
     private final String cancelUrl;
     private final long reconciliationMinAgeSeconds;
     private final long reconciliationMinIntervalSeconds;
+    private final AvailabilityService availability;
+    private final TransactionTemplate checkoutTransactions;
 
     public PaymentService(PaymentTransactionRepository payments, BookingRepository bookings,
-                          PractitionerRepository practitioners, PayOSGateway gateway,
+                          PractitionerRepository practitioners, PayOSGateway gateway, AvailabilityService availability,
+                          PlatformTransactionManager transactionManager,
                           @Value("${app.payos.return-url}") String returnUrl,
                           @Value("${app.payos.cancel-url}") String cancelUrl,
                           @Value("${app.payos.reconciliation-min-age-seconds:60}") long reconciliationMinAgeSeconds,
@@ -58,38 +64,68 @@ public class PaymentService {
         this.bookings = bookings;
         this.practitioners = practitioners;
         this.gateway = gateway;
+        this.availability = availability;
+        this.checkoutTransactions = new TransactionTemplate(transactionManager);
+        this.checkoutTransactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.checkoutTransactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         this.returnUrl = returnUrl;
         this.cancelUrl = cancelUrl;
         this.reconciliationMinAgeSeconds = Math.max(30, reconciliationMinAgeSeconds);
         this.reconciliationMinIntervalSeconds = Math.max(60, reconciliationMinIntervalSeconds);
     }
 
-    @Transactional
+    private record Creation(Long bookingId, CreatePaymentLinkRequest request, PayOSPaymentResponse response, ApiException error) {}
+    private record CreationResult(PayOSPaymentResponse response, ApiException error) {}
+
     public PayOSPaymentResponse create(UserAccount customer, Long bookingId, CreatePayOSPaymentRequest request) {
+        gateway.requireConfigured();
+        // Commit the order ledger before any irreversible provider create call.
+        Creation creation = checkoutTransactions.execute(s -> reserveCheckout(customer, bookingId, request));
+        if (creation.error() != null) throw creation.error();
+        if (creation.response() != null) return creation.response();
+        CreatePaymentLinkResponse provider;
+        try { provider = gateway.create(creation.request()); }
+        catch (RuntimeException error) {
+            // The provider may have created the link despite a timeout. Never erase/reuse this order.
+            throw conflict("PAYMENT_RECONCILING", "Giao dịch đang được đối soát. Vui lòng kiểm tra lịch hẹn, không thanh toán lại.");
+        }
+        CreationResult result = checkoutTransactions.execute(s -> finishCheckout(customer, creation, provider));
+        if (result.error() != null) throw result.error(); // outside committed transaction
+        return result.response();
+    }
+
+    private Creation reserveCheckout(UserAccount customer, Long bookingId, CreatePayOSPaymentRequest request) {
         Booking booking = ownedBooking(customer, bookingId);
-        if (booking.getStatus() == BookingStatus.COMPLETED) {
-            throw conflict("BOOKING_NOT_PAYABLE", "Lịch hẹn không còn ở trạng thái có thể thanh toán");
-        }
-        if (isPaid(booking)) {
-            return payments.findFirstByBookingIdAndStatusOrderByCreatedAtDesc(bookingId, PaymentTransactionStatus.PAID)
-                    .map(this::response)
-                    .orElseThrow(() -> conflict("PAYMENT_ALREADY_PAID", "Lịch hẹn đã được thanh toán"));
-        }
-
+        List<PaymentTransaction> attempts = payments.findAllByBookingIdForUpdate(bookingId);
+        if (booking.getStatus() == BookingStatus.CANCELLED && !booking.isPaymentRetryAllowed())
+            throw conflict("BOOKING_NOT_PAYABLE", "Lịch hẹn đã được khách hàng hủy. Không thể mở lại thanh toán.");
+        if (BookingPaymentPolicy.manual(attempts))
+            throw conflict("PAYMENT_REVIEW_REQUIRED", "Giao dịch cần hỗ trợ đối soát. Vui lòng không thanh toán lại.");
+        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getPaymentStatus() == PaymentStatus.REFUNDED)
+            throw conflict("BOOKING_NOT_PAYABLE", "Lịch hẹn không còn ở trạng thái có thể thanh toán.");
+        if (isPaid(booking)) throw paidCancellationError();
+        if (attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PAID))
+            throw conflict("PAYMENT_STATE_CONFLICT", "Dữ liệu thanh toán cần hỗ trợ đối soát. Không thanh toán lại.");
         String voucherCode = normalizeVoucher(request.voucherCode());
-        PaymentTransaction pending = payments.findFirstByBookingIdAndStatusOrderByCreatedAtDesc(
-                bookingId, PaymentTransactionStatus.PENDING).orElse(null);
-        if (pending != null) {
-            if (isExpired(pending)) {
-                throw conflict("PAYMENT_RECONCILING", "Giao dịch cũ đang được PayOS đối soát trước khi tạo lần thanh toán mới");
-            }
-            if (pending.getPaymentOption() == request.paymentOption()
-                    && Objects.equals(pending.getVoucherCode(), voucherCode)) return response(pending);
-            throw conflict("PAYMENT_ATTEMPT_EXISTS", "Lịch hẹn đang có một phiên PayOS; vui lòng hoàn tất hoặc chờ đối soát");
+        List<PaymentTransaction> pending = attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).toList();
+        if (!pending.isEmpty()) {
+            PaymentTransaction p = pending.getFirst();
+            if (pending.size() != 1 || isExpired(p) || p.getCheckoutUrl() == null || booking.getStatus() == BookingStatus.CANCELLED)
+                throw conflict("PAYMENT_RECONCILING", "Giao dịch cũ đang được đối soát. Vui lòng kiểm tra lịch hẹn.");
+            if (p.getPaymentOption() == request.paymentOption() && Objects.equals(p.getVoucherCode(), voucherCode))
+                return new Creation(bookingId, null, response(p), null);
+            throw conflict("PAYMENT_ATTEMPT_EXISTS", "Lịch hẹn đang có một phiên PayOS; vui lòng hoàn tất hoặc chờ đối soát.");
         }
-
+        // Historical terminal flags alone are not evidence that an old link is closed.
+        for (PaymentTransaction previous : attempts) {
+            if (!reconcileLocked(previous))
+                return new Creation(bookingId, null, null, reconcilingError());
+        }
+        if (BookingPaymentPolicy.unresolved(attempts) || isPaid(booking))
+            return new Creation(bookingId, null, null, BookingPaymentPolicy.manual(attempts) ? manualError() : isPaid(booking) ? paidCancellationError() : reconcilingError());
         if (booking.getStatus() == BookingStatus.CANCELLED) reopenReleasedSlot(booking);
-
+        if (!booking.getAppointmentDate().atTime(booking.getStartTime()).atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant().isAfter(Instant.now()))
+            throw conflict("SLOT_UNAVAILABLE", "Lịch hẹn đã bắt đầu hoặc không còn hợp lệ.");
         BigDecimal total = booking.getTotalAmount().setScale(0, RoundingMode.HALF_UP);
         BigDecimal payable = total.subtract(calculateDiscount(total, voucherCode)).max(BigDecimal.ZERO);
         BigDecimal amount = request.paymentOption() == PaymentOption.DEPOSIT_50
@@ -117,17 +153,42 @@ public class PaymentService {
                 .description(payOSDescription(transaction.getOrderCode()))
                 .buyerName(customer.getFullName()).buyerEmail(customer.getEmail()).buyerPhone(customer.getPhone())
                 .returnUrl(returnUrl).cancelUrl(cancelUrl).expiredAt(transaction.getExpiresAt().getEpochSecond()).build();
-        CreatePaymentLinkResponse payOS = gateway.create(paymentRequest);
-        transaction.setPaymentLinkId(payOS.getPaymentLinkId());
-        transaction.setCheckoutUrl(payOS.getCheckoutUrl());
-        transaction.setProviderCreatedAt(Instant.now());
         booking.setStatus(BookingStatus.PENDING);
         booking.setPaymentStatus(PaymentStatus.UNPAID);
         booking.setPaymentRetryAllowed(false);
-        return response(transaction);
+        return new Creation(bookingId, paymentRequest, null, null);
     }
 
-    @Transactional
+    private CreationResult finishCheckout(UserAccount customer, Creation creation, CreatePaymentLinkResponse provider) {
+        Booking booking = ownedBooking(customer, creation.bookingId());
+        PaymentTransaction transaction = payments.findByOrderCodeForUpdate(creation.request().getOrderCode()).orElseThrow(this::notFound);
+        if (provider == null || !Objects.equals(provider.getOrderCode(), transaction.getOrderCode())
+                || provider.getAmount() == null || provider.getAmount() != transaction.getAmount().longValueExact()
+                || provider.getPaymentLinkId() == null || provider.getPaymentLinkId().isBlank()) {
+            requireManualReview(transaction, null, "create-response-identity-mismatch");
+            return new CreationResult(null, manualError());
+        }
+        if (transaction.getPaymentLinkId() != null && !transaction.getPaymentLinkId().equals(provider.getPaymentLinkId())) {
+            requireManualReview(transaction, null, "create-response-link-mismatch");
+            return new CreationResult(null, manualError());
+        }
+        transaction.setPaymentLinkId(provider.getPaymentLinkId());
+        transaction.setProviderCreatedAt(Instant.now());
+        if (transaction.getStatus() != PaymentTransactionStatus.PENDING || booking.getStatus() == BookingStatus.CANCELLED)
+            return new CreationResult(response(transaction), null); // do not overwrite webhook/cancel outcomes
+        if (provider.getStatus() != PaymentLinkStatus.PENDING || !safeCheckoutUrl(provider.getCheckoutUrl()))
+            return new CreationResult(null, reconcilingError());
+        transaction.setCheckoutUrl(provider.getCheckoutUrl());
+        return new CreationResult(response(transaction), null);
+    }
+
+    private boolean safeCheckoutUrl(String value) {
+        if (value == null) return false;
+        try { var url = java.net.URI.create(value); return "https".equals(url.getScheme()) && "pay.payos.vn".equals(url.getHost()) && url.getUserInfo() == null; }
+        catch (IllegalArgumentException error) { return false; }
+    }
+
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public PayOSPaymentResponse status(UserAccount customer, Long orderCode) {
         PaymentTransaction payment = lockByOrderCode(orderCode);
         if (payment == null) throw notFound();
@@ -138,7 +199,7 @@ public class PaymentService {
         return response(payment);
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public boolean handleWebhook(Webhook webhook) {
         WebhookData data = gateway.verify(webhook);
         if (data == null || data.getOrderCode() == null) {
@@ -149,11 +210,7 @@ public class PaymentService {
             log.info("PayOS signed verification webhook accepted for unknown orderCode={}", data.getOrderCode());
             return true;
         }
-        if (payment.getStatus() == PaymentTransactionStatus.PAID) {
-            log.info("PayOS duplicate paid webhook ignored orderCode={}", data.getOrderCode());
-            return true;
-        }
-        if (payment.getStatus() == PaymentTransactionStatus.REVIEW_REQUIRED) return true;
+        if (payment.getStatus() == PaymentTransactionStatus.REVIEW_REQUIRED || payment.isRequiresManualReview()) return true;
         if (!Boolean.TRUE.equals(webhook.getSuccess()) || !"00".equals(data.getCode())) {
             log.info("PayOS non-success webhook ignored orderCode={} code={}", data.getOrderCode(), data.getCode());
             return true;
@@ -162,13 +219,16 @@ public class PaymentService {
             requireManualReview(payment, data.getReference(), "webhook-amount-mismatch");
             return false;
         }
-        if (payment.getPaymentLinkId() != null && data.getPaymentLinkId() != null
-                && !payment.getPaymentLinkId().equals(data.getPaymentLinkId())) {
+        if (data.getPaymentLinkId() == null || (payment.getPaymentLinkId() != null
+                && !payment.getPaymentLinkId().equals(data.getPaymentLinkId()))) {
             requireManualReview(payment, data.getReference(), "webhook-link-mismatch");
             return false;
         }
+        if (payment.getStatus() == PaymentTransactionStatus.PAID) return true;
+        if (payment.getPaymentLinkId() == null) payment.setPaymentLinkId(data.getPaymentLinkId());
         payment.setLastReconciledAt(Instant.now());
-        if (payment.getBooking().getStatus() == BookingStatus.CANCELLED || isPaid(payment.getBooking())) {
+        if (payment.getBooking().getStatus() == BookingStatus.CANCELLED || payment.getBooking().getStatus() == BookingStatus.COMPLETED
+                || payment.getBooking().getPaymentStatus() == PaymentStatus.REFUNDED || isPaid(payment.getBooking())) {
             requireManualReview(payment, data.getReference(), "late-or-conflicting-webhook");
         } else {
             markPaid(payment, data.getReference(), Instant.now(), "webhook");
@@ -185,7 +245,7 @@ public class PaymentService {
                 .stream().map(PaymentTransaction::getId).toList();
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void reconcileById(Long paymentId) {
         Long bookingId = payments.findBookingIdByPaymentId(paymentId).orElse(null);
         if (bookingId == null || bookings.findByIdForUpdate(bookingId).isEmpty()) return;
@@ -205,33 +265,43 @@ public class PaymentService {
         return payment;
     }
 
-    private void reconcileLocked(PaymentTransaction payment) {
+    private boolean reconcileLocked(PaymentTransaction payment) {
         payment.setLastReconciledAt(Instant.now());
         PaymentLink provider;
         try {
             provider = gateway.get(payment.getOrderCode());
         } catch (ApiException exception) {
             log.warn("PayOS reconciliation deferred orderCode={} code={}", payment.getOrderCode(), exception.getCode());
-            return;
+            return false;
         }
-        if (!validateProviderIdentity(payment, provider)) return;
+        if (!validateProviderIdentity(payment, provider)) return false;
         PaymentLinkStatus providerStatus = provider.getStatus();
-        if (providerStatus == null) return;
+        if (providerStatus == null) return false;
         switch (providerStatus) {
             case PAID -> {
                 if (provider.getAmountPaid() == null || provider.getAmountPaid() != payment.getAmount().longValueExact()) {
                     requireManualReview(payment, null, "reconciliation-paid-amount-mismatch");
-                } else if (payment.getBooking().getStatus() == BookingStatus.CANCELLED || isPaid(payment.getBooking())) {
+                } else if (payment.getBooking().getStatus() == BookingStatus.CANCELLED || payment.getBooking().getStatus() == BookingStatus.COMPLETED
+                        || payment.getBooking().getPaymentStatus() == PaymentStatus.REFUNDED || isPaid(payment.getBooking())) {
                     requireManualReview(payment, null, "late-or-conflicting-reconciliation");
                 } else {
                     markPaid(payment, null, Instant.now(), "server-reconciliation");
                 }
             }
-            case EXPIRED -> closeAndRelease(payment, PaymentTransactionStatus.EXPIRED, "server-reconciliation");
-            case CANCELLED -> closeAndRelease(payment, PaymentTransactionStatus.CANCELLED, "server-reconciliation");
-            case FAILED -> closeAndRelease(payment, PaymentTransactionStatus.FAILED, "server-reconciliation");
-            default -> log.debug("PayOS transaction remains pending orderCode={} providerStatus={}", payment.getOrderCode(), providerStatus);
+            case EXPIRED, CANCELLED, FAILED -> {
+                if (provider.getAmountPaid() == null || provider.getAmountPaid() != 0) {
+                    requireManualReview(payment, null, "closed-link-has-unknown-or-received-money");
+                    return false;
+                }
+                closeAndRelease(payment, PaymentTransactionStatus.valueOf(providerStatus.name()), "server-reconciliation");
+            }
+            default -> {
+                if (provider.getAmountPaid() != null && provider.getAmountPaid() != 0) requireManualReview(payment, null, "incomplete-provider-payment");
+                else payment.setStatus(PaymentTransactionStatus.PENDING);
+                return provider.getStatus() == PaymentLinkStatus.PENDING && provider.getAmountPaid() != null && provider.getAmountPaid() == 0;
+            }
         }
+        return true;
     }
 
     private boolean validateProviderIdentity(PaymentTransaction payment, PaymentLink provider) {
@@ -239,7 +309,7 @@ public class PaymentService {
             requireManualReview(payment, null, "reconciliation-order-mismatch");
             return false;
         }
-        if (payment.getPaymentLinkId() != null && provider.getId() != null && !payment.getPaymentLinkId().equals(provider.getId())) {
+        if (provider.getId() == null || provider.getId().isBlank() || (payment.getPaymentLinkId() != null && !payment.getPaymentLinkId().equals(provider.getId()))) {
             requireManualReview(payment, null, "reconciliation-link-mismatch");
             return false;
         }
@@ -247,6 +317,7 @@ public class PaymentService {
             requireManualReview(payment, null, "reconciliation-amount-mismatch");
             return false;
         }
+        if (payment.getPaymentLinkId() == null) payment.setPaymentLinkId(provider.getId());
         return true;
     }
 
@@ -264,10 +335,9 @@ public class PaymentService {
     }
 
     private void requireManualReview(PaymentTransaction payment, String reference, String reason) {
-        payment.setStatus(PaymentTransactionStatus.REVIEW_REQUIRED);
+        if (payment.getStatus() != PaymentTransactionStatus.PAID) payment.setStatus(PaymentTransactionStatus.REVIEW_REQUIRED);
         payment.setRequiresManualReview(true);
         if (reference != null) payment.setPaymentReference(reference);
-        payment.setPaidAt(Instant.now());
         payment.getBooking().setPaymentRetryAllowed(false);
         log.error("PayOS payment requires manual review orderCode={} bookingId={} reason={}",
                 payment.getOrderCode(), payment.getBooking().getId(), reason);
@@ -277,18 +347,29 @@ public class PaymentService {
         for (PaymentTransaction other : payments.findAllByBookingIdForUpdate(paid.getBooking().getId())) {
             if (other == paid || (paid.getId() != null && Objects.equals(other.getId(), paid.getId()))
                     || other.getStatus() != PaymentTransactionStatus.PENDING) continue;
-            try { gateway.cancel(other.getOrderCode(), "Another payment attempt was completed"); }
+            try {
+                PaymentLink result = gateway.cancel(other.getOrderCode(), "Another payment attempt was completed");
+                if (result == null || result.getStatus() == null) continue;
+                if (!validateProviderIdentity(other, result)) continue;
+                if (result.getStatus() == PaymentLinkStatus.CANCELLED && result.getAmountPaid() != null && result.getAmountPaid() == 0) {
+                    other.setStatus(PaymentTransactionStatus.CANCELLED);
+                    other.setLastReconciledAt(Instant.now());
+                } else if (result.getStatus() == PaymentLinkStatus.PAID || (result.getAmountPaid() != null && result.getAmountPaid() != 0)) {
+                    requireManualReview(other, null, "superseded-link-received-money");
+                }
+                // Unknown or pending result stays PENDING and remains a scheduler candidate.
+            }
             catch (ApiException exception) {
                 log.error("Could not close superseded PayOS attempt orderCode={} code={}", other.getOrderCode(), exception.getCode());
             }
-            other.setStatus(PaymentTransactionStatus.CANCELLED);
         }
     }
 
     private void closeAndRelease(PaymentTransaction payment, PaymentTransactionStatus status, String source) {
         payment.setStatus(status);
         Booking booking = payment.getBooking();
-        if (!isPaid(booking) && booking.getStatus() == BookingStatus.PENDING) {
+        if (booking.getPaymentStatus() == PaymentStatus.UNPAID && booking.getStatus() == BookingStatus.PENDING
+                && !BookingPaymentPolicy.unresolved(payments.findAllByBookingIdForUpdate(booking.getId()))) {
             booking.setStatus(BookingStatus.CANCELLED);
             booking.setPaymentStatus(PaymentStatus.UNPAID);
             booking.setPaymentRetryAllowed(true);
@@ -298,14 +379,27 @@ public class PaymentService {
 
     private void reopenReleasedSlot(Booking booking) {
         if (!booking.isPaymentRetryAllowed()) throw conflict("BOOKING_NOT_PAYABLE", "Lịch hẹn đã bị hủy và không thể thanh toán lại");
-        practitioners.findByIdForUpdate(booking.getPractitioner().getId())
+        practitioners.findByIdForUpdate(booking.getPractitioner().getId()).filter(com.example.backend.model.Practitioner::isActive)
                 .orElseThrow(() -> conflict("SLOT_UNAVAILABLE", "Chuyên viên không còn khả dụng"));
-        boolean occupied = bookings.existsByPractitionerIdAndAppointmentDateAndStartTimeAndStatusNotAndIdNot(
-                booking.getPractitioner().getId(), booking.getAppointmentDate(), booking.getStartTime(), BookingStatus.CANCELLED, booking.getId());
+        if (!booking.getService().isActive() || !booking.getService().getSupplier().getId().equals(booking.getPractitioner().getSupplier().getId()))
+            throw conflict("SLOT_UNAVAILABLE", "Dịch vụ hoặc chuyên viên không còn hợp lệ.");
+        var start = booking.getAppointmentDate().atTime(booking.getStartTime());
+        var end = booking.getAppointmentDate().plusDays(booking.getEndTime().isAfter(booking.getStartTime()) ? 0 : 1).atTime(booking.getEndTime());
+        if (start.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant().isBefore(Instant.now().plusSeconds(1800)))
+            throw conflict("SLOT_UNAVAILABLE", "Thời gian đặt lại không còn hợp lệ.");
+        boolean occupied = bookings.findByPractitionerIdAndAppointmentDateBetweenAndStatusNot(
+                booking.getPractitioner().getId(), booking.getAppointmentDate().minusDays(1), booking.getAppointmentDate().plusDays(1), BookingStatus.CANCELLED)
+                .stream().filter(b -> !b.getId().equals(booking.getId())).anyMatch(b -> {
+                    var otherStart = b.getAppointmentDate().atTime(b.getStartTime());
+                    var otherEnd = b.getAppointmentDate().plusDays(b.getEndTime().isAfter(b.getStartTime()) ? 0 : 1).atTime(b.getEndTime());
+                    return start.isBefore(otherEnd) && end.isAfter(otherStart);
+                });
         if (occupied) {
             booking.setPaymentRetryAllowed(false);
             throw conflict("SLOT_UNAVAILABLE", "Khung giờ đã được người khác đặt sau khi giao dịch trước hết hạn");
         }
+        if (!availability.availability(booking.getService().getId(), booking.getPractitioner().getId(), booking.getAppointmentDate()).availableSlots().contains(booking.getStartTime()))
+            throw conflict("SLOT_UNAVAILABLE", "Khung giờ đặt lại không còn trong lịch làm việc.");
         booking.setStatus(BookingStatus.PENDING);
     }
 
@@ -366,11 +460,67 @@ public class PaymentService {
     }
 
     private ApiException conflict(String code, String message) { return new ApiException(HttpStatus.CONFLICT, code, message); }
+    private ApiException manualError() { return conflict("PAYMENT_REVIEW_REQUIRED", "Giao dịch cần hỗ trợ đối soát. Vui lòng không thanh toán lại và liên hệ hỗ trợ."); }
+    private ApiException reconcilingError() { return conflict("PAYMENT_RECONCILING", "PayOS đang được đối soát. Vui lòng thử làm mới lịch hẹn, không thanh toán lại."); }
+    private ApiException uncertainCancellation(PaymentTransaction payment) {
+        // Retain PENDING for the scheduler, but withdraw the checkout and all customer
+        // actions until verified payment or an approved manual resolution exists.
+        payment.setCheckoutUrl(null);
+        payment.setRequiresManualReview(true);
+        payment.getBooking().setPaymentRetryAllowed(false);
+        return reconcilingError();
+    }
+    private ApiException paidCancellationError() { return conflict("PAYMENT_ALREADY_PAID", "Lịch hẹn đã thanh toán hoặc đặt cọc. Không thể tự hủy hay thanh toán lại; vui lòng liên hệ hỗ trợ."); }
+
+    /** Called under the booking lock. Returns a business outcome so verified evidence can commit. */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public ApiException cancelUnpaidLocked(Booking booking) {
+        List<PaymentTransaction> attempts = payments.findAllByBookingIdForUpdate(booking.getId());
+        if (BookingPaymentPolicy.manual(attempts)) return manualError();
+        if (isPaid(booking)) return paidCancellationError();
+        if (booking.getPaymentStatus() != PaymentStatus.UNPAID) return conflict("BOOKING_NOT_CANCELLABLE", "Trạng thái thanh toán cần hỗ trợ xử lý.");
+        for (PaymentTransaction p : attempts) {
+            if (p.getStatus() == PaymentTransactionStatus.PAID) return conflict("PAYMENT_STATE_CONFLICT", "Giao dịch đã ghi nhận thanh toán. Vui lòng liên hệ hỗ trợ.");
+            // Repeated, already verified customer cancellation has no provider side effect.
+            if (booking.getStatus() == BookingStatus.CANCELLED && !booking.isPaymentRetryAllowed()
+                    && p.getStatus() != PaymentTransactionStatus.PENDING && p.getLastReconciledAt() != null) continue;
+            if (!reconcileLocked(p)) {
+                return BookingPaymentPolicy.manual(attempts) ? manualError() : uncertainCancellation(p);
+            }
+            if (isPaid(booking)) return paidCancellationError();
+            if (BookingPaymentPolicy.manual(attempts)) return manualError();
+            if (p.getStatus() == PaymentTransactionStatus.PENDING) {
+                try {
+                    PaymentLink closed = gateway.cancel(p.getOrderCode(), "Customer requested booking cancellation");
+                    if (closed == null || closed.getStatus() == null) return uncertainCancellation(p);
+                    if (!validateProviderIdentity(p, closed)) return manualError();
+                    if (closed.getStatus() == PaymentLinkStatus.PAID) {
+                        if (closed.getAmountPaid() != null && closed.getAmountPaid() == p.getAmount().longValueExact()
+                                && booking.getStatus() != BookingStatus.CANCELLED) markPaid(p, null, Instant.now(), "cancel-reconciliation");
+                        else requireManualReview(p, null, "cancel-raced-with-payment");
+                        return BookingPaymentPolicy.manual(attempts) ? manualError() : paidCancellationError();
+                    }
+                    if (closed.getStatus() != PaymentLinkStatus.CANCELLED || closed.getAmountPaid() == null) return uncertainCancellation(p);
+                    if (closed.getAmountPaid() != 0) { requireManualReview(p, null, "cancel-link-received-money"); return manualError(); }
+                    p.setStatus(PaymentTransactionStatus.CANCELLED); p.setLastReconciledAt(Instant.now());
+                } catch (ApiException error) { return uncertainCancellation(p); }
+            }
+        }
+        if (BookingPaymentPolicy.unresolved(attempts)) return reconcilingError();
+        booking.setStatus(BookingStatus.CANCELLED); booking.setPaymentRetryAllowed(false);
+        return null;
+    }
 
     private PayOSPaymentResponse response(PaymentTransaction payment) {
         Booking booking = payment.getBooking();
+        List<PaymentTransaction> attempts = payments.findAllByBookingIdOrderByCreatedAtDesc(booking.getId());
+        boolean manual = payment.isRequiresManualReview() || BookingPaymentPolicy.manual(attempts);
+        boolean checkoutAllowed = payment.getStatus() == PaymentTransactionStatus.PENDING && !isExpired(payment)
+                && booking.getStatus() != BookingStatus.CANCELLED && booking.getStatus() != BookingStatus.COMPLETED
+                && booking.getPaymentStatus() == PaymentStatus.UNPAID && !manual
+                && attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).count() <= 1;
         return new PayOSPaymentResponse(booking.getId(), booking.getBookingCode(), payment.getOrderCode(),
-                payment.getPaymentLinkId(), payment.getCheckoutUrl(), payment.getAmount(), payment.getRemainingAmount(),
-                payment.getPaymentOption(), payment.getStatus(), payment.isRequiresManualReview(), payment.getExpiresAt());
+                payment.getPaymentLinkId(), checkoutAllowed ? payment.getCheckoutUrl() : null, payment.getAmount(), payment.getRemainingAmount(),
+                payment.getPaymentOption(), payment.getStatus(), manual, payment.getExpiresAt());
     }
 }

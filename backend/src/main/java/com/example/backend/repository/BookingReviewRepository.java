@@ -13,9 +13,12 @@ import java.util.List;
 public interface BookingReviewRepository extends JpaRepository<BookingReview, Long> {
     String VALID_BOOKING = "r.booking.status = :#{T(com.example.backend.model.DomainEnums.BookingStatus).COMPLETED} "
             + "and r.booking.paymentStatus in (:#{T(com.example.backend.model.DomainEnums.PaymentStatus).PAID}, "
-            + ":#{T(com.example.backend.model.DomainEnums.PaymentStatus).PARTIALLY_PAID}) and r.rating between 1 and 5";
+            + ":#{T(com.example.backend.model.DomainEnums.PaymentStatus).PARTIALLY_PAID}) and r.rating between 1 and 5 "
+            + "and not exists (select p.id from PaymentTransaction p where p.booking.id = r.booking.id and "
+            + "(p.requiresManualReview = true or p.status in (:#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).PENDING}, "
+            + ":#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).REVIEW_REQUIRED})))";
     Optional<BookingReview> findByBookingIdAndTargetType(Long bookingId, ReviewTargetType targetType);
-    @Query("select r from BookingReview r where r.supplier.id = :supplierId and " + VALID_BOOKING + " order by r.createdAt desc, r.id desc")
+    @Query("select r from BookingReview r where r.supplier.id = :supplierId and r.targetType = :#{T(com.example.backend.model.DomainEnums.ReviewTargetType).SUPPLIER} and " + VALID_BOOKING + " order by r.createdAt desc, r.id desc")
     List<BookingReview> findBySupplierIdOrderByCreatedAtDesc(@Param("supplierId") Long supplierId, Pageable pageable);
 
     @Query("select r from BookingReview r where r.service.id = :serviceId and r.targetType = :targetType and " + VALID_BOOKING + " order by r.createdAt desc, r.id desc")

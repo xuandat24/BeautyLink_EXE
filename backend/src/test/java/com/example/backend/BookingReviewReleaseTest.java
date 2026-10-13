@@ -122,17 +122,42 @@ class BookingReviewReleaseTest {
         try { action.run(); return "OK"; } catch (ApiException e) { return e.getCode(); }
     }
 
+    private List<String> parallel(Runnable cancel, Runnable other, boolean cancelFirst) throws Exception {
+        CyclicBarrier start = new CyclicBarrier(2);
+        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+            java.util.concurrent.Callable<String> a = () -> { Thread.currentThread().setName("cancel-worker"); start.await(5, TimeUnit.SECONDS); return outcome(cancel); };
+            java.util.concurrent.Callable<String> b = () -> { Thread.currentThread().setName("other-worker"); start.await(5, TimeUnit.SECONDS); return outcome(other); };
+            Future<String> first = pool.submit(cancelFirst ? a : b), second = pool.submit(cancelFirst ? b : a);
+            String x = first.get(10, TimeUnit.SECONDS), y = second.get(10, TimeUnit.SECONDS);
+            return cancelFirst ? List.of(x, y) : List.of(y, x);
+        }
+    }
+
     @ParameterizedTest @CsvSource({"true,true", "true,false", "false,true", "false,false"})
     void cancelAndPaidProviderNeverLoseBookingState(boolean cancelFirst, boolean useWebhook) throws Exception {
         Booking b = fixture(BookingStatus.PENDING, PaymentStatus.UNPAID); PaymentTransaction p = payment(b);
-        Webhook w = webhook(p); providerPaid(p); UserAccount c = customer();
-        Runnable cancel = () -> bookingService.cancel(c, b.getId());
-        Runnable paid = () -> { if (useWebhook) paymentService.handleWebhook(w); else paymentService.reconcileById(p.getId()); };
-        assertEquals(List.of("OK", "OK"), serialize(b.getId(), cancelFirst ? cancel : paid, cancelFirst ? paid : cancel));
+        Webhook w = webhook(p); UserAccount c = customer();
+        var paidLink = new PaymentLink(); paidLink.setId(p.getPaymentLinkId()); paidLink.setOrderCode(p.getOrderCode());
+        paidLink.setAmount(p.getAmount().longValueExact()); paidLink.setAmountPaid(p.getAmount().longValueExact()); paidLink.setStatus(PaymentLinkStatus.PAID);
+        var pendingLink = new PaymentLink(); pendingLink.setId(p.getPaymentLinkId()); pendingLink.setOrderCode(p.getOrderCode());
+        pendingLink.setAmount(p.getAmount().longValueExact()); pendingLink.setAmountPaid(0L); pendingLink.setStatus(PaymentLinkStatus.PENDING);
+        var closedLink = new PaymentLink(); closedLink.setId(p.getPaymentLinkId()); closedLink.setOrderCode(p.getOrderCode());
+        closedLink.setAmount(p.getAmount().longValueExact()); closedLink.setAmountPaid(0L); closedLink.setStatus(PaymentLinkStatus.CANCELLED);
+        when(gateway.get(p.getOrderCode())).thenAnswer(i -> Thread.currentThread().getName().equals("cancel-worker") ? pendingLink : paidLink);
+        when(gateway.cancel(eq(p.getOrderCode()), any())).thenReturn(closedLink);
+        List<String> results = parallel(() -> bookingService.cancel(c, b.getId()),
+                () -> { if (useWebhook) paymentService.handleWebhook(w); else paymentService.reconcileById(p.getId()); }, cancelFirst);
+        assertEquals("OK", results.get(1));
+        boolean cancelled = results.getFirst().equals("OK");
+        if (!cancelled) assertEquals("PAYMENT_ALREADY_PAID", results.getFirst());
         Booking finalBooking = bookings.findById(b.getId()).orElseThrow(); PaymentTransaction finalPayment = payments.findById(p.getId()).orElseThrow();
-        assertEquals(BookingStatus.CANCELLED, finalBooking.getStatus()); assertFalse(finalBooking.isPaymentRetryAllowed());
-        assertEquals(cancelFirst ? PaymentTransactionStatus.REVIEW_REQUIRED : PaymentTransactionStatus.PAID, finalPayment.getStatus());
-        assertEquals(cancelFirst ? PaymentStatus.UNPAID : PaymentStatus.PARTIALLY_PAID, finalBooking.getPaymentStatus());
+        assertEquals(cancelled ? BookingStatus.CANCELLED : BookingStatus.CONFIRMED, finalBooking.getStatus());
+        assertFalse(finalBooking.isPaymentRetryAllowed());
+        // Reconciliation skips a terminal link whose closure was verified. A later signed
+        // webhook is independent evidence and must escalate rather than resurrect it.
+        assertEquals(cancelled ? (useWebhook ? PaymentTransactionStatus.REVIEW_REQUIRED : PaymentTransactionStatus.CANCELLED)
+                : PaymentTransactionStatus.PAID, finalPayment.getStatus());
+        assertEquals(cancelled ? PaymentStatus.UNPAID : PaymentStatus.PARTIALLY_PAID, finalBooking.getPaymentStatus());
     }
     @Test void duplicateWebhookAndReconciliationAreSerializedAndIdempotent() throws Exception {
         Booking b = fixture(BookingStatus.PENDING, PaymentStatus.UNPAID); PaymentTransaction p = payment(b); Webhook w = webhook(p);
@@ -147,8 +172,11 @@ class BookingReviewReleaseTest {
     void completeAndCancelSerializeWithoutLostUpdate(boolean completeFirst) throws Exception {
         Booking b = fixture(BookingStatus.CONFIRMED, PaymentStatus.PARTIALLY_PAID); UserAccount c = customer();
         Runnable complete = () -> bookingService.complete(c, b.getId()), cancel = () -> bookingService.cancel(c, b.getId());
-        assertEquals(List.of("OK", completeFirst ? "BOOKING_COMPLETED" : "BOOKING_NOT_COMPLETABLE"), serialize(b.getId(), completeFirst ? complete : cancel, completeFirst ? cancel : complete));
-        assertEquals(completeFirst ? BookingStatus.COMPLETED : BookingStatus.CANCELLED, bookings.findById(b.getId()).orElseThrow().getStatus());
+        // Policy changed: paid bookings cannot self-cancel, regardless of which transaction wins.
+        List<String> results = parallel(cancel, complete, !completeFirst);
+        assertEquals("OK", results.get(1));
+        assertTrue(Set.of("BOOKING_COMPLETED", "PAYMENT_ALREADY_PAID").contains(results.getFirst()));
+        assertEquals(BookingStatus.COMPLETED, bookings.findById(b.getId()).orElseThrow().getStatus());
         assertEquals(PaymentStatus.PARTIALLY_PAID, bookings.findById(b.getId()).orElseThrow().getPaymentStatus());
     }
     @Test void twoCompletionsAreIdempotent() throws Exception {

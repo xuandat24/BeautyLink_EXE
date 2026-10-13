@@ -7,19 +7,29 @@ import com.example.backend.repository.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import java.time.*;
 import java.util.*;
 import static com.example.backend.model.DomainEnums.*;
 
 @Service
 public class BookingService {
+    private final PaymentService payments;
+    private final PaymentTransactionRepository paymentTransactions;
+    private final TransactionTemplate cancellationTransactions;
     private final BookingCompletionPolicy completion;
     private final BookingRepository bookings; private final ServiceOfferingRepository services; private final PractitionerRepository practitioners; private final SupplierRepository suppliers; private final AvailabilityService availability; private final BookingReviewRepository reviews;
-    public BookingService(BookingRepository bookings, ServiceOfferingRepository services, PractitionerRepository practitioners, SupplierRepository suppliers, AvailabilityService availability, BookingReviewRepository reviews, BookingCompletionPolicy completion) {
+    public BookingService(BookingRepository bookings, ServiceOfferingRepository services, PractitionerRepository practitioners, SupplierRepository suppliers, AvailabilityService availability, BookingReviewRepository reviews, BookingCompletionPolicy completion, PaymentService payments, PaymentTransactionRepository paymentTransactions, PlatformTransactionManager manager) {
+        this.payments = payments; this.paymentTransactions = paymentTransactions;
+        this.cancellationTransactions = new TransactionTemplate(manager);
+        this.cancellationTransactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.cancellationTransactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         this.completion = completion;
         this.bookings = bookings; this.services = services; this.practitioners = practitioners; this.suppliers = suppliers; this.availability = availability; this.reviews = reviews;
     }
-    @Transactional public BookingResponse create(UserAccount customer, CreateBookingRequest request) {
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED) public BookingResponse create(UserAccount customer, CreateBookingRequest request) {
         ServiceOffering service = services.findById(request.serviceId()).filter(ServiceOffering::isActive).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SERVICE_NOT_FOUND", "Không tìm thấy dịch vụ"));
         Practitioner practitioner;
         if (request.practitionerId() != null) {
@@ -37,6 +47,14 @@ public class BookingService {
         if (!practitioner.getSupplier().getId().equals(service.getSupplier().getId())) throw new ApiException(HttpStatus.BAD_REQUEST, "PRACTITIONER_MISMATCH", "Chuyên viên không cung cấp dịch vụ này");
         List<LocalTime> slots = availability.availability(service.getId(), practitioner.getId(), request.appointmentDate()).availableSlots();
         if (!slots.contains(request.startTime())) throw new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Khung giờ này không còn khả dụng");
+        var start = request.appointmentDate().atTime(request.startTime());
+        if (!start.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant().isAfter(Instant.now()))
+            throw new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Lịch hẹn đã bắt đầu hoặc không còn hợp lệ.");
+        var end = start.plusMinutes(service.getDurationMinutes());
+        // Practitioner mutex + READ_COMMITTED avoids an old snapshot after waiting on a competing create/retry.
+        if (bookings.findByPractitionerIdAndAppointmentDateBetweenAndStatusNot(practitioner.getId(), request.appointmentDate().minusDays(1), request.appointmentDate().plusDays(1), BookingStatus.CANCELLED)
+                .stream().anyMatch(b -> BookingCompletionPolicy.overlaps(b, start, end)))
+            throw new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Khung giờ này không còn khả dụng");
         Booking booking = new Booking(); booking.setBookingCode("BL-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         booking.setCustomer(customer); booking.setSupplier(service.getSupplier()); booking.setService(service); booking.setPractitioner(practitioner);
         booking.setAppointmentDate(request.appointmentDate()); booking.setStartTime(request.startTime()); booking.setEndTime(request.startTime().plusMinutes(service.getDurationMinutes()));
@@ -49,11 +67,18 @@ public class BookingService {
         Supplier supplier = suppliers.findByOwnerId(owner.getId()).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND", "Không tìm thấy nhà cung cấp"));
         return bookings.findBySupplierIdOrderByAppointmentDateDescStartTimeDesc(supplier.getId()).stream().map(this::response).toList();
     }
-    @Transactional public BookingResponse cancel(UserAccount customer, Long bookingId) {
+    private record Cancellation(BookingResponse response, com.example.backend.exception.ApiException error) {}
+    public BookingResponse cancel(UserAccount customer, Long bookingId) {
+        Cancellation result = cancellationTransactions.execute(s -> {
         Booking booking = bookings.findByIdForUpdate(bookingId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "Không tìm thấy lịch hẹn"));
         if (!booking.getCustomer().getId().equals(customer.getId())) throw new ApiException(HttpStatus.FORBIDDEN, "BOOKING_FORBIDDEN", "Bạn không thể hủy lịch hẹn này");
         if (booking.getStatus() == BookingStatus.COMPLETED) throw new ApiException(HttpStatus.CONFLICT, "BOOKING_COMPLETED", "Lịch hẹn đã hoàn thành");
-        booking.setStatus(BookingStatus.CANCELLED); booking.setPaymentRetryAllowed(false); return response(booking);
+        ApiException error = payments.cancelUnpaidLocked(booking);
+        return new Cancellation(error == null ? response(booking) : null, error);
+        });
+        // Verified PAID/manual-review evidence commits even when the customer gets a business conflict.
+        if (result.error() != null) throw result.error();
+        return result.response();
     }
     @Transactional public BookingResponse complete(UserAccount customer, Long bookingId) {
         Booking booking = bookings.findByIdForUpdate(bookingId)
@@ -61,6 +86,8 @@ public class BookingService {
         if (!booking.getCustomer().getId().equals(customer.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "BOOKING_FORBIDDEN", "Bạn chỉ có thể xác nhận lịch hẹn của chính mình");
         }
+        if (paymentTransactions.hasUnresolvedByBookingId(bookingId))
+            throw new ApiException(HttpStatus.CONFLICT, "PAYMENT_REVIEW_REQUIRED", "Giao dịch cần đối soát. Vui lòng liên hệ hỗ trợ trước khi xác nhận hoàn thành.");
         // Retrying an already accepted confirmation is safe.
         if (booking.getStatus() == BookingStatus.COMPLETED) return response(booking);
         if (!completion.canComplete(booking)) {
@@ -72,13 +99,17 @@ public class BookingService {
         return response(booking);
     }
     private BookingResponse response(Booking b) {
+        var attempts = paymentTransactions.findAllByBookingIdOrderByCreatedAtDesc(b.getId());
+        boolean blocked = BookingPaymentPolicy.unresolved(attempts);
+        String reason = BookingPaymentPolicy.reason(b, attempts);
         BookingReviewResponse serviceReview = reviews.findByBookingIdAndTargetType(b.getId(), ReviewTargetType.SERVICE).map(this::reviewResponse).orElse(null);
         BookingReviewResponse supplierReview = reviews.findByBookingIdAndTargetType(b.getId(), ReviewTargetType.SUPPLIER).map(this::reviewResponse).orElse(null);
         return new BookingResponse(b.getId(), b.getBookingCode(), b.getService().getId(), b.getService().getName(),
                 b.getService().getImageUrl(), b.getSupplier().getId(), b.getSupplier().getName(),
                 b.getSupplier().getImageUrl(), b.getSupplier().getAddressLine(), b.getPractitioner().getDisplayName(),
                 b.getAppointmentDate(), b.getStartTime(), b.getEndTime(), b.getTotalAmount(), b.getStatus(),
-                b.getPaymentStatus(), ReviewService.isEligible(b), serviceReview, supplierReview, completion.canComplete(b));
+                b.getPaymentStatus(), !blocked && ReviewService.isEligible(b), serviceReview, supplierReview, !blocked && completion.canComplete(b),
+                BookingPaymentPolicy.canCancel(b, attempts), reason == null && (b.getStatus() != BookingStatus.CANCELLED || b.isPaymentRetryAllowed()), reason);
     }
     private BookingReviewResponse reviewResponse(BookingReview review) {
         return new BookingReviewResponse(review.getId(), review.getBooking().getId(), review.getTargetType(), review.getRating(), review.getComment(), review.getCreatedAt(), review.getUpdatedAt());

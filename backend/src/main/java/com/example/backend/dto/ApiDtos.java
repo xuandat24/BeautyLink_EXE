@@ -115,7 +115,8 @@ public final class ApiDtos {
                                   LocalTime endTime, BigDecimal totalAmount, BookingStatus status,
                                   PaymentStatus paymentStatus, boolean reviewEligible,
                                   BookingReviewResponse serviceReview, BookingReviewResponse supplierReview,
-                                  boolean completionEligible) {}
+                                  boolean completionEligible, boolean cancelEligible,
+                                  boolean paymentEligible, String paymentBlockerReason) {}
     public record BookingHistoryStatusResponse(boolean hasPreviousBooking) {}
     public record UpsertBookingReviewRequest(
             @NotNull(message = "Vui lòng chọn số sao") @Min(value = 1, message = "Đánh giá tối thiểu 1 sao") @Max(value = 5, message = "Đánh giá tối đa 5 sao") Integer rating,

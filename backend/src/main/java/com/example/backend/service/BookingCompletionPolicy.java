@@ -25,9 +25,15 @@ public class BookingCompletionPolicy {
     }
 
     private Instant scheduledEnd(Booking booking) {
+        return appointmentEnd(booking).atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant();
+    }
+    public static LocalDateTime appointmentEnd(Booking booking) {
         LocalDate endDate = booking.getAppointmentDate();
         // A service may finish after midnight.
         if (!booking.getEndTime().isAfter(booking.getStartTime())) endDate = endDate.plusDays(1);
-        return endDate.atTime(booking.getEndTime()).atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant();
+        return endDate.atTime(booking.getEndTime());
+    }
+    public static boolean overlaps(Booking other, LocalDateTime start, LocalDateTime end) {
+        return start.isBefore(appointmentEnd(other)) && end.isAfter(other.getAppointmentDate().atTime(other.getStartTime()));
     }
 }

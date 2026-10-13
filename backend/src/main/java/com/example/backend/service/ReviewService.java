@@ -13,10 +13,12 @@ import static com.example.backend.model.DomainEnums.*;
 public class ReviewService {
     private final BookingRepository bookings;
     private final BookingReviewRepository reviews;
+    private final PaymentTransactionRepository payments;
 
-    public ReviewService(BookingRepository bookings, BookingReviewRepository reviews) {
+    public ReviewService(BookingRepository bookings, BookingReviewRepository reviews, PaymentTransactionRepository payments) {
         this.bookings = bookings;
         this.reviews = reviews;
+        this.payments = payments;
     }
 
     @Transactional
@@ -26,7 +28,7 @@ public class ReviewService {
         if (!booking.getCustomer().getId().equals(customer.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "REVIEW_FORBIDDEN", "Bạn chỉ có thể đánh giá đơn hàng của chính mình");
         }
-        if (!isEligible(booking)) {
+        if (!isEligible(booking) || payments.hasUnresolvedByBookingId(bookingId)) {
             throw new ApiException(HttpStatus.CONFLICT, "REVIEW_NOT_ELIGIBLE", "Chỉ lịch hẹn đã hoàn thành dịch vụ và có thanh toán hoặc đặt cọc mới có thể đánh giá");
         }
 

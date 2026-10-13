@@ -19,7 +19,7 @@ class BookingLifecycleTest {
     private final BookingRepository bookings = mock(BookingRepository.class);
     private final BookingReviewRepository reviews = mock(BookingReviewRepository.class);
     private final BookingService service = new BookingService(bookings, mock(ServiceOfferingRepository.class),
-            mock(PractitionerRepository.class), mock(SupplierRepository.class), mock(AvailabilityService.class), reviews, policy);
+            mock(PractitionerRepository.class), mock(SupplierRepository.class), mock(AvailabilityService.class), reviews, policy, mock(PaymentService.class), mock(PaymentTransactionRepository.class), mock(org.springframework.transaction.PlatformTransactionManager.class));
 
     @ParameterizedTest
     @CsvSource({
@@ -36,7 +36,7 @@ class BookingLifecycleTest {
         assertEquals(canReview, ReviewService.isEligible(booking));
         if (!canReview) {
             when(bookings.findByIdForUpdate(1L)).thenReturn(Optional.of(booking));
-            ReviewService reviewService = new ReviewService(bookings, reviews);
+            ReviewService reviewService = new ReviewService(bookings, reviews, mock(PaymentTransactionRepository.class));
             for (ReviewTargetType target : ReviewTargetType.values()) {
                 ApiException error = assertThrows(ApiException.class,
                         () -> reviewService.upsert(booking.getCustomer(), 1L, target, new UpsertBookingReviewRequest(5, "Review")));
@@ -95,7 +95,7 @@ class BookingLifecycleTest {
         UserAccount stranger = new UserAccount(); stranger.setId(2L);
         assertEquals("BOOKING_FORBIDDEN", assertThrows(ApiException.class, () -> service.complete(stranger, 1L)).getCode());
         assertEquals("REVIEW_FORBIDDEN", assertThrows(ApiException.class,
-                () -> new ReviewService(bookings, reviews).upsert(stranger, 1L, ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, null))).getCode());
+                () -> new ReviewService(bookings, reviews, mock(PaymentTransactionRepository.class)).upsert(stranger, 1L, ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, null))).getCode());
         verifyNoInteractions(reviews);
     }
 

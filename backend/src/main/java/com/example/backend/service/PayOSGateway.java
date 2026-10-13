@@ -33,7 +33,7 @@ public class PayOSGateway {
         PayOS payOS = new PayOS(clientId, apiKey, checksumKey);
         try {
             return payOS.paymentRequests().create(request);
-        } catch (PayOSException ex) {
+        } catch (RuntimeException ex) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYOS_CREATE_FAILED", "Không thể tạo phiên thanh toán PayOS. Vui lòng thử lại");
         } finally {
             payOS.close();
@@ -57,7 +57,7 @@ public class PayOSGateway {
         PayOS payOS = new PayOS(clientId, apiKey, checksumKey);
         try {
             return payOS.paymentRequests().get(orderCode);
-        } catch (PayOSException ex) {
+        } catch (RuntimeException ex) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYOS_RECONCILIATION_FAILED", "Không thể đối soát giao dịch với PayOS. Vui lòng thử lại");
         } finally {
             payOS.close();
@@ -69,7 +69,7 @@ public class PayOSGateway {
         PayOS payOS = new PayOS(clientId, apiKey, checksumKey);
         try {
             return payOS.paymentRequests().cancel(orderCode, reason);
-        } catch (PayOSException ex) {
+        } catch (RuntimeException ex) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYOS_CANCEL_FAILED", "Không thể đóng phiên thanh toán PayOS cũ");
         } finally {
             payOS.close();
@@ -91,6 +91,7 @@ public class PayOSGateway {
     public boolean isConfigured() {
         return StringUtils.hasText(clientId) && StringUtils.hasText(apiKey) && StringUtils.hasText(checksumKey);
     }
+    public void requireConfigured() { ensureConfigured(); }
 
     private void ensureConfigured() {
         if (!isConfigured()) {

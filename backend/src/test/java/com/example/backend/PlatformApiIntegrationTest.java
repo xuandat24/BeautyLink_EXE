@@ -461,16 +461,16 @@ class PlatformApiIntegrationTest {
                 .andExpect(status().isForbidden());
         if (eligible) {
             long publicReviewId = reviews.findByBookingIdAndTargetType(id, com.example.backend.model.DomainEnums.ReviewTargetType.SERVICE).orElseThrow().getId();
-            mvc.perform(get("/api/v1/suppliers/" + offering.getSupplier().getId()))
-                    .andExpect(status().isOk()).andExpect(jsonPath("$.reviews[*].id", hasItem((int) publicReviewId)));
+            mvc.perform(get("/api/v1/services/" + offering.getId() + "/reviews"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.content[*].id", hasItem((int) publicReviewId)));
             assertTrue(reviews.findBySupplierIdOrderByCreatedAtDesc(offering.getSupplier().getId(), org.springframework.data.domain.PageRequest.of(0, 100)).stream()
                     .anyMatch(review -> review.getBooking().getId().equals(id)));
             // Old reviews on non-completed bookings must not remain publicly verified.
             booking.setStatus(BookingStatus.CONFIRMED); bookings.flush();
             assertFalse(reviews.findBySupplierIdOrderByCreatedAtDesc(offering.getSupplier().getId(), org.springframework.data.domain.PageRequest.of(0, 100)).stream()
                     .anyMatch(review -> review.getBooking().getId().equals(id)));
-            mvc.perform(get("/api/v1/suppliers/" + offering.getSupplier().getId()))
-                    .andExpect(status().isOk()).andExpect(jsonPath("$.reviews[*].id", not(hasItem((int) publicReviewId))));
+            mvc.perform(get("/api/v1/services/" + offering.getId() + "/reviews"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.content[*].id", not(hasItem((int) publicReviewId))));
         }
     }
 
@@ -613,6 +613,7 @@ class PlatformApiIntegrationTest {
             var response = mock(CreatePaymentLinkResponse.class);
             when(response.getOrderCode()).thenReturn(request.getOrderCode());
             when(response.getAmount()).thenReturn(request.getAmount());
+            when(response.getStatus()).thenReturn(vn.payos.model.v2.paymentRequests.PaymentLinkStatus.PENDING);
             when(response.getPaymentLinkId()).thenReturn("payos-link-test");
             when(response.getCheckoutUrl()).thenReturn("https://pay.payos.vn/web/test");
             return response;

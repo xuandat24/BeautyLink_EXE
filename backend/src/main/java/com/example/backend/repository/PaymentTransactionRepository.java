@@ -13,6 +13,9 @@ import java.util.Optional;
 import com.example.backend.model.DomainEnums.PaymentTransactionStatus;
 
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, Long> {
+    @Query("select (count(p) > 0) from PaymentTransaction p where p.booking.id = :bookingId and (p.requiresManualReview = true or p.status in "
+            + "(:#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).PENDING}, :#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).REVIEW_REQUIRED}))")
+    boolean hasUnresolvedByBookingId(@Param("bookingId") Long bookingId);
     Optional<PaymentTransaction> findFirstByBookingIdOrderByCreatedAtDesc(Long bookingId);
     Optional<PaymentTransaction> findFirstByBookingIdAndStatusOrderByCreatedAtDesc(Long bookingId, PaymentTransactionStatus status);
     List<PaymentTransaction> findAllByBookingIdOrderByCreatedAtDesc(Long bookingId);
