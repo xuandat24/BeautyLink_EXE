@@ -32,13 +32,16 @@ Older sections below are historical and are not current acceptance evidence.
 | Preserve paid primary | Separate close-zero-secondary action, owner option 1 approved | FULL_100/DEPOSIT_50 primary unchanged; financial/multi-paid/manual cases refused; completion/review reopen only after blocker removed |
 | Money evidence race | Booking-first locking retained, signed PAID on manual attempt no longer ignored; exact late GET PAID observation kept | Concurrent closure/webhook and retained cancel/reconciliation/complete/review tests PASS; no booking revival |
 | Real reviews/regression | Existing scoped public queries/eligibility unchanged | Full Java 21 236 tests + frontend 40 + browser SERVICE/SUPPLIER upsert/reload/details PASS |
-| Artifact safety | Test-classpath fixture/fake gateway only, no runtime/test dependency changes | Production JAR/bundle fixture scan PASS; Docker/MySQL/final-HEAD browser await CI |
+| Artifact safety | Test-classpath fixture/fake gateway only, no runtime/test dependency changes | Production JAR/bundle fixture scan PASS; source HEAD 4b0450f CI Docker/MySQL/browser PASS |
 
 App.tsx changes are restricted to restoring/clearing continuation navigation; they do not change auth.
 SupportService/SupportReportRepository changes directly protect/persist operator audit; no generic support
 workflow refactor. No entities/schema, OTP/auth/JWT/KYC, money/voucher/deposit formulas, supplier onboarding,
 new notifications or runtime dependencies changed. New scope inventory is fixed; no further feature work.
 Existing CI at 4841be0 is baseline only; final HEAD CI must independently pass before CODE READY.
+Source/release HEAD `4b0450f` CI https://github.com/xuandat24/BeautyLink_EXE/actions/runs/38357426376
+PASS: backend 236, MySQL 107, frontend 40/typecheck/build, Docker and browser. Documentation-only final
+checkpoint must also pass its own exact-HEAD CI, reported separately; no runtime changes after this evidence.
 Production/PayOS live smoke NOT RUN. Restore metadata inspected, but isolated restore target/approval absent.
 
 ## Current safety follow-up (2026-10-13; supersedes historical cancellation policy below)

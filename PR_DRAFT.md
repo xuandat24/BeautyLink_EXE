@@ -28,6 +28,9 @@ Continues baseline `4841be0` without rewriting any existing commit. No merge/dep
 - One CI browser gate (temporary test tooling, no repository runtime dependency), retained isolated MySQL
   concurrency/Docker gates. Final commit's own CI evidence will be linked in the final report/handoff;
   previous 4841be0 CI is not proof of this release.
+  Source/release `4b0450f` CI PASS: https://github.com/xuandat24/BeautyLink_EXE/actions/runs/38357426376
+  (backend 236, MySQL 107, frontend 40/typecheck/build, Docker, browser). Final docs-only checkpoint
+  gets its own exact-HEAD CI; no later runtime changes.
 - Backup metadata/chunks/hash read-only checked; no restore target authorized, restore NOT RUN. Railway
   main auto-deploy config observed; Vercel project read 403 and frontend promotion hold unverified. No
   production mutation/payment/restore/config changes. Runbook includes exact proof/actions/SLA proposals,
