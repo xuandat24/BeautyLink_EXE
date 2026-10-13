@@ -10,7 +10,7 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 
 - Added a complete public supplier shop page inspired by marketplace storefronts. It includes the supplier banner and profile, verification and rating summaries, searchable/filterable services, customer reviews, store details, location map, sharing, and direct booking.
 - Supplier names and discovery cards now open the corresponding shop, and each shop has a shareable `#shop/{supplierId}` route.
-- Added database-backed service and supplier reviews from customer bookings. A paid, non-cancelled booking can hold one editable 0–5 star review for the service and one for the supplier.
+- Added database-backed service and supplier reviews. A completed booking with verified PAID/PARTIALLY_PAID payment and no unresolved payment blocker can hold one editable 1–5 star review per target.
 - Expanded profile booking cards with service imagery, supplier identity and address, practitioner/time/price details, and a direct review action without opening the full appointment page.
 - Added a dismissible discovery popup that lets guests and signed-in users choose Hà Nội or Thành phố Hồ Chí Minh and a service category before browsing.
 - Added Vietnamese/English switching across the primary homepage, authentication, discovery, service, and booking flows.
@@ -282,8 +282,8 @@ Guests do not have database accounts. They can browse the catalog but must regis
 
 1. Sign in as the customer who placed the booking.
 2. Open **Tổng quan & Lịch hẹn**.
-3. Select **Đánh giá** on a paid, non-cancelled booking.
-4. Submit separate 0–5 star scores and optional comments for the service and the supplier.
+3. After the appointment ends, confirm **Đã sử dụng dịch vụ** on a confirmed paid/deposit-paid booking. Pending/manual-review payments must be resolved first.
+4. Only after completion, submit separate 1–5 star scores and optional comments for the service and the supplier.
 5. Reopen **Xem / sửa đánh giá** if either review needs to be updated.
 
 The backend enforces booking ownership and payment eligibility; hiding or changing the frontend button cannot bypass these rules.
@@ -305,6 +305,42 @@ The backend enforces booking ownership and payment eligibility; hiding or changi
 5. Save the active service. In local demo mode, manually created suppliers are shown before seeded suppliers on the homepage.
 
 Uploaded JPG, PNG, and WEBP files are resized in the browser and stored with the related MySQL record. The original file limit is 10 MB.
+
+### Complete an appointment and write verified reviews
+
+1. Booking creation stores `PENDING / UNPAID`. A verified PayOS payment changes it to
+   `CONFIRMED / PARTIALLY_PAID` (deposit) or `CONFIRMED / PAID` (full payment).
+2. After the scheduled end time in Vietnam, the booking owner can select **Đã sử dụng dịch vụ**
+   in the bookings page, account bookings tab, or appointments modal, and confirm completion.
+   `PATCH /api/v1/bookings/{id}/complete` checks ownership, verified payment, status, and time
+   on the server; repeating an accepted completion is idempotent.
+3. `COMPLETED` with `PAID` or `PARTIALLY_PAID` enables separate service and supplier reviews.
+   Each target can be edited using the existing PUT API; the unique booking/target constraint
+   prevents duplicate reviews. Deposits remain eligible because the remaining balance may be
+   settled at the salon; completion does not invent an online balance payment.
+4. `PENDING`, `CONFIRMED`, `CANCELLED`, unpaid, and refunded bookings cannot be reviewed.
+   Paid/deposit-paid and completed bookings cannot be self-cancelled. Public review lists and aggregates exclude reviews
+   whose booking does not satisfy the completed/paid rule, including legacy premature reviews.
+
+The API returns `completionEligible`, `reviewEligible`, `cancelEligible`, `paymentEligible`,
+`paymentBlockerReason`, `serviceReview`, and `supplierReview`.
+Customer actions use those server flags. Browser storage is not evidence of an appointment or
+review; customer screens no longer fabricate booking history or grant local review success.
+No existing booking is automatically marked completed by this change.
+
+Customer cancellation is allowed only for unpaid bookings, after any pending PayOS links are
+verified closed with matching identity/amount and zero received money. Unknown results keep
+the slot reserved and disable checkout; verified PAID results commit even when cancellation
+returns HTTP 409. Successful customer cancellation is idempotent and never reopens checkout.
+Provider-closed expiry/failure can allow retry only after all old links are checked and the
+active practitioner/service, working schedule, future time and entire interval remain valid.
+There is no automatic refund or balance collection. Browser return/cancel URLs are not payment proof.
+See [PAYMENT_REVIEW_RUNBOOK.md](PAYMENT_REVIEW_RUNBOOK.md) for unresolved attempts, support and approval gates.
+
+This MVP uses the customer's explicit declaration after the scheduled appointment, not proof
+of physical attendance. Photo/video attachments and reward-point issuance are not implemented
+by the current review persistence API; the review form does not promise to save them or award points.
+See [BOOKING_REVIEW_AUDIT.md](BOOKING_REVIEW_AUDIT.md) for requirements, test coverage, and remaining gaps.
 
 ### Process a report
 
@@ -346,7 +382,7 @@ All application endpoints use the `/api/v1` prefix.
 | Supplier registration | `POST /auth/register-supplier` |
 | Catalog | `GET /locations`, `GET /categories`, `GET /categories/{slug}/services`, `GET /suppliers/{id}` |
 | Availability | `GET /services/{serviceId}/availability` |
-| Customer bookings | `POST /bookings`, `GET /bookings/mine`, `GET /bookings/mine/history-status`, `PATCH /bookings/{id}/cancel` |
+| Customer bookings | `POST /bookings`, `GET /bookings/mine`, `GET /bookings/mine/history-status`, `PATCH /bookings/{id}/cancel`, `PATCH /bookings/{id}/complete` |
 | Booking reviews | `PUT /bookings/{bookingId}/reviews/{SERVICE|SUPPLIER}` |
 | Supplier workspace | `GET/PUT /supplier/profile`, practitioner and schedule endpoints |
 | Supplier services | `GET/POST /supplier/services`, `PUT/DELETE /supplier/services/{id}` |
@@ -515,6 +551,44 @@ The frontend displays a local BeautyLink placeholder when an external supplier i
 - PayOS merchant secrets must be configured only in backend environment variables and must never be stored in the frontend or committed to Git.
 
 ## Contributing
+
+### Booking/review release checks
+
+The public review endpoints are `GET /api/v1/services/{id}/reviews` and `GET /api/v1/suppliers/{id}/reviews`.
+Both accept zero-based `page` and `size` (default 20, capped at 100) and return
+`content`, `totalElements`, `totalPages`, `page`, `size`, `rating`. Service and supplier
+ratings/counts use only completed, paid/deposit-paid bookings with ratings 1–5;
+legacy base ratings do not count. Completion is customer self-attestation, not independent attendance verification.
+
+Run full Maven verify and frontend npm ci/test/lint/build. CI additionally runs
+`BookingReviewReleaseTest,PaymentCancellationSafetyTest` against a disposable loopback MySQL test database
+and a browser → Spring/JWT/H2 smoke with a test-only fake gateway; never point tests at Railway MySQL.
+
+Customer bookings expose `GET /api/v1/bookings/{id}` (owner/CUSTOMER only). `paymentEligible` and blocker
+reasons govern the **Tiếp tục thanh toán** action: reload/back navigation retains only `bookingPayment=<id>`,
+never browser prices/URLs/eligibility. The client rereads the booking and reuses its active option/voucher;
+it never creates a replacement booking to bypass reconciliation. Checkout is strictly before Vietnam start
+time. New booking/retry use Vietnam 30-minute lead and one-calendar-month limits, regardless of JVM zone.
+Provider links created by the new code request expiry no later than booking start. Withholding a URL does
+not prove an older/opened link closed: provider GET/confirmed closure governs slot release; verified money
+still persists after start without automatically completing or reviving cancelled appointments.
+Internal ADMIN preview and guarded zero-money/zero-secondary actions, evidence and release/restore gates:
+[PAYMENT_REVIEW_RUNBOOK.md](PAYMENT_REVIEW_RUNBOOK.md). They do not implement refunds or financial overrides.
+
+For integrated local browser smoke (no real payments/emails):
+
+1. In backend, run `mvn verify dependency:build-classpath -Dmdep.outputFile=target/test-classpath.txt -Dmdep.includeScope=test`.
+2. Start `com.example.backend.BookingReviewSmokeServer` with test-classes, classes and that test classpath (Java 21). It binds 127.0.0.1:8080 and creates only H2 in-memory fixtures. It is not packaged into the production JAR.
+3. In frontend, run `npm run dev -- --host 127.0.0.1`, then `node tests/bookingReviewSmoke.mjs` with an installed Playwright runtime. `PLAYWRIGHT_MODULE_PATH` may specify its module path; `SMOKE_BROWSER_CHANNEL=chrome` uses an installed Chrome in a separate headless test profile.
+4. Stop the test servers afterward. A fresh server is required for each run because the smoke test completes and reviews its fixture bookings. Test entry `tests/review-smoke.html` is not a production build entry.
+
+If this Windows Java installation cannot create AF_UNIX loopback pipes, use
+`-Djdk.net.unixdomain.tmpdir=<a non-existing temporary subdirectory>` only for the
+local test JVM to trigger its TCP pipe fallback. Do not modify the production JVM or Dockerfile for this machine-specific issue.
+
+Before release, verify exact-commit CI, a usable recent DB backup, and a controlled
+backend-first rollout. No schema migration is introduced. See `PR_DRAFT.md` for
+scope, test evidence, release gates and rollback baseline.
 
 1. Create a feature branch from the current main branch.
 2. Keep changes focused and do not commit secrets, `node_modules`, `dist`, or `target`.

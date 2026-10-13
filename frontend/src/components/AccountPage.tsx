@@ -30,12 +30,11 @@ import {
   QrCode,
   Camera,
 } from 'lucide-react';
-import { CurrentUser, BookingDetails } from '../types';
+import { CurrentUser } from '../types';
 import { useBeautyStore } from '../store/beautyStore';
 import { AppointmentShareModal } from './AppointmentShareModal';
 import { AvatarPickerModal } from './AvatarPickerModal';
-import { ServiceReviewModal } from './ServiceReviewModal';
-import { reviewService } from '../services/reviewService';
+import { BookingsPage } from './BookingsPage';
 import { customerProfileSchema, FieldErrors, passwordChangeSchema, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
 
@@ -68,31 +67,17 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   onBackToHome,
   onOpenVouchers,
 }) => {
-  const { appointments, setCurrentUser } = useBeautyStore();
+  const { setCurrentUser } = useBeautyStore();
 
   // Active tab: 'profile' | 'bookings' | 'vouchers' | 'security'
   // (ví voucher là một thành phần bấm TRƯỚC bảo mật và mật khẩu, bỏ tab đăng xuất tài khoản)
   const [activeTab, setActiveTab] = useState<'profile' | 'bookings' | 'vouchers' | 'security'>('profile');
-
-  // Bookings sub-filter: 'all' | 'upcoming' | 'history'
-  const [bookingFilter, setBookingFilter] = useState<'all' | 'upcoming' | 'history'>('all');
 
   // Sharing modal state (Chia sẻ booking khi hôm đó bận)
   const [sharingBooking, setSharingBooking] = useState<any | null>(null);
 
   // Avatar picker modal state
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
-
-  // Review modal state
-  const [reviewingBooking, setReviewingBooking] = useState<{
-    serviceTitle: string;
-    salonName: string;
-    bookingCode?: string;
-  } | null>(null);
-
-  const [reviewedBookingsMap, setReviewedBookingsMap] = useState<Record<string, boolean>>(() => {
-    return reviewService.getReviewedBookings();
-  });
 
   // Copied code feedback
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -178,102 +163,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     setProfileSuccessMsg('Cập nhật ảnh đại diện thành công!');
     setTimeout(() => setProfileSuccessMsg(''), 3000);
   };
-
-  // Combined Bookings List: Stored appointments + curated history and upcoming ticket film
-  const combinedBookings: BookingDetails[] = React.useMemo(() => {
-    const defaultUpcoming: BookingDetails = {
-      id: 'BK-UP-01',
-      serviceTitle: 'Chăm sóc da mặt chuyên sâu Glow Skin & Thải độc Oxy tươi',
-      salonName: 'An Nhiên Beauty & Luxury Spa',
-      date: '05/10/2026',
-      timeSlot: '14:30 - 16:00',
-      price: 490000,
-      originalPrice: 850000,
-      customerName: profile.name,
-      customerPhone: profile.phone,
-      specialist: 'Master Ngọc Ánh (Phòng Relax VIP 1)',
-      bookingCode: 'BP-982312',
-      status: 'confirmed',
-      paymentTime: '10:45 · 02/10/2026',
-      paidAmount: 245000,
-      remainingAmount: 245000,
-      depositType: 'deposit50',
-      paymentMethod: 'PayOS',
-      note: 'Đã đặt cọc 50% giữ chỗ qua PayOS · Còn lại 245.000đ thanh toán tại salon',
-    };
-
-    const defaultHistory: BookingDetails[] = [
-      {
-        id: 'BK-HIST-01',
-        serviceTitle: 'Gội đầu dưỡng sinh thảo dược 12 vị & Massage cổ vai gáy',
-        salonName: 'Sen Spa Dưỡng Sinh & Trị Liệu',
-        date: '18/09/2026',
-        timeSlot: '10:00 - 11:30',
-        price: 350000,
-        originalPrice: 500000,
-        customerName: profile.name,
-        customerPhone: profile.phone,
-        specialist: 'Master Hương Giang (Phòng VIP 2)',
-        bookingCode: 'BP-774921',
-        status: 'completed',
-        paymentTime: '09:15 · 18/09/2026',
-        paidAmount: 350000,
-        remainingAmount: 0,
-        depositType: 'full100',
-        paymentMethod: 'PayOS',
-        note: 'Đã hoàn thành liệu trình xuất sắc · Khách đánh giá 5 sao ⭐',
-      },
-      {
-        id: 'BK-HIST-02',
-        serviceTitle: 'Chăm sóc da Aqua Peel Hydro & Điện di tế bào gốc',
-        salonName: 'Viện Thẩm Mỹ & Spa Radiant Skin',
-        date: '28/08/2026',
-        timeSlot: '15:00 - 16:30',
-        price: 650000,
-        originalPrice: 1200000,
-        customerName: profile.name,
-        customerPhone: profile.phone,
-        specialist: 'Chuyên viên Bác sĩ Da liễu Yến Nhi',
-        bookingCode: 'BP-552891',
-        status: 'completed',
-        paymentTime: '14:20 · 28/08/2026',
-        paidAmount: 325000,
-        remainingAmount: 325000,
-        depositType: 'deposit50',
-        paymentMethod: 'PayOS',
-        note: 'Đã hoàn thành liệu trình · Đã thanh toán nốt 325.000đ tại cơ sở',
-      },
-    ];
-
-    if (!appointments || appointments.length === 0) {
-      return [defaultUpcoming, ...defaultHistory];
-    }
-
-    // Merge store appointments with historical records
-    const normalizedStore = appointments.map((app, idx) => ({
-      ...app,
-      id: app.id || `BK-STORE-${idx}`,
-      status: app.status || 'confirmed',
-      paymentTime: app.paymentTime || '14:32 · 02/10/2026',
-      paidAmount: app.paidAmount || Math.round(app.price * 0.5),
-      remainingAmount: app.remainingAmount !== undefined ? app.remainingAmount : Math.round(app.price * 0.5),
-      depositType: app.depositType || 'deposit50',
-      paymentMethod: app.paymentMethod || 'PayOS',
-    }));
-
-    return [...normalizedStore, ...defaultHistory];
-  }, [appointments, profile]);
-
-  // Filtered Bookings for the View
-  const filteredBookings = React.useMemo(() => {
-    if (bookingFilter === 'upcoming') {
-      return combinedBookings.filter((b) => b.status === 'confirmed' || b.status === 'pending');
-    }
-    if (bookingFilter === 'history') {
-      return combinedBookings.filter((b) => b.status === 'completed' || b.status === 'cancelled');
-    }
-    return combinedBookings;
-  }, [combinedBookings, bookingFilter]);
 
   // Vouchers list for the Voucher Wallet tab
   const VOUCHERS = [
@@ -456,7 +345,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             }`}
           >
             <Ticket className="w-4 h-4" />
-            <span>Lịch hẹn & Lịch sử Booking ({combinedBookings.length})</span>
+            <span>Lịch hẹn & Lịch sử Booking</span>
           </button>
 
           {/* Tab 3: Ví Voucher & Ưu đãi (Nằm trước Bảo mật & Mật khẩu) */}
@@ -734,270 +623,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         {/* TAB 2: LỊCH HẸN & LỊCH SỬ BOOKING (DẠNG TICKET FILM & THỜI GIAN THANH TOÁN DƯỚI GIÁ) */}
         {/* ========================================================================= */}
         {activeTab === 'bookings' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            {/* Header & Sub-filters */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-pink-100">
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#e1146c]">
-                  BeautyPass Tickets
-                </span>
-                <h2 className="text-lg font-black text-slate-900 mt-0.5">
-                  Lịch hẹn & Lịch sử Booking ({combinedBookings.length})
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Xem toàn bộ lịch hẹn sắp tới và lịch sử liệu trình đã hoàn tất
-                </p>
-              </div>
-
-              {/* Sub-tabs: Tất cả / Sắp tới / Lịch sử */}
-              <div className="inline-flex rounded-2xl bg-pink-100/60 p-1 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setBookingFilter('all')}
-                  className={`px-3.5 py-1.5 rounded-xl transition cursor-pointer ${
-                    bookingFilter === 'all'
-                      ? 'bg-white text-[#be185d] shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Tất cả ({combinedBookings.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBookingFilter('upcoming')}
-                  className={`px-3.5 py-1.5 rounded-xl transition cursor-pointer ${
-                    bookingFilter === 'upcoming'
-                      ? 'bg-white text-[#be185d] shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Sắp diễn ra ({combinedBookings.filter((b) => b.status === 'confirmed').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBookingFilter('history')}
-                  className={`px-3.5 py-1.5 rounded-xl transition cursor-pointer ${
-                    bookingFilter === 'history'
-                      ? 'bg-white text-[#be185d] shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Lịch sử ({combinedBookings.filter((b) => b.status === 'completed').length})
-                </button>
-              </div>
-            </div>
-
-            {/* List of Film Tickets */}
-            <div className="space-y-5">
-              {filteredBookings.length === 0 ? (
-                <div className="bg-white rounded-3xl border border-pink-100 p-8 text-center">
-                  <div className="w-14 h-14 rounded-full bg-pink-50 text-[#e1146c] flex items-center justify-center mx-auto mb-3">
-                    <Ticket className="w-7 h-7" />
-                  </div>
-                  <h4 className="text-sm font-bold text-slate-800">Không có lịch hẹn nào ở mục này</h4>
-                  <p className="text-xs text-slate-400 mt-1">Hãy khám phá và đặt dịch vụ làm đẹp nhé!</p>
-                </div>
-              ) : (
-                filteredBookings.map((item) => {
-                  const isCompleted = item.status === 'completed';
-                  const bookingCode = item.bookingCode || 'BP-889921';
-                  const paidAmount = item.paidAmount || (item.depositType === 'deposit50' ? Math.round(item.price * 0.5) : item.price);
-                  const remainingAmount = item.remainingAmount !== undefined ? item.remainingAmount : (item.depositType === 'deposit50' ? item.price - paidAmount : 0);
-
-                  return (
-                    <div
-                      key={item.id || bookingCode}
-                      className="relative bg-white rounded-3xl border border-pink-200/90 shadow-md hover:shadow-xl hover:shadow-pink-500/10 transition-all duration-300 overflow-hidden"
-                    >
-                      {/* Ticket Cutout Notches on Left & Right */}
-                      <div className="hidden sm:block absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#FFF8F9] border-r border-pink-200 z-10" />
-                      <div className="hidden sm:block absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#FFF8F9] border-l border-pink-200 z-10" />
-
-                      {/* Top Cinema Ticket Ribbon */}
-                      <div className="bg-gradient-to-r from-[#831843] via-[#be185d] to-[#e1146c] text-white px-5 py-2.5 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <Ticket className="w-4 h-4 text-pink-200" />
-                          <span className="font-mono font-black tracking-wider text-[11px] uppercase">
-                            BEAUTYPASS · CINEMA PASS VÉ LÀM ĐẸP
-                          </span>
-                        </div>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                            isCompleted
-                              ? 'bg-slate-800/80 text-slate-200'
-                              : 'bg-emerald-400 text-emerald-950 shadow-xs'
-                          }`}
-                        >
-                          {isCompleted
-                            ? '● ĐÃ HOÀN THÀNH LIỆU TRÌNH'
-                            : item.depositType === 'deposit50'
-                            ? '● ĐÃ XÁC NHẬN (CỌC 50%)'
-                            : '● ĐÃ XÁC NHẬN (TRỌN GÓI 100%)'}
-                        </span>
-                      </div>
-
-                      {/* Ticket Main Content */}
-                      <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-                        {/* Left 2 Cols: Service Title, Salon & Schedule Details */}
-                        <div className="md:col-span-2 space-y-3.5 min-w-0">
-                          <div>
-                            <div className="flex items-center gap-1.5 text-xs text-[#be185d] font-bold mb-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                              <span className="truncate">{item.salonName}</span>
-                            </div>
-                            <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">
-                              {item.serviceTitle}
-                            </h3>
-                          </div>
-
-                          {/* 3 Ticket Metadata Blocks: Ngày hẹn, Khung giờ, Chuyên viên */}
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
-                            <div className="p-2.5 rounded-2xl bg-pink-50/50 border border-pink-100">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                                Ngày hẹn (Date)
-                              </span>
-                              <div className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-1 mt-0.5">
-                                <Calendar className="w-3.5 h-3.5 text-[#e1146c]" />
-                                <span>{item.date}</span>
-                              </div>
-                            </div>
-
-                            <div className="p-2.5 rounded-2xl bg-pink-50/50 border border-pink-100">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                                Khung giờ (Time)
-                              </span>
-                              <div className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-1 mt-0.5">
-                                <Clock className="w-3.5 h-3.5 text-[#e1146c]" />
-                                <span>{item.timeSlot}</span>
-                              </div>
-                            </div>
-
-                            <div className="col-span-2 sm:col-span-1 p-2.5 rounded-2xl bg-pink-50/50 border border-pink-100">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                                Chuyên viên & Phòng
-                              </span>
-                              <div className="text-xs sm:text-sm font-black text-slate-800 truncate mt-0.5">
-                                {item.specialist || 'Chuyên viên Master VIP'}
-                              </div>
-                            </div>
-                          </div>
-
-                          {item.note && (
-                            <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2 rounded-xl">
-                              Ghi chú: {item.note}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Right Col: Price, Payment Time, Barcode & Share CTA */}
-                        <div className="md:border-l md:border-dashed md:border-pink-200 md:pl-6 flex flex-col justify-between h-full space-y-4">
-                          {/* Monospace Barcode Aesthetic */}
-                          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 text-center">
-                            <span className="text-[10px] font-mono tracking-widest text-slate-400 block uppercase">
-                              ||| | |||| | || |||||
-                            </span>
-                            <div className="flex items-center justify-center gap-1.5 mt-0.5">
-                              <span className="font-mono font-black text-base text-slate-900 tracking-wider">
-                                {bookingCode}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyCode(bookingCode)}
-                                className="p-1 rounded-lg text-slate-400 hover:text-[#e1146c] hover:bg-white transition cursor-pointer"
-                                title="Sao chép mã"
-                              >
-                                {copiedCode === bookingCode ? (
-                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Price & PAYMENT TIME DISPLAYED DIRECTLY UNDER PRICE */}
-                          <div className="text-right">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                              Số tiền đã thanh toán
-                            </span>
-                            <div className="text-lg sm:text-xl font-black text-[#e1146c]">
-                              {formatCurrency(paidAmount)}
-                            </div>
-
-                            {/* THỜI GIAN THANH TOÁN TIỀN NGAY DƯỚI SỐ TIỀN */}
-                            <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg inline-flex items-center gap-1 mt-0.5">
-                              <Clock className="w-3 h-3 text-emerald-600 shrink-0" />
-                              <span>Đã thanh toán: {item.paymentTime || '14:32 · 02/10/2026'}</span>
-                            </div>
-
-                            {remainingAmount > 0 && (
-                              <span className="text-[10px] text-slate-500 block mt-0.5 font-medium">
-                                (Còn {formatCurrency(remainingAmount)} thanh toán tại cơ sở)
-                              </span>
-                            )}
-                          </div>
-
-                          {/* ACTION: CHIA SẺ VÀ ĐÁNH GIÁ DỊCH VỤ */}
-                          <div className="pt-2.5 border-t border-pink-100 grid grid-cols-2 gap-2">
-                            {/* Nút chia sẻ (đổi từ 'Chia sẻ vé khi bận' thành 'Chia sẻ') */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSharingBooking({
-                                  bookingCode,
-                                  serviceName: item.serviceTitle,
-                                  supplierName: item.salonName,
-                                  supplierAddress: 'Chi nhánh chính BeautyLink',
-                                  practitionerName: item.specialist,
-                                  appointmentDate: item.date,
-                                  startTime: item.timeSlot.split(' - ')[0] || item.timeSlot,
-                                  totalAmount: paidAmount,
-                                });
-                              }}
-                              className="w-full py-2 px-3 rounded-xl border border-pink-200 bg-pink-50/70 hover:bg-pink-100 text-[#be185d] text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                              title="Chia sẻ thông tin lịch hẹn hoặc tặng vé cho bạn bè"
-                            >
-                              <Share2 className="w-3.5 h-3.5 text-[#e1146c]" />
-                              <span>Chia sẻ</span>
-                            </button>
-
-                            {/* Nút đánh giá dịch vụ (khi người dùng trải nghiệm xong dịch vụ sẽ đánh giá) */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setReviewingBooking({
-                                  serviceTitle: item.serviceTitle,
-                                  salonName: item.salonName,
-                                  bookingCode,
-                                });
-                              }}
-                              className={`w-full py-2 px-3 rounded-xl text-xs font-black shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                                reviewedBookingsMap[bookingCode]
-                                  ? 'bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100'
-                                  : 'bg-gradient-to-r from-pink-500 via-[#db2777] to-[#be185d] text-white hover:opacity-95'
-                              }`}
-                              title="Đánh giá chất lượng dịch vụ và kỹ thuật viên"
-                            >
-                              <Star
-                                className={`w-3.5 h-3.5 ${
-                                  reviewedBookingsMap[bookingCode]
-                                    ? 'fill-amber-500 text-amber-500'
-                                    : 'text-amber-200 fill-amber-200'
-                                }`}
-                              />
-                              <span>
-                                {reviewedBookingsMap[bookingCode] ? 'Đã đánh giá ★' : 'Đánh giá'}
-                              </span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
+          <BookingsPage embedded onBack={onBackToHome} onBookNew={onBackToHome} />
         )}
 
         {/* ========================================================================= */}
@@ -1183,29 +809,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         currentAvatar={profile.avatar}
         onSaveAvatar={handleUpdateAvatar}
       />
-
-      {/* 6. Modal Đánh Giá Dịch Vụ */}
-      {reviewingBooking && (
-        <ServiceReviewModal
-          isOpen={Boolean(reviewingBooking)}
-          onClose={() => setReviewingBooking(null)}
-          serviceTitle={reviewingBooking.serviceTitle}
-          salonName={reviewingBooking.salonName}
-          bookingCode={reviewingBooking.bookingCode}
-          customerName={profile.name}
-          customerAvatar={profile.avatar}
-          onSuccess={(rev) => {
-            if (reviewingBooking.bookingCode) {
-              setReviewedBookingsMap((prev) => ({
-                ...prev,
-                [reviewingBooking.bookingCode!]: true,
-              }));
-            }
-            setProfileSuccessMsg(`Cảm ơn bạn! Đánh giá "${rev.serviceTitle}" đã được ghi nhận.`);
-            setTimeout(() => setProfileSuccessMsg(''), 4000);
-          }}
-        />
-      )}
 
       {/* 7. Minimal Clean Footer */}
       <footer className="py-4 px-4 text-center text-xs text-slate-400 border-t border-pink-100/60 bg-white/60">

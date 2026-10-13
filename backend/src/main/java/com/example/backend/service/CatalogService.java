@@ -7,6 +7,8 @@ import com.example.backend.repository.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import java.util.*;
 
 @Service
@@ -42,15 +44,13 @@ public class CatalogService {
         List<ServiceResponse> shopServices = services.findBySupplierIdAndActiveTrue(id).stream()
                 .sorted(Comparator.comparing(ServiceOffering::isFeatured).reversed().thenComparing(ServiceOffering::getId, Comparator.reverseOrder()))
                 .map(this::service).toList();
-        List<PublicReviewResponse> publicReviews = reviews.findBySupplierIdOrderByCreatedAtDesc(id).stream()
-                .limit(100)
-                .map(review -> new PublicReviewResponse(review.getId(), review.getTargetType(), review.getRating(), review.getComment(),
-                        maskedName(review.getCustomer().getFullName()), review.getService().getId(), review.getService().getName(), review.getCreatedAt()))
+        List<PublicReviewResponse> publicReviews = reviews.findBySupplierIdOrderByCreatedAtDesc(id, PageRequest.of(0, 100)).stream()
+                .map(this::publicReview)
                 .toList();
         long liveCount = reviews.countBySupplierIdAndTargetType(id, DomainEnums.ReviewTargetType.SUPPLIER);
         long liveSum = Optional.ofNullable(reviews.ratingSumBySupplier(id, DomainEnums.ReviewTargetType.SUPPLIER)).orElse(0L);
-        long totalCount = supplier.getReviewCount() + liveCount;
-        double rating = totalCount == 0 ? 0 : roundRating((supplier.getRating() * supplier.getReviewCount() + liveSum) / totalCount);
+        long totalCount = liveCount;
+        double rating = totalCount == 0 ? 0 : roundRating((double) liveSum / totalCount);
         return new PublicSupplierShopResponse(supplier.getId(), supplier.getName(), supplier.getSlug(), supplier.getBusinessType(),
                 supplier.getDescription(), supplier.getAddressLine(), supplier.getLocation() == null ? null : supplier.getLocation().getName(),
                 supplier.getImageUrl(), supplier.getLatitude(), supplier.getLongitude(), supplier.getVerificationStatus(), rating,
@@ -61,6 +61,33 @@ public class CatalogService {
                 .sorted(MANUAL_SUPPLIERS_FIRST)
                 .map(this::service).toList();
     }
+    public PublicReviewPageResponse serviceReviews(Long id, int page, int size) {
+        services.findById(id).filter(ServiceOffering::isActive)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SERVICE_NOT_FOUND", "Không tìm thấy dịch vụ"));
+        Page<BookingReview> result = reviews.findPublicByService(id, DomainEnums.ReviewTargetType.SERVICE, reviewPage(page, size));
+        Double average = reviews.averageByService(id, DomainEnums.ReviewTargetType.SERVICE);
+        return reviewPageResponse(result, average == null ? 0 : roundRating(average));
+    }
+    public PublicReviewPageResponse supplierReviews(Long id, int page, int size) {
+        supplierRepository.findByIdAndVerificationStatus(id, DomainEnums.VerificationStatus.VERIFIED)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND", "Không tìm thấy cửa hàng"));
+        Page<BookingReview> result = reviews.findPublicBySupplier(id, DomainEnums.ReviewTargetType.SUPPLIER, reviewPage(page, size));
+        long count = result.getTotalElements();
+        long sum = Optional.ofNullable(reviews.ratingSumBySupplier(id, DomainEnums.ReviewTargetType.SUPPLIER)).orElse(0L);
+        return reviewPageResponse(result, count == 0 ? 0 : roundRating((double) sum / count));
+    }
+    private PageRequest reviewPage(int page, int size) {
+        if (page < 0 || size < 1) throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PAGINATION", "Trang và kích thước trang không hợp lệ");
+        return PageRequest.of(page, Math.min(size, 100));
+    }
+    private PublicReviewPageResponse reviewPageResponse(Page<BookingReview> result, double rating) {
+        return new PublicReviewPageResponse(result.getContent().stream().map(this::publicReview).toList(),
+                result.getTotalElements(), result.getTotalPages(), result.getNumber(), result.getSize(), rating);
+    }
+    private PublicReviewResponse publicReview(BookingReview review) {
+        return new PublicReviewResponse(review.getId(), review.getTargetType(), review.getRating(), review.getComment(),
+                maskedName(review.getCustomer().getFullName()), review.getService().getId(), review.getService().getName(), review.getCreatedAt());
+    }
     private LocationResponse location(Location l) { return new LocationResponse(l.getId(), l.getName(), l.getSlug(), l.getType(), l.getParent() == null ? null : l.getParent().getId()); }
     private CategoryResponse category(ServiceCategory c) { return new CategoryResponse(c.getId(), c.getSlug(), c.getName(), c.getDescription(), c.getImageUrl()); }
     private ServiceResponse service(ServiceOffering s) {
@@ -68,11 +95,11 @@ public class CatalogService {
         List<PractitionerResponse> people = practitioners.findBySupplierIdAndActiveTrue(supplier.getId()).stream().map(p -> new PractitionerResponse(p.getId(), p.getDisplayName(), p.getSpecialty(), p.getAvatarUrl(), p.getBio())).toList();
         long serviceReviewCount = reviews.countByServiceIdAndTargetType(s.getId(), DomainEnums.ReviewTargetType.SERVICE);
         Double serviceAverage = reviews.averageByService(s.getId(), DomainEnums.ReviewTargetType.SERVICE);
-        double serviceRating = serviceAverage == null ? supplier.getRating() : roundRating(serviceAverage);
+        double serviceRating = serviceAverage == null ? 0 : roundRating(serviceAverage);
         long liveSupplierCount = reviews.countBySupplierIdAndTargetType(supplier.getId(), DomainEnums.ReviewTargetType.SUPPLIER);
         long liveSupplierSum = Optional.ofNullable(reviews.ratingSumBySupplier(supplier.getId(), DomainEnums.ReviewTargetType.SUPPLIER)).orElse(0L);
-        long supplierReviewCount = supplier.getReviewCount() + liveSupplierCount;
-        double supplierRating = supplierReviewCount == 0 ? 0 : roundRating((supplier.getRating() * supplier.getReviewCount() + liveSupplierSum) / supplierReviewCount);
+        long supplierReviewCount = liveSupplierCount;
+        double supplierRating = supplierReviewCount == 0 ? 0 : roundRating((double) liveSupplierSum / supplierReviewCount);
         return new ServiceResponse(s.getId(), s.getName(), s.getDescription(), s.getPrice(), s.getDurationMinutes(), s.getImageUrl(), s.getCategory().getSlug(), supplier.getId(), supplier.getName(), supplier.getAddressLine(), serviceRating, Math.toIntExact(serviceReviewCount), supplierRating, people,
                 s.getOriginalPrice() == null ? s.getPrice() : s.getOriginalPrice(), s.getHighlightText(), s.isFeatured(),
                 supplier.getImageUrl(), supplier.getBusinessType(), Math.toIntExact(supplierReviewCount), supplier.isDemoData(),

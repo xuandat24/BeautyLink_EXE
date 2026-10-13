@@ -105,7 +105,7 @@ public final class ApiDtos {
     public record CreateBookingRequest(
             @NotNull(message = "Vui lòng chọn dịch vụ") @Positive(message = "Dịch vụ không hợp lệ") Long serviceId,
             @Positive(message = "Chuyên viên không hợp lệ") Long practitionerId,
-            @NotNull(message = "Vui lòng chọn ngày hẹn") @FutureOrPresent(message = "Ngày hẹn không được ở trong quá khứ") LocalDate appointmentDate,
+            @NotNull(message = "Vui lòng chọn ngày hẹn") LocalDate appointmentDate,
             @NotNull(message = "Vui lòng chọn khung giờ") LocalTime startTime,
             @Size(max = 500, message = "Ghi chú tối đa 500 ký tự") String note) {}
     public record BookingResponse(Long id, String bookingCode, Long serviceId, String serviceName,
@@ -114,8 +114,23 @@ public final class ApiDtos {
                                   String practitionerName, LocalDate appointmentDate, LocalTime startTime,
                                   LocalTime endTime, BigDecimal totalAmount, BookingStatus status,
                                   PaymentStatus paymentStatus, boolean reviewEligible,
-                                  BookingReviewResponse serviceReview, BookingReviewResponse supplierReview) {}
+                                  BookingReviewResponse serviceReview, BookingReviewResponse supplierReview,
+                                  boolean completionEligible, boolean cancelEligible,
+                                  boolean paymentEligible, String paymentBlockerReason,
+                                  PaymentOption paymentOption, String paymentVoucherCode, boolean paymentAttemptActive) {}
     public record BookingHistoryStatusResponse(boolean hasPreviousBooking) {}
+    public record PaymentReviewAttempt(Long id, Long orderCode, String paymentLinkId,
+            PaymentTransactionStatus appStatus, boolean manual, BigDecimal expectedAmount, Instant paidAt, Instant updatedAt,
+            String providerStatus, Long providerOrderCode, String providerLinkId, Long providerAmount, Long amountPaid,
+            boolean identityMatches, String errorCode) {}
+    public record PaymentReviewPreview(Long bookingId, BookingStatus bookingStatus, PaymentStatus paymentStatus,
+            boolean retryAllowed, String fingerprint, boolean canCloseZeroMoney, boolean proposedRetryAllowed,
+            String blocker, boolean canCloseZeroSecondary, List<PaymentReviewAttempt> attempts) {}
+    public record CloseZeroMoneyRequest(
+            @NotBlank @Pattern(regexp = "[a-f0-9]{64}") String fingerprint,
+            @NotBlank @Pattern(regexp = "[A-Za-z0-9_.-]{3,80}") String caseReference) {}
+    public record PaymentReviewResolution(Long bookingId, BookingStatus bookingStatus,
+            boolean retryAllowed, Long auditId, boolean alreadyApplied) {}
     public record UpsertBookingReviewRequest(
             @NotNull(message = "Vui lòng chọn số sao") @Min(value = 1, message = "Đánh giá tối thiểu 1 sao") @Max(value = 5, message = "Đánh giá tối đa 5 sao") Integer rating,
             @Size(max = 1500, message = "Nội dung đánh giá tối đa 1500 ký tự") String comment) {}
@@ -124,6 +139,8 @@ public final class ApiDtos {
     public record PublicReviewResponse(Long id, ReviewTargetType targetType, int rating, String comment,
                                        String reviewerDisplayName, Long serviceId, String serviceName,
                                        Instant createdAt) {}
+    public record PublicReviewPageResponse(List<PublicReviewResponse> content, long totalElements,
+                                          int totalPages, int page, int size, double rating) {}
     public record PublicSupplierShopResponse(Long id, String name, String slug, String businessType,
                                              String description, String addressLine, String locationName,
                                              String imageUrl, Double latitude, Double longitude,

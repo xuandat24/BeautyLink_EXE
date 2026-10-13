@@ -13,21 +13,23 @@ import static com.example.backend.model.DomainEnums.*;
 public class ReviewService {
     private final BookingRepository bookings;
     private final BookingReviewRepository reviews;
+    private final PaymentTransactionRepository payments;
 
-    public ReviewService(BookingRepository bookings, BookingReviewRepository reviews) {
+    public ReviewService(BookingRepository bookings, BookingReviewRepository reviews, PaymentTransactionRepository payments) {
         this.bookings = bookings;
         this.reviews = reviews;
+        this.payments = payments;
     }
 
     @Transactional
     public BookingReviewResponse upsert(UserAccount customer, Long bookingId, ReviewTargetType targetType, UpsertBookingReviewRequest request) {
-        Booking booking = bookings.findById(bookingId)
+        Booking booking = bookings.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "Không tìm thấy lịch hẹn"));
         if (!booking.getCustomer().getId().equals(customer.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "REVIEW_FORBIDDEN", "Bạn chỉ có thể đánh giá đơn hàng của chính mình");
         }
-        if (!isEligible(booking)) {
-            throw new ApiException(HttpStatus.CONFLICT, "REVIEW_NOT_ELIGIBLE", "Chỉ đơn hàng đã thanh toán và chưa bị hủy mới có thể đánh giá");
+        if (!isEligible(booking) || payments.hasUnresolvedByBookingId(bookingId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "REVIEW_NOT_ELIGIBLE", "Chỉ lịch hẹn đã hoàn thành dịch vụ và có thanh toán hoặc đặt cọc mới có thể đánh giá");
         }
 
         BookingReview review = reviews.findByBookingIdAndTargetType(bookingId, targetType).orElseGet(BookingReview::new);
@@ -44,9 +46,8 @@ public class ReviewService {
     }
 
     public static boolean isEligible(Booking booking) {
-        boolean paid = booking.getPaymentStatus() == PaymentStatus.PAID
-                || booking.getPaymentStatus() == PaymentStatus.PARTIALLY_PAID;
-        return paid && booking.getStatus() != BookingStatus.CANCELLED;
+        return booking.getStatus() == BookingStatus.COMPLETED
+                && BookingCompletionPolicy.hasVerifiedPayment(booking);
     }
 
     public BookingReviewResponse response(BookingReview review) {

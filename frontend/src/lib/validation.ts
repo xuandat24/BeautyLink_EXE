@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validBookingDate } from './bookingTime';
 
 export type FieldErrors = Record<string, string>;
 
@@ -98,11 +99,8 @@ export const adminReportSchema = z
 
 export const bookingSchema = z.object({
   appointmentDate: z.string().min(1, 'Vui lòng chọn ngày hẹn').refine((value) => {
-    const selected = new Date(`${value}T00:00:00`);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return selected >= today;
-  }, 'Ngày hẹn không được ở trong quá khứ'),
+    return validBookingDate(value);
+  }, 'Ngày hẹn phải hợp lệ, không trong quá khứ và không quá một tháng (giờ Việt Nam)'),
   startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Khung giờ không hợp lệ'),
   note: z.string().trim().max(500, 'Ghi chú tối đa 500 ký tự'),
 });

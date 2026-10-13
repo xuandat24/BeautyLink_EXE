@@ -57,6 +57,8 @@ export interface BackendService {
   featured?: boolean;
   rating: number;
   supplierId: number;
+  serviceReviewCount?: number;
+  supplierRating?: number;
   supplierName: string;
   supplierAddress: string;
   supplierImageUrl?: string;
@@ -114,6 +116,25 @@ export interface BackendBooking {
   supplierAddress?: string | null;
   paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'REFUNDED';
   reviewEligible?: boolean;
+  completionEligible?: boolean;
+  cancelEligible?: boolean;
+  paymentEligible?: boolean;
+  paymentBlockerReason?: string | null;
+  paymentOption?: 'DEPOSIT_50' | 'FULL_100' | null;
+  paymentVoucherCode?: string | null;
+  paymentAttemptActive?: boolean;
+  serviceReview?: BookingReview | null;
+  supplierReview?: BookingReview | null;
+}
+
+export interface BookingReview {
+  id: number;
+  bookingId: number;
+  targetType: 'SERVICE' | 'SUPPLIER';
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PayOSPayment {
@@ -121,7 +142,7 @@ export interface PayOSPayment {
   bookingCode: string;
   orderCode: number;
   paymentLinkId?: string | null;
-  checkoutUrl: string;
+  checkoutUrl: string | null;
   amount: number;
   remainingAmount: number;
   paymentOption: 'DEPOSIT_50' | 'FULL_100';
@@ -167,6 +188,7 @@ export interface BackendReport {
 export interface HotDeal {
   id: string;
   serviceId?: number;
+  supplierId?: number;
   title: string;
   brandName: string;
   brandLogo: string;
@@ -187,6 +209,7 @@ export interface HotDeal {
 export interface Salon {
   id: string;
   serviceId?: number;
+  supplierId?: number;
   name: string;
   category: 'spa' | 'tham-my-vien' | 'clinic' | 'massage' | 'nail' | 'salon-toc' | string;
   categoryLabel: string;
@@ -206,7 +229,10 @@ export interface Salon {
 
 export interface NewPartner {
   id: string;
+  supplierId?: number;
   serviceId?: number;
+  rating?: number;
+  reviewsCount?: number;
   name: string;
   subTitle: string;
   address: string;

@@ -44,7 +44,7 @@ const INITIAL_REVIEWS: CustomerReview[] = [
     id: 'rev-1',
     authorName: 'Hoàng Thùy Linh',
     authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-    verifiedBooking: true,
+    verifiedBooking: false,
     salonName: 'An Miên Spa Dưỡng Sinh',
     salonCategory: 'spa',
     serviceTitle: 'Gói Thư Giãn 90 Phút - Chăm Sóc Toàn Thân & Làn Da',
@@ -68,7 +68,7 @@ const INITIAL_REVIEWS: CustomerReview[] = [
     id: 'rev-2',
     authorName: 'Dược sĩ Mai Phương',
     authorAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80',
-    verifiedBooking: true,
+    verifiedBooking: false,
     salonName: 'PMT Aesthetic Clinic',
     salonCategory: 'clinic',
     serviceTitle: 'Liệu Trình Trẻ Hóa & Làm Sáng Da Beauty Radiance 199K',
@@ -92,7 +92,7 @@ const INITIAL_REVIEWS: CustomerReview[] = [
     id: 'rev-3',
     authorName: 'Khánh Vy',
     authorAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&q=80',
-    verifiedBooking: true,
+    verifiedBooking: false,
     salonName: 'Yên Trang Beauty Spa & Academy',
     salonCategory: 'clinic',
     serviceTitle: 'Điêu Khắc Chân Mày Hairstroke & Phun Môi Tế Bào Gốc',
@@ -110,7 +110,7 @@ const INITIAL_REVIEWS: CustomerReview[] = [
     id: 'rev-4',
     authorName: 'Thu Hương',
     authorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
-    verifiedBooking: true,
+    verifiedBooking: false,
     salonName: 'Seoul Luxury Skin Center',
     salonCategory: 'clinic',
     serviceTitle: 'Trị Mụn Laser Diode & Cấy HA Căng Bóng Da',
@@ -127,7 +127,7 @@ const INITIAL_REVIEWS: CustomerReview[] = [
     id: 'rev-5',
     authorName: 'Trần Minh Anh',
     authorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-    verifiedBooking: true,
+    verifiedBooking: false,
     salonName: 'Paradise Skin Clinic',
     salonCategory: 'spa',
     serviceTitle: 'Chăm Sóc Da Mặt Chuẩn Y Khoa & Điện Di Tinh Chất C',
@@ -141,7 +141,7 @@ const INITIAL_REVIEWS: CustomerReview[] = [
     id: 'rev-6',
     authorName: 'Ngọc Hân',
     authorAvatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=150&q=80',
-    verifiedBooking: true,
+    verifiedBooking: false,
     salonName: 'De Paris Nail & Eyelash Studio',
     salonCategory: 'nail',
     serviceTitle: 'Combo Sơn Gel Thạch Hàn Quốc & Nối Mi Thiết Kế',
@@ -227,7 +227,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
       id: `rev-${Date.now()}`,
       authorName: validation.data.author,
       authorAvatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80`,
-      verifiedBooking: true,
+      verifiedBooking: false,
       salonName: validation.data.salon,
       salonCategory: 'spa',
       serviceTitle: validation.data.service,
@@ -270,7 +270,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
             <div className="flex items-center gap-2 mb-2">
               <span className="px-3 py-1 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-[11px] font-black uppercase tracking-wider shadow-xs flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>100% ĐÁNH GIÁ THỰC TẾ TỪ KHÁCH HÀNG</span>
+                <span>DEMO — NỘI DUNG ĐÁNH GIÁ MINH HỌA</span>
               </span>
               <span className="text-xs text-emerald-600 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" />
@@ -464,7 +464,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
                       <div className="flex items-center gap-1 mt-0.5">
                         <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded-md">
                           <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          <span>Đã trải nghiệm</span>
+                          <span>Nội dung demo</span>
                         </span>
                         <span className="text-[11px] text-slate-400">• {review.date}</span>
                       </div>

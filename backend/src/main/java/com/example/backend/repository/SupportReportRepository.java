@@ -6,4 +6,6 @@ import java.util.*;
 public interface SupportReportRepository extends JpaRepository<SupportReport, Long> {
     List<SupportReport> findAllByOrderByCreatedAtDesc();
     List<SupportReport> findByStatusOrderByCreatedAtDesc(ReportStatus status);
+    Optional<SupportReport> findFirstByTargetTypeAndTargetIdAndReasonAndResolutionNote(
+        com.example.backend.model.DomainEnums.ReportTargetType targetType, Long targetId, String reason, String resolutionNote);
 }

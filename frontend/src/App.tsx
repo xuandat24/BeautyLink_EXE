@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { FeaturedCategories } from './components/FeaturedCategories';
@@ -19,6 +19,7 @@ import { ReportsPage } from './components/ReportsPage';
 import { AuthPage } from './components/AuthPage';
 import { AccountPage } from './components/AccountPage';
 import { CheckoutPage } from './components/CheckoutPage';
+import { continuationDestination, setPaymentBookingId } from './lib/paymentNavigation';
 import { FilterExplorePage, ExploreContext } from './components/FilterExplorePage';
 import { PartnerDetailPage } from './components/PartnerDetailPage';
 
@@ -45,6 +46,7 @@ import {
   SearchFilters,
 } from './types';
 import { beautyApi, DEFAULT_CATEGORIES, getAccessToken } from './services/beautyApi';
+import { serviceReviewSummary, supplierReviewSummary } from './lib/reviewScope';
 import { updateMetaTags } from './lib/seo';
 import { CheckCircle2 } from 'lucide-react';
 
@@ -96,6 +98,7 @@ const calculateDistanceKm = (
 const mapServiceToDeal = (item: BackendService, idx: number): HotDeal => ({
   id: `service-${item.id}`,
   serviceId: item.id,
+  supplierId: item.supplierId,
   title: item.name,
   brandName: item.supplierName,
   brandLogo: getInitials(item.supplierName),
@@ -107,8 +110,7 @@ const mapServiceToDeal = (item: BackendService, idx: number): HotDeal => ({
       ? Math.round((1 - item.price / item.originalPrice) * 100)
       : 0,
   isNew: idx < 4,
-  rating: item.rating,
-  reviewsCount: item.supplierReviewCount,
+  ...serviceReviewSummary(item),
   duration: `${item.durationMinutes} phút`,
   category: mapCategorySlug(item.categorySlug),
   highlightText: item.highlightText || item.description || '',
@@ -133,6 +135,7 @@ const mapServiceToSalon = (
   return {
     id: `supplier-${item.supplierId}`,
     serviceId: item.id,
+    supplierId: item.supplierId,
     name: item.supplierName,
     category: mapCategorySlug(item.categorySlug),
     categoryLabel: item.supplierBusinessType,
@@ -142,8 +145,7 @@ const mapServiceToSalon = (
       calculatedDist != null
         ? Number(calculatedDist.toFixed(1))
         : 0.8 + (idx % 8) * 0.7,
-    rating: item.rating,
-    reviewsCount: item.supplierReviewCount,
+    ...supplierReviewSummary(item),
     image: item.supplierImageUrl || item.imageUrl,
     logo: getInitials(item.supplierName),
     badge: 'Đã xác minh',
@@ -156,7 +158,9 @@ const mapServiceToSalon = (
 
 const mapServiceToPartner = (item: BackendService): NewPartner => ({
   id: `new-supplier-${item.supplierId}`,
+  supplierId: item.supplierId,
   serviceId: item.id,
+  ...supplierReviewSummary(item),
   name: item.supplierName,
   subTitle: item.supplierBusinessType.toUpperCase(),
   address: item.supplierAddress,
@@ -255,6 +259,11 @@ export default function App() {
 
   // Page Routing & Hash Navigation
   const [currentPage, setCurrentPage] = useState<AppView>('home');
+  const continuationAccount = useRef(currentUser?.id);
+  useEffect(() => {
+    if (continuationAccount.current !== undefined && continuationAccount.current !== currentUser?.id) setPaymentBookingId(null);
+    continuationAccount.current = currentUser?.id;
+  }, [currentUser?.id]);
   const [selectedCategory, setSelectedCategory] = useState<BackendCategory | null>(null);
   const [serviceCategories, setServiceCategories] = useState<BackendCategory[]>([]);
   const [returnTarget, setReturnTarget] = useState<string>('home');
@@ -278,6 +287,7 @@ export default function App() {
   // Listen to hash changes
   useEffect(() => {
     const handleHash = () => {
+      if (continuationDestination()) { setCurrentPage('bookings'); return; }
       const hash = window.location.hash.toLowerCase();
       if (hash === '#login') {
         setCurrentPage('login');
@@ -306,7 +316,8 @@ export default function App() {
 
     handleHash();
     window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
+    window.addEventListener('popstate', handleHash);
+    return () => { window.removeEventListener('hashchange', handleHash); window.removeEventListener('popstate', handleHash); };
   }, []);
 
   const navigateTo = (view: AppView, fallbackReturn = 'home') => {
@@ -329,6 +340,7 @@ export default function App() {
   };
 
   const handleBackToHome = () => {
+    setPaymentBookingId(null);
     setCurrentPage('home');
     const hashes = [
       '#login',
@@ -381,35 +393,39 @@ export default function App() {
       return;
     }
 
-    if (paymentResult === 'cancelled') {
-      showToast('Bạn đã hủy thanh toán PayOS. Hệ thống sẽ đối soát trạng thái trên máy chủ.');
-      return;
-    }
     if (!orderCode || !/^\d{1,19}$/.test(orderCode)) {
       showToast('Không tìm thấy mã giao dịch hợp lệ để xác minh.');
       return;
     }
 
     let stopped = false;
+    let timer: number | undefined;
     let attempts = 0;
     const verify = async () => {
+      if (stopped) return;
       attempts += 1;
       try {
         const payment = await beautyApi.payOSPaymentStatus(orderCode);
+        if (stopped) return;
+        window.dispatchEvent(new Event('beautylink-bookings-refresh'));
+        if (payment.requiresManualReview || payment.status === 'REVIEW_REQUIRED') {
+          showToast('Giao dịch cần hỗ trợ đối soát. Không thanh toán lại; vui lòng gửi Phản hồi trong lịch hẹn.');
+          return;
+        }
         if (payment.status === 'PAID') {
           sessionStorage.removeItem('beautylink_payos_order_code');
           if (!stopped) showToast('Thanh toán PayOS đã được máy chủ xác thực thành công.');
           return;
         }
-        if (payment.status === 'REVIEW_REQUIRED') {
-          if (!stopped) showToast('Giao dịch đang được kiểm tra an toàn. Vui lòng không thanh toán lại.');
+        if (['CANCELLED', 'EXPIRED', 'FAILED'].includes(payment.status)) {
+          showToast('Máy chủ đã xác minh phiên thanh toán kết thúc. Vui lòng kiểm tra trạng thái lịch hẹn.');
           return;
         }
       } catch {
         // The final message below covers temporary webhook/API propagation delays.
       }
       if (!stopped && attempts < 10) {
-        window.setTimeout(verify, 1500);
+        timer = window.setTimeout(verify, 1500);
       } else if (!stopped) {
         showToast('PayOS đang đối soát giao dịch. Trạng thái sẽ tự cập nhật trong lịch hẹn.');
       }
@@ -417,6 +433,7 @@ export default function App() {
     void verify();
     return () => {
       stopped = true;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [currentUser, showToast]);
 
@@ -1013,7 +1030,8 @@ export default function App() {
                     ? Math.round(((svc.originalPrice - svc.price) / svc.originalPrice) * 100)
                     : 0,
                 rating: svc.rating,
-                reviewsCount: svc.supplierReviewCount,
+                reviewsCount: svc.serviceReviewCount ?? 0,
+                supplierId: svc.supplierId,
                 image: svc.imageUrl,
                 category: svc.categorySlug,
                 duration: `${svc.durationMinutes} phút`,
@@ -1098,7 +1116,7 @@ export default function App() {
               onViewAll={() => openViewAll('new-partners')}
             />
 
-            <CustomerReviewsSection />
+            {import.meta.env.DEV && <CustomerReviewsSection />}
 
             <WhyChooseUs onBookService={handleBookDeal} />
           </>

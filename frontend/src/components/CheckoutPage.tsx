@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   ShieldCheck,
@@ -20,10 +20,14 @@ import {
 } from 'lucide-react';
 import { useBeautyStore } from '../store/beautyStore';
 import { CurrentUser, BackendService, CartItem } from '../types';
-import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { beautyApi, getApiErrorMessage, getAccessToken } from '../services/beautyApi';
+import { canPayBooking, safeCheckout } from '../lib/bookingPolicy';
 import { OptimizedImage } from './OptimizedImage';
 import { bookingSchema, FieldErrors, voucherCodeSchema, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
+import { bookingDay, bookingMaxDate } from '../lib/bookingTime';
+import { paymentBookingId, setPaymentBookingId } from '../lib/paymentNavigation';
+import { PaymentContinuationDialog } from './PaymentContinuationDialog';
 
 interface CheckoutPageProps {
   currentUser: CurrentUser | null;
@@ -84,7 +88,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 ? Math.round(((directService.originalPrice - directService.price) / directService.originalPrice) * 100)
                 : 0,
             rating: directService.rating,
-            reviewsCount: directService.supplierReviewCount,
+            reviewsCount: directService.serviceReviewCount ?? 0,
+            supplierId: directService.supplierId,
             image: directService.imageUrl,
             category: directService.categorySlug,
             duration: `${directService.durationMinutes} phút`,
@@ -106,9 +111,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Default Tomorrow's date
   const tomorrow = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
+    return bookingDay(1);
   }, []);
 
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -143,6 +146,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // Submission state
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [resumeId, setResumeId] = useState<number | null>(() => paymentBookingId());
+  useEffect(() => { const pop = () => setResumeId(paymentBookingId()); window.addEventListener('popstate', pop); return () => window.removeEventListener('popstate', pop); }, []);
+  const submissionBusy = useRef(false);
+  const alive = useRef(false);
+  const reservedBooking = useRef<{ context: string; id: number } | null>(null);
+  const context = JSON.stringify([currentUser?.id, items[0]?.deal.serviceId, selectedDate, selectedTimeSlot]);
+  const latestContext = useRef(context); latestContext.current = context;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   // Calculations
   const subtotal = useMemo(() => {
     return items.reduce((sum, item) => sum + item.deal.salePrice * item.quantity, 0);
@@ -230,6 +241,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Submit & Complete Booking
   const handleFinalSubmit = async () => {
+    if (submissionBusy.current) return;
     setErrorMsg('');
     if (!currentUser) {
       onNeedLogin();
@@ -258,38 +270,53 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
 
     setSubmitting(true);
+    submissionBusy.current = true;
+    const token = getAccessToken();
+    const current = () => alive.current && context === latestContext.current && token === getAccessToken();
 
     try {
       const firstItem = items[0];
       if (!firstItem?.deal.serviceId) {
         throw new Error('Dịch vụ chưa được đồng bộ với hệ thống. Vui lòng chọn lại từ trang dịch vụ.');
       }
-      const booking = await beautyApi.createBooking({
+      // Retain the booking after a provider error. Retrying must never create another
+      // booking simply to bypass an unresolved payment on the first one.
+      const existingId = reservedBooking.current?.context === context ? reservedBooking.current.id : null;
+      const booking = existingId ? (await beautyApi.myBookings()).find(b => b.id === existingId) : await beautyApi.createBooking({
         serviceId: firstItem.deal.serviceId,
         practitionerId: directService?.practitioners?.[0]?.id,
         appointmentDate: selectedDate,
         startTime: selectedTimeSlot,
         note: `Thanh toán ${depositOption === 'deposit50' ? 'cọc 50%' : '100%'} qua PayOS`,
       });
+      if (!current()) return;
+      if (!booking) throw new Error('Không tải được lịch hẹn đã tạo. Vui lòng mở Lịch hẹn của tôi và làm mới.');
+      reservedBooking.current = { context, id: booking.id };
+      setPaymentBookingId(booking.id); // identity only; reload still fetches ownership/capabilities from server
+      if (!canPayBooking(booking)) throw new Error('Lịch hẹn chưa được máy chủ cho phép thanh toán hoặc đang cần đối soát. Vui lòng kiểm tra Lịch hẹn của tôi; không thanh toán lại.');
       const payment = await beautyApi.createPayOSPayment(booking.id, {
         paymentOption: depositOption === 'deposit50' ? 'DEPOSIT_50' : 'FULL_100',
         voucherCode: appliedVoucher?.code,
       });
-      if (!payment.checkoutUrl) {
-        throw new Error('PayOS không trả về đường dẫn thanh toán hợp lệ.');
+      if (!current()) return;
+      const checkout = safeCheckout(payment, booking.id);
+      if (!checkout) {
+        throw new Error('Giao dịch chưa có checkout an toàn hoặc cần hỗ trợ đối soát. Không thanh toán lại; vui lòng kiểm tra lịch hẹn.');
       }
       sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
-      window.location.assign(payment.checkoutUrl);
-    } catch (err: any) {
-      setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng thử lại.'));
+      window.location.assign(checkout);
+    } catch (err: unknown) {
+      if (current()) setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng kiểm tra lịch hẹn trước khi thử lại.'));
     } finally {
-      setSubmitting(false);
+      submissionBusy.current = false;
+      if (alive.current) setSubmitting(false);
     }
   };
 
   // =========================================================================
   // VIEW: EMPTY CART
   // =========================================================================
+  if (resumeId !== null) return <PaymentContinuationDialog bookingId={resumeId} onClose={() => { setPaymentBookingId(null); setResumeId(null); onViewBookings(); }} />;
   if (items.length === 0) {
     return (
       <div className="min-h-screen bg-[#FFF8F9] py-12 px-4 sm:px-6">
@@ -539,14 +566,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     </label>
                     <div className="flex gap-2 flex-wrap mb-2.5">
                       {[
-                        { label: 'Hôm nay', val: new Date().toISOString().split('T')[0] },
+                        { label: 'Hôm nay', val: bookingDay() },
                         { label: 'Ngày mai', val: tomorrow },
                         {
                           label: 'Ngày kia',
                           val: (() => {
-                            const d = new Date();
-                            d.setDate(d.getDate() + 2);
-                            return d.toISOString().split('T')[0];
+                            return bookingDay(2);
                           })(),
                         },
                       ].map((item) => (
@@ -567,7 +592,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                     <input
                       type="date"
-                      min={new Date().toISOString().split('T')[0]}
+                      min={bookingDay()}
+                      max={bookingMaxDate()}
                       value={selectedDate}
                       onChange={(e) => { setSelectedDate(e.target.value); setScheduleErrors((value) => ({ ...value, appointmentDate: '' })); }}
                       aria-invalid={Boolean(scheduleErrors.appointmentDate)}

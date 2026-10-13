@@ -205,3 +205,24 @@ Verify all of these from the Vercel website:
 4. Verify customer and supplier registration, login, booking creation and PayOS checkout after deployment.
 
 Automated tests use a local HTTP fake and never call Resend or a production database. If the OTP change must be rolled back, redeploy the previous application image/commit; there is no database migration to reverse. Keep `OTP_PEPPER` unchanged so existing unexpired challenges remain consistently hashed. The legacy `phone_code_hash` column remains populated for old MySQL `NOT NULL` compatibility and must not be dropped during rollback.
+
+## 10. Booking/payment/review release gate
+
+See [PAYMENT_REVIEW_RUNBOOK.md](PAYMENT_REVIEW_RUNBOOK.md) for the current cancellation policy,
+read-only manual/legacy-attempt audit, responsible owner, unresolved money decisions and rollback.
+This task authorizes feature-branch push/draft PR **only**: no merge, production deploy, database
+write/restore or real payment. The owner's backup has not been restore-tested; notification and
+late-money procedures remain approval gates. Do not treat prior CI or a health HTTP 200 as release evidence.
+
+Require exact final HEAD CI: full Java 21 regression, frontend tests/typecheck/build, MySQL 8.4
+`BookingReviewReleaseTest,PaymentCancellationSafetyTest`, and backend Docker build. Local browser
+smoke uses real Spring/JWT/H2 with a test-only fake gateway and blocks PayOS network redirects;
+neither fixtures nor the fake provider belongs in the production JAR/bundle.
+The browser gate covers actual existing-booking continuation after reload/back navigation, reuse and expiry
+retry without a new booking; it is not a live PayOS test. Temporary CI-only browser tooling is not a runtime
+dependency. Internal ADMIN zero-money/zero-secondary operations require fresh all-attempt provider proof,
+preview fingerprint and append-only support-report audit; production use requires separate approval.
+Read-only backup metadata now exists, but restore into an approved isolated target remains BLOCKED.
+Book/payment DTO changes are additive; deploy backend before frontend after separate approval.
+Verify current image/commit and how frontend auto-promotion is held **before** merging main.
+No schema/entity mapping, DDL, secrets, webhook URL, CORS or domain changes are required.

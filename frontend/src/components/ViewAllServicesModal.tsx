@@ -66,9 +66,9 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
   initialCategory,
   onBookDeal,
   onAddToCart,
-  deals = HOT_DEALS,
-  salons = NEARBY_SALONS,
-  partners = NEW_PARTNERS,
+  deals = import.meta.env.DEV ? HOT_DEALS : [],
+  salons = import.meta.env.DEV ? NEARBY_SALONS : [],
+  partners = import.meta.env.DEV ? NEW_PARTNERS : [],
 }) => {
   // Lock body scroll when open
   useBodyScrollLock(isOpen);
@@ -150,8 +150,8 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
       salePrice: 350000,
       originalPrice: 600000,
       discountPercent: 42,
-      rating: 4.9,
-      reviewsCount: 120 + idx * 35,
+      rating: p.rating ?? 0,
+      reviewsCount: p.reviewsCount ?? 0,
       duration: '75 phút',
       category: 'spa',
       distanceKm: 1.8 + idx * 0.7,

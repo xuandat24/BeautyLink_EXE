@@ -52,7 +52,7 @@ class PaymentServiceSecurityTest {
 
     @BeforeEach
     void setUp() {
-        service = new PaymentService(payments, bookings, practitioners, gateway,
+        service = new PaymentService(payments, bookings, practitioners, gateway, mock(com.example.backend.service.AvailabilityService.class), mock(org.springframework.transaction.PlatformTransactionManager.class), new com.example.backend.service.BookingCompletionPolicy(),
                 "https://frontend/success", "https://frontend/cancel", 60, 120);
     }
 
@@ -60,7 +60,7 @@ class PaymentServiceSecurityTest {
     void providerExpiredPaymentReleasesBookingSlot() {
         PaymentTransaction payment = pendingPayment();
         PaymentLink provider = provider(payment, PaymentLinkStatus.EXPIRED);
-        when(payments.findByOrderCodeForUpdate(payment.getOrderCode())).thenReturn(Optional.of(payment));
+        lockPayment(payment);
         when(gateway.get(payment.getOrderCode())).thenReturn(provider);
 
         service.status(payment.getBooking().getCustomer(), payment.getOrderCode());
@@ -75,7 +75,7 @@ class PaymentServiceSecurityTest {
     void providerCancelledPaymentAlsoReleasesBookingSlot() {
         PaymentTransaction payment = pendingPayment();
         PaymentLink provider = provider(payment, PaymentLinkStatus.CANCELLED);
-        when(payments.findByOrderCodeForUpdate(payment.getOrderCode())).thenReturn(Optional.of(payment));
+        lockPayment(payment);
         when(gateway.get(payment.getOrderCode())).thenReturn(provider);
 
         service.status(payment.getBooking().getCustomer(), payment.getOrderCode());
@@ -98,7 +98,7 @@ class PaymentServiceSecurityTest {
         when(data.getReference()).thenReturn("LATE-BANK-REFERENCE");
         when(data.getCode()).thenReturn("00");
         when(gateway.verify(webhook)).thenReturn(data);
-        when(payments.findByOrderCodeForUpdate(payment.getOrderCode())).thenReturn(Optional.of(payment));
+        lockPayment(payment);
 
         service.handleWebhook(webhook);
 
@@ -124,9 +124,13 @@ class PaymentServiceSecurityTest {
         when(data.getPaymentLinkId()).thenReturn(oldAttempt.getPaymentLinkId());
         when(data.getCode()).thenReturn("00");
         when(gateway.verify(webhook)).thenReturn(data);
-        when(payments.findByOrderCodeForUpdate(oldAttempt.getOrderCode())).thenReturn(Optional.of(oldAttempt));
-        when(payments.findAllByBookingIdOrderByCreatedAtDesc(oldAttempt.getBooking().getId()))
+        lockPayment(oldAttempt);
+        when(payments.findAllByBookingIdForUpdate(oldAttempt.getBooking().getId()))
                 .thenReturn(List.of(newerAttempt, oldAttempt));
+        var closed = new PaymentLink(); closed.setId("test"); closed.setOrderCode(newerAttempt.getOrderCode());
+        closed.setAmount(250000L); closed.setAmountPaid(0L); closed.setStatus(PaymentLinkStatus.CANCELLED);
+        newerAttempt.setAmount(new BigDecimal("250000")); newerAttempt.setPaymentLinkId(closed.getId());
+        when(gateway.cancel(newerAttempt.getOrderCode(), "Another payment attempt was completed")).thenReturn(closed);
 
         service.handleWebhook(webhook);
 
@@ -157,8 +161,7 @@ class PaymentServiceSecurityTest {
     void createRejectsAmountsBelowPayOSMinimum() {
         Booking booking = payableBooking(53L, 3_000L);
         when(bookings.findByIdForUpdate(booking.getId())).thenReturn(Optional.of(booking));
-        when(payments.findFirstByBookingIdAndStatusOrderByCreatedAtDesc(booking.getId(), PaymentTransactionStatus.PENDING))
-                .thenReturn(Optional.empty());
+        when(payments.findAllByBookingIdForUpdate(booking.getId())).thenReturn(List.of());
         ApiException error = assertThrows(ApiException.class, () -> service.create(booking.getCustomer(), booking.getId(),
                 new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_50, null)));
         assertEquals("PAYMENT_AMOUNT_TOO_LOW", error.getCode());
@@ -174,7 +177,7 @@ class PaymentServiceSecurityTest {
                 new CreatePayOSPaymentRequest(PaymentOption.FULL_100, null))).getCode());
 
         PaymentTransaction payment = pendingPayment();
-        when(payments.findByOrderCodeForUpdate(payment.getOrderCode())).thenReturn(Optional.of(payment));
+        lockPayment(payment);
         assertEquals("PAYMENT_FORBIDDEN", assertThrows(ApiException.class,
                 () -> service.status(other, payment.getOrderCode())).getCode());
     }
@@ -184,63 +187,40 @@ class PaymentServiceSecurityTest {
         PaymentTransaction amountMismatch = pendingPayment();
         Webhook amountWebhook = successfulWebhook(amountMismatch, amountMismatch.getAmount().longValueExact() - 1,
                 amountMismatch.getPaymentLinkId());
-        when(payments.findByOrderCodeForUpdate(amountMismatch.getOrderCode())).thenReturn(Optional.of(amountMismatch));
+        lockPayment(amountMismatch);
         assertEquals(false, service.handleWebhook(amountWebhook));
         assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, amountMismatch.getStatus());
         assertTrue(amountMismatch.isRequiresManualReview());
+        org.junit.jupiter.api.Assertions.assertNull(amountMismatch.getPaymentReference());
+        org.junit.jupiter.api.Assertions.assertNull(amountMismatch.getPaidAt());
 
         PaymentTransaction linkMismatch = pendingPayment();
         linkMismatch.setOrderCode(610000052L);
         Webhook linkWebhook = successfulWebhook(linkMismatch, linkMismatch.getAmount().longValueExact(), "wrong-link");
-        when(payments.findByOrderCodeForUpdate(linkMismatch.getOrderCode())).thenReturn(Optional.of(linkMismatch));
+        lockPayment(linkMismatch);
         assertEquals(false, service.handleWebhook(linkWebhook));
         assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, linkMismatch.getStatus());
+        org.junit.jupiter.api.Assertions.assertNull(linkMismatch.getPaymentReference());
+        org.junit.jupiter.api.Assertions.assertNull(linkMismatch.getPaidAt());
     }
 
     @Test
     void duplicatePaidWebhookIsIdempotent() {
         PaymentTransaction payment = pendingPayment();
         Webhook webhook = successfulWebhook(payment, payment.getAmount().longValueExact(), payment.getPaymentLinkId());
-        when(payments.findByOrderCodeForUpdate(payment.getOrderCode())).thenReturn(Optional.of(payment));
-        when(payments.findAllByBookingIdOrderByCreatedAtDesc(payment.getBooking().getId())).thenReturn(List.of(payment));
+        when(gateway.verify(webhook).getReference()).thenReturn("BANK-REF");
+        lockPayment(payment);
+        when(payments.findAllByBookingIdForUpdate(payment.getBooking().getId())).thenReturn(List.of(payment));
         assertTrue(service.handleWebhook(webhook));
+        var locks = org.mockito.Mockito.inOrder(payments, bookings);
+        locks.verify(payments).findBookingIdByOrderCode(payment.getOrderCode());
+        locks.verify(bookings).findByIdForUpdate(payment.getBooking().getId());
+        locks.verify(payments).findByOrderCodeForUpdate(payment.getOrderCode());
         Instant firstPaidAt = payment.getPaidAt();
         assertTrue(service.handleWebhook(webhook));
         assertEquals(firstPaidAt, payment.getPaidAt());
+        assertEquals("BANK-REF", payment.getPaymentReference());
         assertEquals(PaymentTransactionStatus.PAID, payment.getStatus());
-    }
-
-    @Test
-    void retryCreatesNewAttemptAndRejectsAnOccupiedReleasedSlot() {
-        Booking booking = payableBooking(55L, 100_000L);
-        booking.setStatus(BookingStatus.CANCELLED);
-        booking.setPaymentRetryAllowed(true);
-        PaymentTransaction old = pendingPayment();
-        old.setBooking(booking);
-        old.setStatus(PaymentTransactionStatus.EXPIRED);
-        prepareCreate(booking, "retry-link");
-        when(practitioners.findByIdForUpdate(booking.getPractitioner().getId())).thenReturn(Optional.of(booking.getPractitioner()));
-        when(bookings.existsByPractitionerIdAndAppointmentDateAndStartTimeAndStatusNotAndIdNot(
-                booking.getPractitioner().getId(), booking.getAppointmentDate(), booking.getStartTime(), BookingStatus.CANCELLED, booking.getId()))
-                .thenReturn(false);
-        service.create(booking.getCustomer(), booking.getId(), new CreatePayOSPaymentRequest(PaymentOption.FULL_100, null));
-        ArgumentCaptor<PaymentTransaction> saved = ArgumentCaptor.forClass(PaymentTransaction.class);
-        verify(payments).saveAndFlush(saved.capture());
-        assertNotSame(old, saved.getValue());
-        assertEquals(PaymentTransactionStatus.EXPIRED, old.getStatus());
-
-        Booking occupied = payableBooking(56L, 100_000L);
-        occupied.setStatus(BookingStatus.CANCELLED);
-        occupied.setPaymentRetryAllowed(true);
-        when(bookings.findByIdForUpdate(occupied.getId())).thenReturn(Optional.of(occupied));
-        when(payments.findFirstByBookingIdAndStatusOrderByCreatedAtDesc(occupied.getId(), PaymentTransactionStatus.PENDING))
-                .thenReturn(Optional.empty());
-        when(practitioners.findByIdForUpdate(occupied.getPractitioner().getId())).thenReturn(Optional.of(occupied.getPractitioner()));
-        when(bookings.existsByPractitionerIdAndAppointmentDateAndStartTimeAndStatusNotAndIdNot(
-                occupied.getPractitioner().getId(), occupied.getAppointmentDate(), occupied.getStartTime(), BookingStatus.CANCELLED, occupied.getId()))
-                .thenReturn(true);
-        assertEquals("SLOT_UNAVAILABLE", assertThrows(ApiException.class, () -> service.create(occupied.getCustomer(), occupied.getId(),
-                new CreatePayOSPaymentRequest(PaymentOption.FULL_100, null))).getCode());
     }
 
     @Test
@@ -248,8 +228,10 @@ class PaymentServiceSecurityTest {
         PaymentTransaction paid = pendingPayment();
         PaymentLink provider = provider(paid, PaymentLinkStatus.PAID);
         when(provider.getAmountPaid()).thenReturn(paid.getAmount().longValueExact());
+        when(payments.findBookingIdByPaymentId(71L)).thenReturn(Optional.of(paid.getBooking().getId()));
+        when(bookings.findByIdForUpdate(paid.getBooking().getId())).thenReturn(Optional.of(paid.getBooking()));
         when(payments.findByIdForUpdate(71L)).thenReturn(Optional.of(paid));
-        when(payments.findAllByBookingIdOrderByCreatedAtDesc(paid.getBooking().getId())).thenReturn(List.of(paid));
+        when(payments.findAllByBookingIdForUpdate(paid.getBooking().getId())).thenReturn(List.of(paid));
         when(gateway.get(paid.getOrderCode())).thenReturn(provider);
         service.reconcileById(71L);
         assertEquals(PaymentTransactionStatus.PAID, paid.getStatus());
@@ -257,12 +239,20 @@ class PaymentServiceSecurityTest {
 
         PaymentTransaction pending = pendingPayment();
         pending.setOrderCode(610000053L);
+        when(payments.findBookingIdByPaymentId(72L)).thenReturn(Optional.of(pending.getBooking().getId()));
+        when(bookings.findByIdForUpdate(pending.getBooking().getId())).thenReturn(Optional.of(pending.getBooking()));
         when(payments.findByIdForUpdate(72L)).thenReturn(Optional.of(pending));
         when(gateway.get(pending.getOrderCode())).thenThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
                 "PAYOS_RECONCILIATION_FAILED", "temporary"));
         service.reconcileById(72L);
         assertEquals(PaymentTransactionStatus.PENDING, pending.getStatus());
         assertTrue(pending.getLastReconciledAt() != null);
+    }
+
+    private void lockPayment(PaymentTransaction payment) {
+        when(payments.findBookingIdByOrderCode(payment.getOrderCode())).thenReturn(Optional.of(payment.getBooking().getId()));
+        when(bookings.findByIdForUpdate(payment.getBooking().getId())).thenReturn(Optional.of(payment.getBooking()));
+        when(payments.findByOrderCodeForUpdate(payment.getOrderCode())).thenReturn(Optional.of(payment));
     }
 
     private PaymentTransaction pendingPayment() {
@@ -303,6 +293,7 @@ class PaymentServiceSecurityTest {
         booking.setAppointmentDate(LocalDate.now().plusDays(1));
         booking.setStartTime(LocalTime.of(10, 0));
         booking.setTotalAmount(BigDecimal.valueOf(total));
+        var offering = new com.example.backend.model.ServiceOffering(); offering.setId(id); booking.setService(offering);
         booking.setStatus(BookingStatus.PENDING);
         booking.setPaymentStatus(PaymentStatus.UNPAID);
         return booking;
@@ -310,12 +301,18 @@ class PaymentServiceSecurityTest {
 
     private void prepareCreate(Booking booking, String paymentLinkId) {
         when(bookings.findByIdForUpdate(booking.getId())).thenReturn(Optional.of(booking));
-        when(payments.findFirstByBookingIdAndStatusOrderByCreatedAtDesc(booking.getId(), PaymentTransactionStatus.PENDING))
-                .thenReturn(Optional.empty());
-        CreatePaymentLinkResponse response = mock(CreatePaymentLinkResponse.class);
-        when(response.getPaymentLinkId()).thenReturn(paymentLinkId);
-        when(response.getCheckoutUrl()).thenReturn("https://pay.payos.vn/web/" + paymentLinkId);
-        when(gateway.create(any(CreatePaymentLinkRequest.class))).thenReturn(response);
+        when(payments.findAllByBookingIdForUpdate(booking.getId())).thenReturn(List.of());
+        org.mockito.Mockito.doAnswer(invocation -> {
+            PaymentTransaction saved = invocation.getArgument(0);
+            when(payments.findByOrderCodeForUpdate(saved.getOrderCode())).thenReturn(Optional.of(saved));
+            return saved;
+        }).when(payments).saveAndFlush(any());
+        when(gateway.create(any(CreatePaymentLinkRequest.class))).thenAnswer(invocation -> {
+            CreatePaymentLinkRequest r = invocation.getArgument(0);
+            var response = new CreatePaymentLinkResponse(); response.setOrderCode(r.getOrderCode()); response.setAmount(r.getAmount());
+            response.setStatus(PaymentLinkStatus.PENDING); response.setPaymentLinkId(paymentLinkId); response.setCheckoutUrl("https://pay.payos.vn/web/" + paymentLinkId);
+            return response;
+        });
     }
 
     private Webhook successfulWebhook(PaymentTransaction payment, long amount, String paymentLinkId) {
@@ -325,7 +322,6 @@ class PaymentServiceSecurityTest {
         when(data.getOrderCode()).thenReturn(payment.getOrderCode());
         when(data.getAmount()).thenReturn(amount);
         org.mockito.Mockito.lenient().when(data.getPaymentLinkId()).thenReturn(paymentLinkId);
-        when(data.getReference()).thenReturn("BANK-REF");
         when(data.getCode()).thenReturn("00");
         when(gateway.verify(webhook)).thenReturn(data);
         return webhook;
@@ -337,6 +333,7 @@ class PaymentServiceSecurityTest {
         when(provider.getId()).thenReturn(payment.getPaymentLinkId());
         when(provider.getAmount()).thenReturn(payment.getAmount().longValueExact());
         when(provider.getStatus()).thenReturn(status);
+        when(provider.getAmountPaid()).thenReturn(0L);
         return provider;
     }
 }

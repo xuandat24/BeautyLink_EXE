@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ArrowLeft,
   Calendar,
@@ -12,13 +12,19 @@ import {
   Share2,
 } from 'lucide-react';
 import { BackendBooking } from '../types';
-import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { beautyApi, getApiErrorMessage, getAccessToken } from '../services/beautyApi';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { AppointmentShareModal } from './AppointmentShareModal';
 import { supportReportSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
+import { ServiceReviewModal } from './ServiceReviewModal';
+import { canCancelBooking, canPayBooking, canCompleteBooking, canReviewBooking, paymentSupportMessage } from '../lib/bookingPolicy';
+import { PaymentContinuationDialog } from './PaymentContinuationDialog';
+import { paymentBookingId, setPaymentBookingId } from '../lib/paymentNavigation';
+import { useBeautyStore } from '../store/beautyStore';
 
 interface BookingsPageProps {
+  embedded?: boolean;
   onBack: () => void;
   onBookNew: () => void;
 }
@@ -34,10 +40,22 @@ const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('vi-VN').format(val) + 'đ';
 };
 
-export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew }) => {
+export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, embedded = false }) => {
+  const { currentUser } = useBeautyStore();
+  const [paymentId, setPaymentId] = useState<number | null>(() => paymentBookingId());
+  const [sessionRevision, setSessionRevision] = useState(0);
+  const sessionToken = getAccessToken();
+  const priorSession = useRef(sessionToken);
+  useEffect(() => {
+    if (priorSession.current !== sessionToken) { setPaymentId(null); setPaymentBookingId(null); priorSession.current = sessionToken; }
+  }, [sessionToken]);
   const [bookings, setBookings] = useState<BackendBooking[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [completingId, setCompletingId] = useState<number | null>(null);
+  const [confirmingBooking, setConfirmingBooking] = useState<BackendBooking | null>(null);
+  const [reviewingBooking, setReviewingBooking] = useState<BackendBooking | null>(null);
+  const [filter, setFilter] = useState<'all' | 'upcoming' | 'history'>('all');
   const [error, setError] = useState<string>('');
   const [reportBooking, setReportBooking] = useState<BackendBooking | null>(null);
   const [reportReason, setReportReason] = useState<string>('');
@@ -46,45 +64,80 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
   const [reportSuccess, setReportSuccess] = useState<string>('');
   const [sharingBooking, setSharingBooking] = useState<BackendBooking | null>(null);
   const [reportErrors, setReportErrors] = useState<FieldErrors>({});
+  const alive = useRef(false);
+  const loadVersion = useRef(0);
+  const actionBusy = useRef(false);
 
   // Lock body scroll when report modal is open
-  useBodyScrollLock(Boolean(reportBooking));
+  useBodyScrollLock(Boolean(reportBooking || confirmingBooking));
 
   // Close report modal on ESC
   useEffect(() => {
-    if (!reportBooking) return;
+    if (!reportBooking && !confirmingBooking) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setReportBooking(null);
+      if (e.key === 'Escape' && completingId === null) { setReportBooking(null); setConfirmingBooking(null); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [reportBooking]);
+  }, [reportBooking, confirmingBooking, completingId]);
 
-  const loadBookings = () => {
+  const loadBookings = useCallback(async (keepError = false) => {
+    const version = ++loadVersion.current;
+    const token = getAccessToken();
+    const current = () => alive.current && version === loadVersion.current && token === getAccessToken();
     setLoading(true);
-    setError('');
-    beautyApi
-      .myBookings()
-      .then((data) => setBookings(data))
-      .catch((err) => setError(getApiErrorMessage(err, 'Không thể tải danh sách lịch hẹn.')))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    loadBookings();
+    if (!keepError) setError('');
+    try { const data = await beautyApi.myBookings(); if (current()) setBookings(data); }
+    catch (err) { if (current()) { setBookings([]); setError(getApiErrorMessage(err, 'Không thể tải danh sách lịch hẹn.')); } }
+    finally { if (current()) setLoading(false); }
   }, []);
 
+  useEffect(() => {
+    alive.current = true;
+    setBookings([]); setReviewingBooking(null); setConfirmingBooking(null);
+    void loadBookings();
+    return () => { alive.current = false; loadVersion.current += 1; };
+  }, [loadBookings, sessionToken, currentUser?.id, sessionRevision]);
+  useEffect(() => {
+    const pop = () => setPaymentId(paymentBookingId());
+    const changed = () => { setPaymentId(null); setPaymentBookingId(null); setSessionRevision(n => n + 1); };
+    window.addEventListener('popstate', pop); window.addEventListener('storage', changed);
+    return () => { window.removeEventListener('popstate', pop); window.removeEventListener('storage', changed); };
+  }, []);
+  useEffect(() => {
+    const refresh = () => { void loadBookings(true); };
+    window.addEventListener('beautylink-bookings-refresh', refresh);
+    return () => window.removeEventListener('beautylink-bookings-refresh', refresh);
+  }, [loadBookings]);
+
   const handleCancelBooking = async (id: number) => {
+    if (actionBusy.current || !bookings.some(b => b.id === id && canCancelBooking(b))) return;
+    actionBusy.current = true; loadVersion.current += 1;
+    const token = getAccessToken();
+    const current = () => alive.current && token === getAccessToken();
     setCancellingId(id);
     setError('');
     try {
-      const updated = await beautyApi.cancelBooking(id);
-      setBookings((prev) => prev.map((b) => (b.id === id ? updated : b)));
+      await beautyApi.cancelBooking(id);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể hủy lịch hẹn.'));
+      if (current()) setError(getApiErrorMessage(err, 'Không thể hủy lịch hẹn.'));
     } finally {
-      setCancellingId(null);
+      if (current()) { await loadBookings(true); setCancellingId(null); }
+      actionBusy.current = false;
     }
+  };
+
+  const handleComplete = async () => {
+    if (!confirmingBooking || actionBusy.current || !canCompleteBooking(confirmingBooking)) return;
+    actionBusy.current = true; loadVersion.current += 1;
+    const token = getAccessToken();
+    const current = () => alive.current && token === getAccessToken();
+    setCompletingId(confirmingBooking.id); setError('');
+    try {
+      await beautyApi.completeBooking(confirmingBooking.id);
+      if (current()) setConfirmingBooking(null);
+    } catch (err) { if (current()) setError(getApiErrorMessage(err, 'Không thể xác nhận hoàn thành.')); }
+    finally { if (current()) { await loadBookings(true); setCompletingId(null); } actionBusy.current = false; }
   };
 
   const handleSendReport = async () => {
@@ -116,8 +169,8 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
   };
 
   return (
-    <div className="min-h-screen bg-[#FFF0F3]">
-      <header className="border-b border-pink-100 bg-white">
+    <div className={embedded ? "bg-white" : "min-h-screen bg-[#FFF0F3]"}>
+      {!embedded && <header className="border-b border-pink-100 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
           <button
             onClick={onBack}
@@ -135,17 +188,22 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
             Đặt lịch mới
           </button>
         </div>
-      </header>
+      </header>}
 
-      <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+      <main className={embedded ? "mx-auto max-w-5xl py-6" : "mx-auto max-w-5xl px-4 py-10 sm:px-6"}>
         <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-pink-600">
           Tài khoản khách hàng
         </p>
         <h1 className="mt-2 text-3xl font-black">Lịch hẹn của tôi</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Theo dõi trạng thái, mã đặt lịch và giao dịch thanh toán.
+          Sau giờ kết thúc lịch hẹn, xác nhận đã sử dụng dịch vụ để mở đánh giá.
         </p>
 
+        <div className="mt-4 flex flex-wrap gap-2">
+          {(['all', 'upcoming', 'history'] as const).map((value) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className="rounded-xl border px-3 py-2 text-sm">{{all: 'Tất cả', upcoming: 'Sắp tới', history: 'Lịch sử'}[value]}</button>)}
+          <button type="button" onClick={() => void loadBookings()} disabled={loading || cancellingId !== null || completingId !== null} className="rounded-xl border px-3 py-2 text-sm">Làm mới</button>
+          {embedded && <button type="button" onClick={onBookNew} className="rounded-xl bg-pink-600 px-3 py-2 text-sm text-white">Đặt lịch mới</button>}
+        </div>
         {loading && (
           <div className="grid h-64 place-items-center">
             <Loader2 className="h-8 w-8 animate-spin text-pink-600" />
@@ -181,7 +239,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
         )}
 
         <div className="mt-8 space-y-4">
-          {bookings.map((item) => (
+          {bookings.filter((item) => filter === 'all' || (filter === 'history' ? ['COMPLETED', 'CANCELLED'].includes(item.status) : ['PENDING', 'CONFIRMED'].includes(item.status))).map((item) => (
             <article
               key={item.id}
               className="rounded-[1.6rem] border border-pink-100 bg-white p-5 shadow-sm sm:p-6"
@@ -203,7 +261,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
                         ? 'Đã thanh toán đủ'
                         : item.paymentStatus === 'PARTIALLY_PAID'
                           ? 'Đã cọc 50%'
-                          : 'Chờ thanh toán'}
+                          : item.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : 'Chờ thanh toán'}
                     </span>
                   </div>
 
@@ -247,9 +305,12 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
                     >
                       <MessageSquare className="h-4 w-4" /> Phản hồi
                     </button>
-                    {!['CANCELLED', 'COMPLETED'].includes(item.status) && (
+                    {canCompleteBooking(item) && <button type="button" disabled={completingId !== null || cancellingId !== null} onClick={() => setConfirmingBooking(item)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Đã sử dụng dịch vụ</button>}
+                    {canReviewBooking(item) && <button type="button" onClick={() => setReviewingBooking(item)} className="rounded-xl bg-pink-600 px-3 py-2 text-xs font-bold text-white">{item.serviceReview || item.supplierReview ? 'Xem / sửa đánh giá' : 'Đánh giá dịch vụ / nhà cung cấp'}</button>}
+                    {canPayBooking(item) && <button type="button" disabled={loading || cancellingId !== null || completingId !== null} onClick={() => { setPaymentBookingId(item.id, true); setPaymentId(item.id); }} className="rounded-xl bg-pink-600 px-3 py-2 text-xs font-bold text-white">Tiếp tục thanh toán</button>}
+                    {canCancelBooking(item) && (
                       <button
-                        disabled={cancellingId === item.id}
+                        disabled={cancellingId !== null || completingId !== null}
                         onClick={() => handleCancelBooking(item.id)}
                         className="flex items-center gap-1.5 text-xs font-extrabold text-rose-600 hover:text-rose-800 transition"
                       >
@@ -262,12 +323,24 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew })
                       </button>
                     )}
                   </div>
+                  {paymentSupportMessage(item) && <p role="status" className="mt-3 max-w-sm text-xs text-amber-800">{paymentSupportMessage(item)}</p>}
                 </div>
               </div>
             </article>
           ))}
         </div>
       </main>
+
+      {confirmingBooking && <div className="fixed inset-0 z-[120] grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="complete-title">
+        <div className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6">
+          <h2 id="complete-title" className="text-xl font-black">Xác nhận đã sử dụng dịch vụ</h2>
+          <p>Bạn xác nhận đã sử dụng xong {confirmingBooking.serviceName} tại {confirmingBooking.supplierName}? Sau xác nhận, lịch hẹn không thể hủy và bạn có thể đánh giá trải nghiệm.</p>
+          {error && <p role="alert" className="text-rose-700">{error}</p>}
+          <div className="flex justify-end gap-3"><button type="button" disabled={completingId !== null} onClick={() => setConfirmingBooking(null)}>Quay lại</button><button type="button" disabled={completingId !== null} onClick={handleComplete} className="rounded-xl bg-emerald-600 p-3 text-white">{completingId !== null ? 'Đang xác nhận...' : 'Xác nhận hoàn thành'}</button></div>
+        </div>
+      </div>}
+      {reviewingBooking && <ServiceReviewModal isOpen booking={reviewingBooking} serviceTitle={reviewingBooking.serviceName} salonName={reviewingBooking.supplierName} onClose={() => setReviewingBooking(null)} onSuccess={() => void loadBookings()} />}
+      {paymentId !== null && <PaymentContinuationDialog bookingId={paymentId} onClose={() => { setPaymentBookingId(null); setPaymentId(null); void loadBookings(); }} />}
 
       {/* Support Report Modal */}
       {reportBooking && (
