@@ -1,5 +1,55 @@
 # Payment review operations — approval required before rollout
 
+## Webhook / reconciliation decision — 13 October 2026 release
+
+This section supersedes any older statement allowing automatic PAID confirmation after an uncertain
+customer cancellation. A manual case is never resolved by webhook, customer status GET or scheduler.
+All three record an exact, identity-verified receipt through the same decision in PaymentService.
+They preserve the first verified receipt observation (`paidAt`), a verified webhook reference when
+available, booking/order/link/expected amount and last reconciliation time. An unverified webhook
+reference cannot replace verified evidence. These are application observations, not bank settlement proof.
+REVIEW_REQUIRED and legacy manual-flagged attempts remain bounded/rate-limited reconciliation candidates
+so a later receipt is still discovered. Non-paid manual rows converge to REVIEW_REQUIRED; an established
+PAID primary with a manual flag remains PAID/blocked rather than losing its existing receipt.
+
+| Observation for an unresolved/manual attempt | Application result | Authorized next action |
+| --- | --- | --- |
+| Exact verified PAID | Retain receipt, manual blocker, booking/payment state; no completion/review/checkout | Owner investigates all attempts; no automatic financial resolution |
+| Matching terminal, amountPaid=0 | Retain blocker and slot; no automatic closure | ADMIN preview then guarded all-attempt zero closure if every predicate passes |
+| Zero response after a recorded receipt | Preserve paidAt/reference and blocker | Zero closure refused; owner investigates contradictory evidence |
+| Missing/wrong identity, unknown/nonmatching amount, timeout | No fabricated receipt or closure; blocker retained | Obtain provider/bank evidence and retry read-only preview |
+| Normal exact PAID, no manual case | CONFIRMED plus PAID/PARTIALLY_PAID; no auto-completion | Existing completion policy after appointment end |
+| Verified primary plus zero terminal secondary | Primary and booking unchanged until operator action | Existing ADMIN close-zero-secondary, freshly verify every attempt and audit |
+
+### Quy trình vận hành tiền đến muộn (chủ dự án: xuandat24)
+
+1. Mở hồ sơ riêng với mã case, booking ID và **tất cả** attempt IDs/orderCodes. Dùng ADMIN GET preview
+   bên dưới; đối chiếu đúng kênh PayOS, link ID, số tiền dự kiến/thực nhận, thời điểm, mã tham chiếu,
+   giao dịch ngân hàng và tình trạng quyết toán. Lưu bằng chứng vào hồ sơ có giới hạn truy cập, không vào
+   Git/chat/log công khai. Nếu PayOS và ngân hàng chưa thống nhất, hồ sơ vẫn đang xử lý.
+2. Chủ dự án lấy số điện thoại từ hồ sơ tài khoản/support được phép xem, gọi khách và xác nhận booking
+   đang nói đến. Không hỏi OTP/mật khẩu. Thông báo đã ghi nhận giao dịch cần kiểm tra, yêu cầu không trả
+   thêm, ghi giờ gọi/kết quả/lần liên hệ tiếp theo. Nếu không liên hệ được, ghi lần thử và hẹn gọi lại;
+   không coi im lặng là đồng ý. Ứng dụng chưa tự gửi Gmail hoặc tự gọi điện.
+3. Chỉ chủ dự án quyết định việc giữ lịch còn khả dụng hoặc cách xử lý tiền ngoài ứng dụng, sau khi trao
+   đổi với khách và spa. Quyết định phải ghi mã case, từng giao dịch/số tiền, ý kiến khách/spa, người duyệt
+   và thời điểm. Booking đã hủy không được hồi sinh; không hứa đổi lịch hay hoàn tiền khi chưa có quyết định.
+   Yêu cầu chung “triển khai hoàn thành” không phải phê duyệt một khoản chuyển/hoàn tiền cụ thể.
+4. Trong ứng dụng chỉ được: đọc preview; ADMIN đóng toàn bộ attempt terminal/zero hoặc secondary zero
+   đúng điều kiện đã mô tả; lưu audit tự động của các thao tác đó. Có tiền, paidAt, sai/thiếu bằng chứng:
+   **không gọi closure để ép mở khóa**, không đổi PAID/REFUNDED/CONFIRMED, không UPDATE SQL.
+   Kể cả đã xử lý tiền bên ngoài, blocker tài chính vẫn được giữ trong bản này. Hồ sơ không được đánh dấu
+   đã giải quyết trong app. Bất kỳ thao tác đổi trạng thái có tiền nào đều cần quyết định riêng, đúng target,
+   preview/recheck/audit được kiểm thử; không thuộc bản sửa này và không chặn việc hoàn tất code hiện tại.
+5. Khi zero closure được phép: lưu fingerprint/caseReference, gọi đúng endpoint một lần, lưu auditId,
+   đọc preview/booking lại. Nếu 409, đọc lại hồ sơ thay vì lặp mù. Xác nhận lịch sử còn nguyên và không mở
+   completion/review khi còn attempt khác chưa giải quyết. Không hủy hay tạo link mới để vượt blocker.
+
+Người trực release/đối soát chính: **xuandat24** (đã xác nhận nhận trách nhiệm). Trước public rollout cần
+chốt khung giờ trực và người thay thế khi vắng mặt; đề xuất kiểm tra lúc mở ca và mỗi 30 phút, phản hồi
+khách trong 2 giờ làm việc, ghi quyết định xử lý trong 1 ngày làm việc. Đây là lịch trực đề xuất, chưa phải
+bằng chứng đã được chủ dự án duyệt. Từng giao dịch tiền thật vẫn cần phê duyệt riêng.
+
 ## Owner and current gate
 
 The project owner (`xuandat24`) is responsible for PayOS reconciliation and contacting customers.
@@ -100,9 +150,9 @@ The historical `last_reconciled_at` value alone is not proof the link was closed
 
 Valid pending checkout reuse is the exception in the last row: exactly one live link, unpaid/non-cancelled
 booking, no manual blocker, matching option/voucher. Cancellation is still server-verified before success.
-Manual flag on an uncertain cancellation keeps the attempt PENDING for scheduler discovery. A verified
-PAID result may safely confirm a still-reserved booking; a closed/no-money result with a manual flag
-does not automatically resolve the support case or release its slot. REVIEW_REQUIRED is not auto-resolved.
+An uncertain cancellation may initially retain PENDING/manual for compatibility. Its next verified
+observation converges to REVIEW_REQUIRED and retains the blocker, even for exact PAID. Scheduler/status
+also inspect REVIEW_REQUIRED/manual rows; terminal/zero never automatically closes the operator case.
 
 ## Implementation invariants and residual risks
 
@@ -127,13 +177,14 @@ does not automatically resolve the support case or release its slot. REVIEW_REQU
   bookings block the full interval. Configuring new overnight supplier hours is not added in this patch.
 - Customer completion is MVP self-attestation, not independent attendance proof. Media/rewards remain absent.
 
-## Release and rollback — not authorized in this task
+## Single release approval gate — conditional, not yet satisfied
 
 1. Exact final HEAD CI must pass backend, frontend, isolated MySQL and Docker; review the draft PR.
 2. Obtain a usable recent backup with completion/checksum metadata. Restore only into an explicitly
    approved isolated target (no paid resource creation without approval); compare schema, aggregate row
    counts and booking/payment/review relations and read with the app. Do not run create-drop tests on a
-   restored database containing real customer data. Backup at 20:00 was reported, restoration is unverified.
+   restored database containing real customer data. The existing before_resend backup is acknowledged;
+   making another backup is not a substitute for an isolated restore check.
 3. Obtain separate approval for exact release SHA, environment, money-review process and backend-first
    promotion control. Railway/Vercel Git auto-deploy may race; do not merge until frontend can be held.
 4. Backend first, verify deployed SHA/health/startup/MySQL/API; only then frontend from same release SHA.
@@ -218,6 +269,45 @@ alone. A further controlled app-state action, if needed, must be separately spec
   This is not the feature release. Vercel project read returned 403 under connector scope `project-personal2`;
   no CLI is installed, so frontend auto-promotion/current SHA cannot be confirmed. No alternate credentials.
 - **NO-GO merge** until exact release SHA CI/review, isolated restore, financial runbook approval and explicit
-  backend-first frontend-hold control are verified. No merge/deploy authorization in this task. Approve
+   backend-first frontend-hold control are verified. Latest task conditionally authorizes release only
+   after these gates; the follow-up asks to finish deployment but supplies no restore/rollout evidence. Approve
   rollback image/commit before rollout; old main may reopen known review/cancellation bugs. Roll back code/
   image, never restore production DB to repair a code-only error. Webhook must remain receiving throughout.
+
+## Exact rollout control and remaining account-owner actions
+
+Read-only recheck in this task: Railway source remains main/root /backend, checkSuites=false, no staged
+changes, production deployment 12ca4eb6-d4ca-419c-9c99-2467b712cd03 SUCCESS at main 5cdc5d3. A main merge
+can start backend deployment immediately; passing feature CI does not change this setting. Vercel GET
+project still returns 403 for project-personal2/team_ZSxj6a4Zw9lLokoiuJ3sgoSZ. No alternate credentials.
+Current Vercel SHA, branch tracking and promotion switch remain unverified, not assumed safe.
+
+The concrete frontend hold is documented by [Vercel](https://vercel.com/docs/deployments/promoting-a-deployment):
+project Settings → Environments → Production → Branch Tracking → turn OFF **Auto-assign Custom Production
+Domains** before merging. Record its current value and current deployment ID/SHA first. After merge the
+production build should be Staged, not Current; keep the old live frontend until Railway validation.
+After backend succeeds, Deployments → exact merge-SHA staged production deployment → (…) → Promote.
+Do not substitute promotion of an unrelated preview (it can rebuild with different environment variables).
+This is a proposed setting change for the project owner; it has not been made or verified by this session.
+
+One approval record must contain: final feature SHA/green CI, PR/reviewer, merge strategy and resulting
+merge SHA, restore target/result, named incident operator and shift, frontend hold evidence, backend-first
+sequence and selected rollback image. Verify merge tree/source matches the reviewed branch and merge CI.
+Railway first: deployment SHA/image, categories HTTP 200, startup/MySQL/5xx, completion/review ownership
+and manual-blocker API checks in isolated staging, and unchanged webhook route/signature configuration.
+Keep webhook reachable; never forge a production event or manufacture money to test it. Then staged
+frontend same merge SHA, API base/CORS unchanged, smoke login/catalog/bookings/reviews, promote and monitor.
+No live payment/refund without separate account/booking/amount/channel/disposition approval.
+
+Backup marker/hash is unchanged on recheck. Docker engine is unavailable locally (service stopped), no
+local MySQL server/approved isolated restore target is configured. No restored customer data entered CI.
+Owner action: provide an existing isolated host/schema with restore permission, or approve a dedicated
+local Docker MySQL target on loopback port 3307 once Docker is running; never reuse the automated-test DB
+or Railway production. Restore first, then schema/count/FK/application-read evidence with writes disabled.
+Do not create a paid service. Do not send database credentials or customer rows in chat.
+
+Rollback preserves DB/ledger/audit. Frontend-only failure: previous frontend deployment, keep healthy
+backend. Backend failure: hold frontend and use a reviewed safe image/forward fix. Neither old main 5cdc5d3
+nor feature baseline 87409c1 is a safe *automatic* rollback for these payment/review bugs. If no safe image
+exists, owner must approve an incident containment plan that keeps webhook receipt running; no silent
+return to unsafe cancellation/review behavior and no production DB restore for a code-only fault.

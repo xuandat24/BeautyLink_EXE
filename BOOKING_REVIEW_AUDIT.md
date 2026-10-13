@@ -1,5 +1,21 @@
 # BeautyLink booking and verified-review audit
 
+## Final convergence fix (baseline 87409c11, 13 October 2026)
+
+| Verified defect | Minimal correction | Behavioral evidence |
+| --- | --- | --- |
+| PAID reconciliation calls markPaid on PENDING/manual while webhook keeps escalation | Single identity/amount-verified receipt decision; never clear manual flags automatically | 2 RED cases before fix; delivery-order/repeated/status/scheduler/webhook tests now PASS |
+| REVIEW_REQUIRED is excluded from scheduler/status and may lose later receipt observation | Bounded/throttled candidate query and common entry guard include manual cases | Provider timeout/identity/amount matrix followed by later PAID; query-driven scheduler test |
+| Terminal-zero reconciliation can overwrite manual attempt status; invalid webhook reference overwrites verified evidence | Preserve manual status/first verified receipt/reference, ADMIN-only all-attempt closure | Zero/contradictory-zero/operator audit, primary-secondary and concurrent MySQL-selected tests |
+
+Fixed scope: PaymentService, PaymentTransactionRepository, existing payment tests/browser fixture, runbook,
+PR and handoff. No API shape/schema/dependency/OTP/auth/money math/unrelated UI change. All paths that can
+markPaid or clear manual were traced; only PaymentReviewService clears manual after its locked all-attempt
+provider proof/audit. It is unchanged. Established PAID primary stays intact while a secondary is blocked.
+Local full suite 269 PASS (+33 integration cases); frontend 40/typecheck/build PASS; expanded real
+Chrome/Spring/JWT/H2 fake-gateway smoke PASS. MySQL/Docker/browser CI must match the final pushed HEAD.
+Production and operational gates are tracked separately in PAYMENT_REVIEW_RUNBOOK; no merge/deploy yet.
+
 ## Fixed scope for continuation/review resolution (baseline 4841be0)
 
 Fetched main 5cdc5d3 and feature 4841be0, clean worktree, merge base main; no AGENTS.md found.
