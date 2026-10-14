@@ -23,7 +23,6 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.Instant;
 import java.math.RoundingMode;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -745,15 +744,15 @@ class PlatformApiIntegrationTest {
         });
         String paymentJson = mvc.perform(post("/api/v1/payments/payos/bookings/" + bookingId)
                         .header("Authorization", "Bearer " + customerToken).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"paymentOption\":\"DEPOSIT_50\"}"))
+                        .content("{\"paymentOption\":\"DEPOSIT_05\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status", is("PENDING")))
                 .andExpect(jsonPath("$.checkoutUrl", is("https://pay.payos.vn/web/test")))
                 .andReturn().getResponse().getContentAsString();
         JsonNode payment = objectMapper.readTree(paymentJson);
         long expectedDeposit = bookings.findById(bookingId).orElseThrow().getTotalAmount()
-                .multiply(new java.math.BigDecimal("0.50")).setScale(0, RoundingMode.HALF_UP).longValueExact();
-        assertTrue(payment.path("amount").asLong() == expectedDeposit, "Deposit must be 50% of the discounted booking total");
+                .multiply(new java.math.BigDecimal("0.05")).setScale(0, RoundingMode.HALF_UP).longValueExact();
+        assertTrue(payment.path("amount").asLong() == expectedDeposit, "Deposit must be 5% of the discounted booking total");
         long orderCode = payment.path("orderCode").asLong();
         long amount = payment.path("amount").asLong();
         WebhookData verifiedData = mock(WebhookData.class);

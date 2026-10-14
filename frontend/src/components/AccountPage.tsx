@@ -716,6 +716,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 <label className="text-xs font-bold text-slate-700 block mb-1">Mật khẩu hiện tại</label>
                 <input
                   type="password"
+                  name="currentPassword"
+                  autoComplete="current-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={passwordForm.currentPassword}
                   onChange={(e) => { setPasswordForm((value) => ({ ...value, currentPassword: e.target.value })); setPasswordErrors((value) => ({ ...value, currentPassword: '' })); }}
                   maxLength={72}
@@ -731,6 +736,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 <label className="text-xs font-bold text-slate-700 block mb-1">Mật khẩu mới</label>
                 <input
                   type="password"
+                  name="newPassword"
+                  autoComplete="new-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={passwordForm.newPassword}
                   onChange={(e) => { setPasswordForm((value) => ({ ...value, newPassword: e.target.value })); setPasswordErrors((value) => ({ ...value, newPassword: '' })); }}
                   maxLength={72}
@@ -746,6 +756,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 <label className="text-xs font-bold text-slate-700 block mb-1">Xác nhận mật khẩu mới</label>
                 <input
                   type="password"
+                  name="confirmPassword"
+                  autoComplete="new-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={passwordForm.confirmPassword}
                   onChange={(e) => { setPasswordForm((value) => ({ ...value, confirmPassword: e.target.value })); setPasswordErrors((value) => ({ ...value, confirmPassword: '' })); }}
                   maxLength={72}

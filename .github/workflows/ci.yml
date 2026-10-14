@@ -94,7 +94,7 @@ jobs:
           cd backend
           mvn --batch-mode --no-transfer-progress test-compile dependency:build-classpath -Dmdep.outputFile=target/test-classpath.txt -Dmdep.includeScope=test
           npm install --prefix "$RUNNER_TEMP/beautylink-browser" --no-save --package-lock=false playwright@1.62.1
-          "$RUNNER_TEMP/beautylink-browser/node_modules/.bin/playwright" install --with-deps chromium
+          "$RUNNER_TEMP/beautylink-browser/node_modules/.bin/playwright" install --with-deps chromium webkit
       - name: Browser to real Spring and isolated H2, test-classpath fake gateway only
         env:
           PLAYWRIGHT_MODULE_PATH: ${{ runner.temp }}/beautylink-browser/node_modules/playwright
@@ -110,3 +110,4 @@ jobs:
           done
           grep -q BOOKING_REVIEW_SMOKE_READY backend/target/browser-server.log
           node frontend/tests/bookingReviewSmoke.mjs
+          node frontend/tests/authMobileSmoke.mjs

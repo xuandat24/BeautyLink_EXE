@@ -94,6 +94,7 @@ class PaymentCancellationSafetyTest {
         return w;
     }
     private CreatePayOSPaymentRequest request() { return new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_50, null); }
+    private CreatePayOSPaymentRequest newRequest() { return new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_05, null); }
     private UserAccount admin() { return users.findAll().stream().filter(u -> u.getRole() == Role.ADMIN).findFirst().orElseThrow(); }
     private void proof(PaymentTransaction p, PaymentLinkStatus state) { var result = provider(p, state); when(gateway.get(p.getOrderCode())).thenReturn(result); }
     private CloseZeroMoneyRequest resolution(Booking b) { return new CloseZeroMoneyRequest(operatorReview.preview(admin(), b.getId()).fingerprint(), "TEST-CASE-1"); }
@@ -213,7 +214,8 @@ class PaymentCancellationSafetyTest {
         assertThrows(ApiException.class, () -> operatorReview.closeZeroMoney(admin(), b.getId(), new CloseZeroMoneyRequest(preview.fingerprint(), "CONTRADICTORY-PROOF")));
     }
     @ParameterizedTest @CsvSource({"WEBHOOK,FULL_100,PAID", "STATUS,FULL_100,PAID", "SCHEDULER,FULL_100,PAID",
-            "WEBHOOK,DEPOSIT_50,PARTIALLY_PAID", "STATUS,DEPOSIT_50,PARTIALLY_PAID", "SCHEDULER,DEPOSIT_50,PARTIALLY_PAID"})
+            "WEBHOOK,DEPOSIT_50,PARTIALLY_PAID", "STATUS,DEPOSIT_50,PARTIALLY_PAID", "SCHEDULER,DEPOSIT_50,PARTIALLY_PAID",
+            "WEBHOOK,DEPOSIT_05,PARTIALLY_PAID", "STATUS,DEPOSIT_05,PARTIALLY_PAID", "SCHEDULER,DEPOSIT_05,PARTIALLY_PAID"})
     void normalPaidStillConfirmsThroughEverySource(String path, PaymentOption option, PaymentStatus paid) {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.PENDING);
         p.setPaymentOption(option); payments.saveAndFlush(p); proof(p, PaymentLinkStatus.PAID); var webhook = paidWebhook(p);
@@ -283,7 +285,7 @@ class PaymentCancellationSafetyTest {
             CreatePaymentLinkRequest input = invocation.getArgument(0); assertEquals(start.getEpochSecond(), input.getExpiredAt());
             assertEquals(1, payments.count(), "ledger committed before provider"); doReturn(start).when(time).now(); return created(input);
         });
-        var response = paymentService.create(customer(), b.getId(), request()); assertNull(response.checkoutUrl());
+        var response = paymentService.create(customer(), b.getId(), newRequest()); assertNull(response.checkoutUrl());
         assertEquals(start, payments.findByOrderCode(response.orderCode()).orElseThrow().getExpiresAt());
         assertEquals(PaymentTransactionStatus.PENDING, payments.findByOrderCode(response.orderCode()).orElseThrow().getStatus());
         verify(gateway, never()).cancel(any(), any());
@@ -446,7 +448,7 @@ class PaymentCancellationSafetyTest {
 
     @Test void customerCancelledPendingCheckoutMustNotBeReturned() {
         var b = booking(BookingStatus.CANCELLED, PaymentStatus.UNPAID); attempt(b, PaymentTransactionStatus.PENDING);
-        assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request()));
+        assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest()));
         verify(gateway, never()).create(any()); verify(gateway, never()).get(any()); verify(gateway, never()).cancel(any(), any());
     }
     @Test void paidAndDepositPaidCannotBeSelfCancelled() {
@@ -460,7 +462,7 @@ class PaymentCancellationSafetyTest {
     @Test void manualReviewBlocksNewCheckoutEvenWithAnotherPendingAttempt() {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); attempt(b, PaymentTransactionStatus.REVIEW_REQUIRED);
         attempt(b, PaymentTransactionStatus.PENDING);
-        assertEquals("PAYMENT_REVIEW_REQUIRED", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request())).getCode());
+        assertEquals("PAYMENT_REVIEW_REQUIRED", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest())).getCode());
     }
     @Test void supersededCancelFailureMustRemainReconcileableAndPreserveMainPaid() {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID);
@@ -496,7 +498,7 @@ class PaymentCancellationSafetyTest {
     @Test void uncertainCreateMustRetainOrderForReconciliation() {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); long before = payments.count();
         when(gateway.create(any())).thenThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY, "PAYOS_CREATE_FAILED", "test timeout"));
-        assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request()));
+        assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest()));
         assertEquals(before + 1, payments.count());
         assertEquals(PaymentTransactionStatus.PENDING, payments.findFirstByBookingIdOrderByCreatedAtDesc(b.getId()).orElseThrow().getStatus());
     }
@@ -543,7 +545,7 @@ class PaymentCancellationSafetyTest {
         assertNotNull(payments.findById(p.getId()).orElseThrow().getLastReconciledAt());
         assertTrue(payments.findById(p.getId()).orElseThrow().isRequiresManualReview());
         assertNull(payments.findById(p.getId()).orElseThrow().getCheckoutUrl());
-        assertEquals("PAYMENT_REVIEW_REQUIRED", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request())).getCode());
+        assertEquals("PAYMENT_REVIEW_REQUIRED", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest())).getCode());
         if (failure.equals("GET_TIMEOUT")) verify(gateway, never()).cancel(any(), any());
     }
     @Test void cancelResponsePaidAlsoCommitsMoneyAndRejectsCancel() {
@@ -590,14 +592,14 @@ class PaymentCancellationSafetyTest {
             assertTrue(tx(() -> payments.existsByOrderCode(r.getOrderCode())));
             var result = created(r); result.setAmount(r.getAmount() + 1); return result;
         });
-        assertEquals("PAYMENT_REVIEW_REQUIRED", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request())).getCode());
+        assertEquals("PAYMENT_REVIEW_REQUIRED", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest())).getCode());
         assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, payments.findFirstByBookingIdOrderByCreatedAtDesc(b.getId()).orElseThrow().getStatus());
         assertEquals(1, payments.count());
     }
     @Test void timeoutCannotIssueSecondCheckoutAndVerifiedPendingCanBeReusedOnlyWhenSafe() {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); when(gateway.create(any())).thenThrow(timeout());
-        assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request()));
-        assertEquals("PAYMENT_RECONCILING", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request())).getCode());
+        assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest()));
+        assertEquals("PAYMENT_RECONCILING", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest())).getCode());
         verify(gateway, times(1)).create(any()); assertEquals(1, payments.count());
     }
     @Test void pendingReuseIsIdempotentButExpiredLinksFailClosed() {
@@ -612,7 +614,7 @@ class PaymentCancellationSafetyTest {
         var expired = provider(p, PaymentLinkStatus.EXPIRED); when(gateway.get(p.getOrderCode())).thenReturn(expired);
         paymentService.reconcileById(p.getId()); assertTrue(bookings.findById(b.getId()).orElseThrow().isPaymentRetryAllowed());
         when(gateway.create(any())).thenAnswer(i -> created(i.getArgument(0)));
-        var response = paymentService.create(customer(), b.getId(), request());
+        var response = paymentService.create(customer(), b.getId(), newRequest());
         assertNotEquals(p.getOrderCode(), response.orderCode()); assertNotNull(response.checkoutUrl());
         assertEquals(2, payments.count()); assertEquals(PaymentTransactionStatus.EXPIRED, payments.findById(p.getId()).orElseThrow().getStatus());
     }
@@ -653,7 +655,7 @@ class PaymentCancellationSafetyTest {
             when(gateway.get(request.getOrderCode())).thenReturn(pending); when(gateway.cancel(eq(request.getOrderCode()), any())).thenReturn(closed);
             bookingService.cancel(customer(), b.getId()); return created;
         });
-        assertNull(paymentService.create(customer(), b.getId(), request()).checkoutUrl());
+        assertNull(paymentService.create(customer(), b.getId(), newRequest()).checkoutUrl());
         assertEquals(BookingStatus.CANCELLED, bookings.findById(b.getId()).orElseThrow().getStatus());
         assertEquals(PaymentTransactionStatus.CANCELLED, payments.findFirstByBookingIdOrderByCreatedAtDesc(b.getId()).orElseThrow().getStatus());
     }
@@ -686,7 +688,7 @@ class PaymentCancellationSafetyTest {
         when(gateway.create(any())).thenAnswer(i -> created(i.getArgument(0)));
         var gate = new java.util.concurrent.CyclicBarrier(2);
         try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
-            var retry = pool.submit(() -> { gate.await(5, java.util.concurrent.TimeUnit.SECONDS); return outcome(() -> paymentService.create(c, b.getId(), request())); });
+            var retry = pool.submit(() -> { gate.await(5, java.util.concurrent.TimeUnit.SECONDS); return outcome(() -> paymentService.create(c, b.getId(), newRequest())); });
             var create = pool.submit(() -> { gate.await(5, java.util.concurrent.TimeUnit.SECONDS); return outcome(() -> bookingService.create(c,
                     new CreateBookingRequest(b.getService().getId(), b.getPractitioner().getId(), b.getAppointmentDate(), LocalTime.parse(newStart), null))); });
             var results = List.of(retry.get(10, java.util.concurrent.TimeUnit.SECONDS), create.get(10, java.util.concurrent.TimeUnit.SECONDS));

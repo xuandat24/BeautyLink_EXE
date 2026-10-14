@@ -19,7 +19,7 @@ import {
   Percent,
 } from 'lucide-react';
 import { useBeautyStore } from '../store/beautyStore';
-import { CurrentUser, BackendService, CartItem } from '../types';
+import { CurrentUser, BackendService, CartItem, PaymentQuote } from '../types';
 import { beautyApi, getApiErrorMessage, getAccessToken } from '../services/beautyApi';
 import { canPayBooking, safeCheckout } from '../lib/bookingPolicy';
 import { OptimizedImage } from './OptimizedImage';
@@ -41,6 +41,17 @@ interface CheckoutPageProps {
 
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('vi-VN').format(val) + 'đ';
+};
+
+const quoteUnavailableMessage = (quote: PaymentQuote | null) => {
+  if (!quote?.unavailableReason) return '';
+  if (quote.unavailableReason === 'DEPOSIT_TOO_LOW_USE_FULL_PAYMENT') {
+    return 'Tiền cọc 5% dưới mức tối thiểu 2.000đ của PayOS. Bạn vẫn có thể chọn thanh toán toàn bộ 100%.';
+  }
+  if (quote.unavailableReason === 'PAYMENT_UNAVAILABLE_ZERO') {
+    return 'Đơn hàng không còn số tiền cần thanh toán qua PayOS.';
+  }
+  return 'Số tiền thanh toán thấp hơn mức tối thiểu 2.000đ của PayOS.';
 };
 
 const getInitials = (str: string) =>
@@ -102,7 +113,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return cartItems;
   }, [directService, cartItems]);
 
-  // Stepper state: 1 = Lịch hẹn & Hồ sơ, 2 = Hình thức thanh toán (50% / 100%), 3 = Tóm tắt dịch vụ & Voucher
+  // Stepper state: 1 = Lịch hẹn & Hồ sơ, 2 = Hình thức thanh toán (5% / 100%), 3 = Tóm tắt dịch vụ & Voucher
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
   // Check if date & slot were preselected from beauty service page (Trường hợp 2)
@@ -131,17 +142,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
   }, [preselectedDate, preselectedTime]);
 
-  // Payment Deposit Option: 50% deposit or 100% full
-  const [depositOption, setDepositOption] = useState<'deposit50' | 'full100'>('deposit50');
+  // New checkouts offer the current 5% policy; legacy 50% exists only in persisted attempts.
+  const [depositOption, setDepositOption] = useState<'deposit05' | 'full100'>('deposit05');
 
   // Voucher state
   const [voucherCodeInput, setVoucherCodeInput] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState<{
     code: string;
-    discountAmount: number;
     description: string;
   } | null>(null);
   const [voucherError, setVoucherError] = useState('');
+  const [paymentQuote, setPaymentQuote] = useState<PaymentQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState('');
 
   // Submission state
   const [submitting, setSubmitting] = useState(false);
@@ -151,6 +164,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const submissionBusy = useRef(false);
   const alive = useRef(false);
   const reservedBooking = useRef<{ context: string; id: number } | null>(null);
+  // Payment choices may change after a provider failure; booking identity must not.
   const context = JSON.stringify([currentUser?.id, items[0]?.deal.serviceId, selectedDate, selectedTimeSlot]);
   const latestContext = useRef(context); latestContext.current = context;
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -159,32 +173,28 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return items.reduce((sum, item) => sum + item.deal.salePrice * item.quantity, 0);
   }, [items]);
 
-  const discountAmount = useMemo(() => {
-    if (!appliedVoucher) return 0;
-    return appliedVoucher.discountAmount;
-  }, [appliedVoucher]);
+  const serviceId = items.length === 1 ? items[0]?.deal.serviceId : undefined;
+  useEffect(() => {
+    let active = true;
+    setPaymentQuote(null);
+    setQuoteError('');
+    setQuoteLoading(false);
+    if (!serviceId) return () => { active = false; };
+    setQuoteLoading(true);
+    const option = depositOption === 'deposit05' ? 'DEPOSIT_05' : 'FULL_100';
+    beautyApi.servicePaymentQuote(serviceId, option, appliedVoucher?.code)
+      .then(quote => { if (active) setPaymentQuote(quote); })
+      .catch(error => { if (active) setQuoteError(getApiErrorMessage(error, 'Không thể xác minh số tiền với máy chủ.')); })
+      .finally(() => { if (active) setQuoteLoading(false); });
+    return () => { active = false; };
+  }, [serviceId, depositOption, appliedVoucher?.code]);
 
-  const discountedTotal = useMemo(
-    () => Math.max(0, subtotal - discountAmount),
-    [subtotal, discountAmount]
-  );
-
-  // The deposit option is calculated from the discounted business total:
-  // exactly 50% now + 50% at the salon, or 100% now.
-  const amountDueNow = useMemo(() => {
-    if (depositOption === 'deposit50') {
-      return Math.round(discountedTotal * 0.5);
-    }
-    return discountedTotal;
-  }, [depositOption, discountedTotal]);
-
-  const remainingAtSalon = useMemo(() => {
-    if (depositOption === 'deposit50') {
-      return discountedTotal - amountDueNow;
-    }
-    return 0;
-  }, [depositOption, discountedTotal, amountDueNow]);
-
+  // Definitive checkout amounts come only from the backend quote.
+  const quotedSubtotal = paymentQuote?.originalAmount ?? subtotal;
+  const discountAmount = paymentQuote?.discountAmount ?? 0;
+  const discountedTotal = paymentQuote?.payableAmount ?? quotedSubtotal;
+  const amountDueNow = paymentQuote?.amount ?? 0;
+  const remainingAtSalon = paymentQuote?.remainingAmount ?? 0;
   const totalBillAfterDiscount = discountedTotal;
 
   // Apply Voucher
@@ -200,24 +210,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setVoucherError('Mã voucher không hợp lệ hoặc đã hết hạn.');
       return;
     }
-    if (subtotal < found.minOrder) {
-      setVoucherError(`Đơn hàng tối thiểu ${formatCurrency(found.minOrder)} để áp dụng mã này.`);
-      return;
-    }
-
-    let calculatedDiscount = 0;
-    if (found.type === 'fixed') {
-      calculatedDiscount = found.discount as number;
-    } else {
-      calculatedDiscount = Math.min(
-        Math.round(subtotal * (found.discount as number)),
-        found.maxDiscount || 150000
-      );
-    }
-
     setAppliedVoucher({
       code: found.code,
-      discountAmount: calculatedDiscount,
       description: found.label,
     });
     setVoucherCodeInput('');
@@ -259,6 +253,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setErrorMsg('Mỗi giao dịch chỉ áp dụng cho một lịch hẹn. Vui lòng thanh toán từng dịch vụ.');
       return;
     }
+    if (quoteLoading || !paymentQuote || quoteError || !paymentQuote.paymentAvailable) {
+      setErrorMsg(quoteError || 'Số tiền chưa được máy chủ xác minh hoặc chưa đủ mức tối thiểu để thanh toán PayOS.');
+      return;
+    }
     const validation = bookingSchema.safeParse({
       appointmentDate: selectedDate,
       startTime: selectedTimeSlot,
@@ -287,7 +285,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         practitionerId: directService?.practitioners?.[0]?.id,
         appointmentDate: selectedDate,
         startTime: selectedTimeSlot,
-        note: `Thanh toán ${depositOption === 'deposit50' ? 'cọc 50%' : '100%'} qua PayOS`,
+        note: `Thanh toán ${depositOption === 'deposit05' ? 'cọc 5%' : '100%'} qua PayOS`,
       });
       if (!current()) return;
       if (!booking) throw new Error('Không tải được lịch hẹn đã tạo. Vui lòng mở Lịch hẹn của tôi và làm mới.');
@@ -295,10 +293,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setPaymentBookingId(booking.id); // identity only; reload still fetches ownership/capabilities from server
       if (!canPayBooking(booking)) throw new Error('Lịch hẹn chưa được máy chủ cho phép thanh toán hoặc đang cần đối soát. Vui lòng kiểm tra Lịch hẹn của tôi; không thanh toán lại.');
       const payment = await beautyApi.createPayOSPayment(booking.id, {
-        paymentOption: depositOption === 'deposit50' ? 'DEPOSIT_50' : 'FULL_100',
+        paymentOption: depositOption === 'deposit05' ? 'DEPOSIT_05' : 'FULL_100',
         voucherCode: appliedVoucher?.code,
       });
       if (!current()) return;
+      if (payment.paymentOption !== paymentQuote.paymentOption || payment.amount !== paymentQuote.amount
+          || payment.remainingAmount !== paymentQuote.remainingAmount) {
+        setResumeId(booking.id);
+        throw new Error('Giá thanh toán đã thay đổi sau khi máy chủ xác minh. Phiên PayOS được giữ nguyên để bạn kiểm tra số tiền trước khi tiếp tục.');
+      }
       const checkout = safeCheckout(payment, booking.id);
       if (!checkout) {
         throw new Error('Giao dịch chưa có checkout an toàn hoặc cần hỗ trợ đối soát. Không thanh toán lại; vui lòng kiểm tra lịch hẹn.');
@@ -648,18 +651,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         )}
 
         {/* ========================================================================= */}
-        {/* STEP 2: HÌNH THỨC THANH TOÁN (CỌC 50% HOẶC 100%) & PHƯƠNG THỨC */}
+        {/* STEP 2: HÌNH THỨC THANH TOÁN (CỌC 5% HOẶC 100%) & PHƯƠNG THỨC */}
         {/* ========================================================================= */}
         {currentStep === 2 && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            {/* 1. Deposit Option Selection (Bắt buộc chọn cọc 50% hoặc toàn bộ) */}
+            {/* 1. Deposit Option Selection (Bắt buộc chọn cọc 5% hoặc toàn bộ) */}
             <div className="bg-white rounded-3xl border border-pink-100 p-6 sm:p-7 shadow-xs">
               <div className="pb-4 border-b border-pink-50 mb-5">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#e1146c]">
                   Chính sách thanh toán giữ chỗ
                 </span>
                 <h2 className="text-base sm:text-lg font-black text-slate-900 mt-0.5">
-                  Bạn muốn đặt cọc 50% hay thanh toán toàn bộ 100%?
+                  Bạn muốn đặt cọc 5% hay thanh toán toàn bộ 100%?
                 </h2>
                 <p className="text-xs text-slate-500 mt-1">
                   Chọn hình thức phù hợp với kế hoạch chi tiêu của bạn
@@ -667,11 +670,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Option 1: Cọc 50% */}
+                {/* Option 1: Cọc 5% */}
                 <div
-                  onClick={() => setDepositOption('deposit50')}
+                  onClick={() => setDepositOption('deposit05')}
                   className={`p-5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
-                    depositOption === 'deposit50'
+                    depositOption === 'deposit05'
                       ? 'border-[#e1146c] bg-pink-50/40 shadow-sm'
                       : 'border-pink-200 bg-white hover:bg-pink-50/20'
                   }`}
@@ -683,18 +686,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       </span>
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                          depositOption === 'deposit50' ? 'border-[#e1146c] bg-[#e1146c]' : 'border-slate-300'
+                          depositOption === 'deposit05' ? 'border-[#e1146c] bg-[#e1146c]' : 'border-slate-300'
                         }`}
                       >
-                        {depositOption === 'deposit50' && <div className="w-2 h-2 rounded-full bg-white" />}
+                        {depositOption === 'deposit05' && <div className="w-2 h-2 rounded-full bg-white" />}
                       </div>
                     </div>
 
                     <h3 className="text-base font-black text-slate-900">
-                      Đặt cọc 50% giữ chỗ
+                      Đặt cọc 5% giữ chỗ
                     </h3>
                     <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                      Thanh toán trước 50% để giữ lịch hẹn và phòng dịch vụ. 50% còn lại thanh toán tại cơ sở khi trải nghiệm.
+                      Thanh toán trước 5% để xác nhận lịch hẹn. 95% còn lại thanh toán tại cơ sở.
                     </p>
                   </div>
 
@@ -706,7 +709,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </div>
                   <div className="mt-1 text-[11px] text-slate-500 flex justify-between">
                     <span>Còn lại tại salon:</span>
-                    <span className="font-bold text-slate-700">{formatCurrency(remainingAtSalon)} (50% sau giảm giá)</span>
+                    <span className="font-bold text-slate-700">{formatCurrency(remainingAtSalon)} (95% sau giảm giá)</span>
                   </div>
                 </div>
 
@@ -927,7 +930,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-black text-[#e1146c]">
-                      -{formatCurrency(appliedVoucher.discountAmount)}
+                      {quoteLoading ? 'Đang xác minh...' : paymentQuote ? `-${formatCurrency(paymentQuote.discountAmount)}` : 'Chưa xác minh'}
                     </span>
                     <button
                       type="button"
@@ -962,10 +965,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 Bảng tính số tiền thanh toán
               </h3>
 
+              {quoteLoading && <p role="status" className="mt-3 text-xs text-slate-500">Đang xác minh giá và voucher với máy chủ...</p>}
+              {quoteError && <p role="alert" className="mt-3 text-xs font-semibold text-rose-600">{quoteError}</p>}
+              {paymentQuote && !paymentQuote.paymentAvailable && (
+                <p role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                  {quoteUnavailableMessage(paymentQuote)}
+                </p>
+              )}
+
               <div className="space-y-2.5 text-xs text-slate-600 pt-3">
                 <div className="flex justify-between">
                   <span>Tổng giá gốc dịch vụ ({items.length} dịch vụ):</span>
-                  <span className="font-bold text-slate-800">{formatCurrency(subtotal)}</span>
+                  <span className="font-bold text-slate-800">{formatCurrency(quotedSubtotal)}</span>
                 </div>
 
                 {discountAmount > 0 && (
@@ -983,7 +994,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <div className="flex justify-between pb-2 border-b border-pink-50">
                   <span>Hình thức đã chọn:</span>
                   <span className="font-bold text-slate-800">
-                    {depositOption === 'deposit50' ? 'Đặt cọc 50% giữ chỗ' : 'Thanh toán trọn gói 100%'}
+                    {depositOption === 'deposit05' ? 'Đặt cọc 5% giữ chỗ' : 'Thanh toán toàn bộ 100%'}
                   </span>
                 </div>
 
@@ -998,15 +1009,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     </span>
                   </div>
 
-                  {depositOption === 'deposit50' && (
+                  {depositOption === 'deposit05' && (
                     <div className="text-right">
-                      <span className="text-[11px] text-slate-500 block">Thanh toán tại salon sau (gốc 50%):</span>
+                      <span className="text-[11px] text-slate-500 block">Thanh toán tại salon sau (95% sau giảm giá):</span>
                       <strong className="text-sm text-slate-800 font-black">
                         {formatCurrency(remainingAtSalon)}
                       </strong>
-                      <span className="text-[10px] text-slate-400 block font-medium">
-                        (không áp dụng giảm giá)
-                      </span>
+                      <span className="text-[10px] text-slate-400 block font-medium">Đã áp dụng voucher vào toàn bộ số tiền phải trả</span>
                     </div>
                   )}
                 </div>
@@ -1037,7 +1046,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                 <button
                   type="button"
-                  disabled={submitting}
+                  disabled={submitting || quoteLoading || !paymentQuote?.paymentAvailable || Boolean(quoteError)}
                   onClick={handleFinalSubmit}
                   className="w-full sm:flex-1 py-3.5 px-6 rounded-full bg-gradient-to-r from-[#e1146c] via-[#db2777] to-[#be185d] text-white text-xs sm:text-sm font-black shadow-lg shadow-pink-600/30 hover:opacity-95 active:scale-98 transition flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer disabled:opacity-50"
                 >
@@ -1045,6 +1054,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <span>
                     {submitting
                       ? 'Đang tiến hành xử lý...'
+                      : quoteLoading
+                        ? 'Đang xác minh giá với máy chủ...'
                       : `Xác nhận thanh toán ${formatCurrency(amountDueNow)}`}
                   </span>
                 </button>

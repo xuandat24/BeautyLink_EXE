@@ -31,9 +31,13 @@ test('bookings hide paid/manual/legacy cancellation, guard double submit and rej
   try {
     await act(async () => root.render(React.createElement(BookingsPage, { onBack() {}, onBookNew() {} })));
     await act(async () => loads[0]([unpaid, { ...unpaid, id: 2, paymentStatus: 'PAID' },
-      { ...unpaid, id: 3, cancelEligible: false, paymentBlockerReason: 'PAYMENT_REVIEW_REQUIRED' }, { ...unpaid, id: 4, cancelEligible: undefined }]));
+      { ...unpaid, id: 3, cancelEligible: false, paymentBlockerReason: 'PAYMENT_REVIEW_REQUIRED' }, { ...unpaid, id: 4, cancelEligible: undefined },
+      { ...unpaid, id: 5, paymentStatus: 'PARTIALLY_PAID', paymentOption: 'DEPOSIT_05', cancelEligible: false },
+      { ...unpaid, id: 6, paymentStatus: 'PARTIALLY_PAID', paymentOption: 'DEPOSIT_50', cancelEligible: false }]));
     assert.equal([...document.querySelectorAll('button')].filter(b => b.textContent?.includes('Hủy lịch')).length, 1);
     assert.match(document.body.textContent ?? '', /Không thanh toán lại/);
+    assert.match(document.body.textContent ?? '', /Đã cọc 5%/);
+    assert.match(document.body.textContent ?? '', /Đã cọc 50% \(giao dịch cũ\)/);
     await act(async () => window.dispatchEvent(new dom.window.Event('beautylink-bookings-refresh')));
     await click('Hủy lịch', true); assert.equal(cancelCalls, 1);
     // Complete the mutation while an older readonly list request is still in flight.
@@ -47,9 +51,12 @@ test('bookings hide paid/manual/legacy cancellation, guard double submit and rej
 });
 test('checkout retains booking after provider failure, rereads backend and blocks manual checkout', async () => {
   const { dom, root } = environment();
-  const originals = { create: beautyApi.createBooking, pay: beautyApi.createPayOSPayment, load: beautyApi.myBookings };
+  const originals = { create: beautyApi.createBooking, pay: beautyApi.createPayOSPayment, load: beautyApi.myBookings, quote: beautyApi.servicePaymentQuote };
   let created = 0, payCalls = 0, readCalls = 0;
   beautyApi.createBooking = async () => { created++; return unpaid; };
+  beautyApi.servicePaymentQuote = async (_id, paymentOption) => ({ originalAmount: 500000, discountAmount: 0, payableAmount: 500000,
+    amount: paymentOption === 'DEPOSIT_05' ? 25000 : 500000, remainingAmount: paymentOption === 'DEPOSIT_05' ? 475000 : 0,
+    paymentOption, paymentAvailable: true, unavailableReason: null });
   beautyApi.createPayOSPayment = async () => { payCalls++; throw new Error('Provider timeout'); };
   beautyApi.myBookings = async () => { readCalls++; return [{ ...unpaid, paymentEligible: false, paymentBlockerReason: 'PAYMENT_REVIEW_REQUIRED' }]; };
   const service: BackendService = { id: 1, name: 'Test service', supplierId: 1, supplierName: 'Test supplier', supplierAddress: '', supplierBusinessType: 'SPA', supplierReviewCount: 0, imageUrl: '', price: 500000, durationMinutes: 60, categorySlug: 'spa', rating: 0, practitioners: [] };
@@ -63,5 +70,5 @@ test('checkout retains booking after provider failure, rereads backend and block
     await click('Xác nhận thanh toán');
     assert.equal(created, 1); assert.equal(payCalls, 1); assert.equal(readCalls, 1);
     assert.match(document.body.textContent ?? '', /chưa được máy chủ cho phép/);
-  } finally { await act(async () => root.unmount()); beautyApi.createBooking = originals.create; beautyApi.createPayOSPayment = originals.pay; beautyApi.myBookings = originals.load; dom.window.close(); }
+  } finally { await act(async () => root.unmount()); beautyApi.createBooking = originals.create; beautyApi.createPayOSPayment = originals.pay; beautyApi.myBookings = originals.load; beautyApi.servicePaymentQuote = originals.quote; dom.window.close(); }
 });

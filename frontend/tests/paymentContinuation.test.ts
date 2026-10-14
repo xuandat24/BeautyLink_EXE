@@ -68,6 +68,31 @@ test('continuation rereads same booking, preserves pending options and double su
     assert.match(document.body.textContent ?? '', /checkout an toàn/); assert.equal(sessionStorage.getItem('beautylink_payos_order_code'), null);
   } finally { await act(async () => root.unmount()); beautyApi.myBooking = old.read; beautyApi.createPayOSPayment = old.pay; beautyApi.createBooking = old.create; dom.window.close(); }
 });
+test('inactive legacy booking starts a new 5% attempt from a server quote', async () => {
+  const { dom, root } = environment();
+  const old = { read: beautyApi.myBooking, quote: beautyApi.bookingPaymentQuote };
+  let quotedOption = '';
+  beautyApi.myBooking = async () => ({ ...pending, paymentAttemptActive: false, paymentOption: 'DEPOSIT_50', paymentVoucherCode: 'OLD50', paymentAmount: 250000, paymentRemainingAmount: 250000 });
+  beautyApi.bookingPaymentQuote = async (_id, option) => {
+    quotedOption = option;
+    return { originalAmount: 500000, discountAmount: 0, payableAmount: 500000, amount: 25000, remainingAmount: 475000,
+      paymentOption: option, paymentAvailable: true, unavailableReason: null };
+  };
+  try {
+    await act(async () => root.render(React.createElement(PaymentContinuationDialog, { bookingId: 42, onClose() {} })));
+    assert.equal((document.querySelector('select') as HTMLSelectElement).value, 'DEPOSIT_05');
+    assert.equal((document.querySelector('select') as HTMLSelectElement).disabled, false);
+    assert.equal((document.querySelector('input') as HTMLInputElement).value, '');
+    assert.equal(quotedOption, 'DEPOSIT_05');
+    assert.match(document.body.textContent ?? '', /25\.000đ/);
+    assert.match(document.body.textContent ?? '', /475\.000đ/);
+  } finally {
+    await act(async () => root.unmount());
+    beautyApi.myBooking = old.read;
+    beautyApi.bookingPaymentQuote = old.quote;
+    dom.window.close();
+  }
+});
 test('server blockers and stale capability stop checkout; missing fields fail closed', async () => {
   const { dom, root } = environment(); const old = { read: beautyApi.myBooking, pay: beautyApi.createPayOSPayment };
   let payments = 0; beautyApi.createPayOSPayment = async () => { payments++; throw new Error('must not pay'); };

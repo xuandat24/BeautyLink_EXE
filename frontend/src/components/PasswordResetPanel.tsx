@@ -113,8 +113,9 @@ export const PasswordResetPanel: React.FC<PasswordResetPanelProps> = ({ initialI
             <label className="mb-1 block text-xs font-bold text-slate-700">Mật khẩu mới</label>
             <div className="relative">
               <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
-              <input type={showPassword ? 'text' : 'password'} required minLength={8} maxLength={72}
-                value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="••••••••••••"
+              <input id="reset-new-password" name="newPassword" type={showPassword ? 'text' : 'password'} required minLength={8} maxLength={72}
+                autoComplete="new-password" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Nhập mật khẩu mới"
                 className="w-full rounded-xl border border-pink-200 bg-pink-50/20 py-2.5 pl-10 pr-10 text-xs font-medium outline-hidden focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50" />
               <button type="button" onClick={() => setShowPassword((value) => !value)}
                 className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-700">
@@ -125,8 +126,9 @@ export const PasswordResetPanel: React.FC<PasswordResetPanelProps> = ({ initialI
           </div>
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-700">Xác nhận mật khẩu mới</label>
-            <input type={showPassword ? 'text' : 'password'} required minLength={8} maxLength={72}
-              value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="••••••••••••"
+            <input id="reset-confirm-password" name="confirmPassword" type={showPassword ? 'text' : 'password'} required minLength={8} maxLength={72}
+              autoComplete="new-password" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+              value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Nhập lại mật khẩu mới"
               className="w-full rounded-xl border border-pink-200 bg-pink-50/20 px-3.5 py-2.5 text-xs font-medium outline-hidden focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50" />
           </div>
           <div className="rounded-2xl border-2 border-[#be185d]/35 bg-pink-50/60 p-4">

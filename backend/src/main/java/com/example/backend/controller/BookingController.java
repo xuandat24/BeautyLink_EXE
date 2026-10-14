@@ -1,7 +1,6 @@
 package com.example.backend.controller;
 
 import com.example.backend.dto.ApiDtos.*;
-import com.example.backend.model.UserAccount;
 import com.example.backend.service.*;
 import jakarta.validation.Valid;
 import org.springframework.http.*;

@@ -12,6 +12,7 @@ import com.example.backend.repository.PaymentTransactionRepository;
 import com.example.backend.repository.PractitionerRepository;
 import com.example.backend.service.PayOSGateway;
 import com.example.backend.service.PaymentService;
+import com.example.backend.service.PaymentQuoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,14 +34,11 @@ import java.util.List;
 
 import static com.example.backend.model.DomainEnums.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import org.mockito.ArgumentCaptor;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceSecurityTest {
@@ -53,6 +51,7 @@ class PaymentServiceSecurityTest {
     @BeforeEach
     void setUp() {
         service = new PaymentService(payments, bookings, practitioners, gateway, mock(com.example.backend.service.AvailabilityService.class), mock(org.springframework.transaction.PlatformTransactionManager.class), new com.example.backend.service.BookingCompletionPolicy(),
+                new PaymentQuoteService(mock(com.example.backend.repository.ServiceOfferingRepository.class)),
                 "https://frontend/success", "https://frontend/cancel", 60, 120);
     }
 
@@ -145,9 +144,9 @@ class PaymentServiceSecurityTest {
         Booking depositBooking = payableBooking(51L, 500_000L);
         prepareCreate(depositBooking, "deposit-link");
         PayOSPaymentResponse deposit = service.create(depositBooking.getCustomer(), depositBooking.getId(),
-                new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_50, "BEAUTY50"));
-        assertEquals(new BigDecimal("225000"), deposit.amount());
-        assertEquals(new BigDecimal("225000"), deposit.remainingAmount());
+                new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_05, "BEAUTY50"));
+        assertEquals(new BigDecimal("22500"), deposit.amount());
+        assertEquals(new BigDecimal("427500"), deposit.remainingAmount());
 
         Booking fullBooking = payableBooking(52L, 500_000L);
         prepareCreate(fullBooking, "full-link");
@@ -163,8 +162,42 @@ class PaymentServiceSecurityTest {
         when(bookings.findByIdForUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(payments.findAllByBookingIdForUpdate(booking.getId())).thenReturn(List.of());
         ApiException error = assertThrows(ApiException.class, () -> service.create(booking.getCustomer(), booking.getId(),
+                new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_05, null)));
+        assertEquals("DEPOSIT_TOO_LOW_USE_FULL_PAYMENT", error.getCode());
+    }
+
+    @Test
+    void newLegacyDepositRequestGetsExplicitPolicyChangedResponse() {
+        Booking booking = payableBooking(531L, 500_000L);
+        when(bookings.findByIdForUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(payments.findAllByBookingIdForUpdate(booking.getId())).thenReturn(List.of());
+
+        ApiException error = assertThrows(ApiException.class, () -> service.create(booking.getCustomer(), booking.getId(),
                 new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_50, null)));
-        assertEquals("PAYMENT_AMOUNT_TOO_LOW", error.getCode());
+
+        assertEquals("POLICY_CHANGED", error.getCode());
+    }
+
+    @Test
+    void existingLegacyPendingAttemptKeepsItsOriginalAmountsAndCanBeResumed() {
+        Booking booking = payableBooking(532L, 500_000L);
+        PaymentTransaction legacy = pendingPayment();
+        legacy.setBooking(booking);
+        legacy.setAmount(new BigDecimal("250000"));
+        legacy.setRemainingAmount(new BigDecimal("250000"));
+        legacy.setPaymentOption(PaymentOption.DEPOSIT_50);
+        legacy.setCheckoutUrl("https://pay.payos.vn/web/legacy-payment");
+        legacy.setExpiresAt(Instant.now().plusSeconds(600));
+        when(bookings.findByIdForUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(payments.findAllByBookingIdForUpdate(booking.getId())).thenReturn(List.of(legacy));
+        when(payments.findAllByBookingIdOrderByCreatedAtDesc(booking.getId())).thenReturn(List.of(legacy));
+
+        PayOSPaymentResponse response = service.create(booking.getCustomer(), booking.getId(),
+                new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_50, null));
+
+        assertEquals(PaymentOption.DEPOSIT_50, response.paymentOption());
+        assertEquals(new BigDecimal("250000"), response.amount());
+        assertEquals(new BigDecimal("250000"), response.remainingAmount());
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.example.backend.controller;
 
 import com.example.backend.dto.ApiDtos.*;
+import com.example.backend.model.DomainEnums.PaymentOption;
 import com.example.backend.service.*;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,6 +25,14 @@ public class PaymentController {
     public PayOSPaymentResponse create(Authentication auth, @PathVariable Long bookingId,
                                        @Valid @RequestBody CreatePayOSPaymentRequest request) {
         return payments.create(current.require(auth), bookingId, request);
+    }
+
+    @GetMapping("/bookings/{bookingId}/quote")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public PaymentQuoteResponse quote(Authentication auth, @PathVariable Long bookingId,
+                                      @RequestParam PaymentOption paymentOption,
+                                      @RequestParam(required = false) String voucherCode) {
+        return payments.quote(current.require(auth), bookingId, paymentOption, voucherCode);
     }
 
     @GetMapping("/{orderCode}")
