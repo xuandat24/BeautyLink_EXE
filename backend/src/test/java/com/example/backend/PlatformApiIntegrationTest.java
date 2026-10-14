@@ -7,12 +7,14 @@ import com.example.backend.repository.BookingRepository;
 import com.example.backend.repository.PaymentTransactionRepository;
 import com.example.backend.service.PayOSGateway;
 import com.example.backend.service.RegistrationVerificationService;
+import com.example.backend.service.OtpDeliveryService;
 import com.example.backend.model.DomainEnums.BookingStatus;
 import com.example.backend.model.DomainEnums.PaymentStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
 import vn.payos.model.webhooks.WebhookData;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,7 +30,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -50,6 +55,7 @@ class PlatformApiIntegrationTest {
     @Autowired com.example.backend.repository.UserAccountRepository users;
     @MockitoBean PayOSGateway payOSGateway;
     @MockitoBean RegistrationVerificationService registrationVerificationService;
+    @MockitoBean OtpDeliveryService otpDeliveryService;
 
     @Test
     void validationReturnsFieldMessagesForCustomerAndAdminInput() throws Exception {
@@ -153,6 +159,61 @@ class PlatformApiIntegrationTest {
         mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.phone", is("0912345678")));
+    }
+
+    @Test
+    void registrationAccepts07PhoneEightCharacterPasswordAndValidLeapDayBirthDate() throws Exception {
+        mvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName":"Le Minh","phone":"0712345678","email":"phone07@example.com",
+                                 "password":"Abcdef12","gender":"OTHER","dateOfBirth":"2000-02-29",
+                                 "verificationToken":"verified-phone07-token"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.user.phone", is("0712345678")))
+                .andExpect(jsonPath("$.user.dateOfBirth", is("2000-02-29")));
+    }
+
+    @Test
+    void customerCanResetPasswordWithEmailOtpAndOldSessionIsInvalidated() throws Exception {
+        String registerBody = """
+                {"fullName":"Reset Account","phone":"0911111111","email":"reset-account@example.com","password":"OldStrongPassword123!","gender":"OTHER","dateOfBirth":"1996-04-12","verificationToken":"verified-reset-token"}
+                """;
+        String registered = mvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON).content(registerBody))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String oldToken = objectMapper.readTree(registered).path("accessToken").asText();
+
+        when(otpDeliveryService.isEmailConfigured()).thenReturn(true);
+        ArgumentCaptor<String> otp = ArgumentCaptor.forClass(String.class);
+        String startResponse = mvc.perform(post("/api/v1/auth/password-reset/start")
+                        .with(request -> { request.setRemoteAddr("198.51.100.90"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"0911111111\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", startsWith("Nếu tài khoản tồn tại")))
+                .andReturn().getResponse().getContentAsString();
+        verify(otpDeliveryService).sendPasswordResetCode(eq("reset-account@example.com"), otp.capture(), anyLong());
+        String challengeId = objectMapper.readTree(startResponse).path("challengeId").asText();
+
+        mvc.perform(post("/api/v1/auth/password-reset/confirm")
+                        .with(request -> { request.setRemoteAddr("198.51.100.90"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"challengeId\":\"" + challengeId + "\",\"otpCode\":\"" + otp.getValue()
+                                + "\",\"newPassword\":\"Newpass1\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", containsString("đặt lại")));
+
+        mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + oldToken))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"0911111111\",\"password\":\"OldStrongPassword123!\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"0911111111\",\"password\":\"Newpass1\"}"))
+                .andExpect(status().isOk());
     }
 
     @Test

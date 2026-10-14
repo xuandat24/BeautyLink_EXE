@@ -327,7 +327,7 @@ export const UserAuthSchema = z.object({
   phone: z
     .string()
     .regex(/^(0|\+84)(3|5|7|8|9)[0-9]{8}$/, 'Số điện thoại không hợp lệ'),
-  password: z.string().min(6, 'Mật khẩu phải từ 6 ký tự trở lên'),
+  password: z.string().min(8, 'Mật khẩu phải từ 8 ký tự trở lên'),
 });
 
 export type BookingInput = z.infer<typeof BookingSchema>;

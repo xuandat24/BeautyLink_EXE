@@ -528,6 +528,14 @@ export const beautyApi = {
     return res;
   },
 
+  async startPasswordReset(identifier: string): Promise<{ challengeId: string; expiresInSeconds: number; message: string }> {
+    return unwrap(apiClient.post('/v1/auth/password-reset/start', { identifier }));
+  },
+
+  async confirmPasswordReset(data: { challengeId: string; otpCode: string; newPassword: string }): Promise<{ message: string }> {
+    return unwrap(apiClient.post('/v1/auth/password-reset/confirm', data));
+  },
+
   async startRegistrationVerification(data: { phone: string; email: string; channel?: 'PHONE' | 'EMAIL' }): Promise<{ challengeId: string; expiresInSeconds: number; requiredChannels: string[] }> {
     return unwrap(apiClient.post('/v1/auth/registration-verification/start', data));
   },

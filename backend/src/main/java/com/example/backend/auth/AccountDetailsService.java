@@ -11,12 +11,10 @@ public class AccountDetailsService implements UserDetailsService {
     private final UserAccountRepository users;
     public AccountDetailsService(UserAccountRepository users) { this.users = users; }
     @Override public UserDetails loadUserByUsername(String phone) {
-        UserAccount user = users.findByPhone(phone).orElseThrow(() -> new UsernameNotFoundException("Account not found"));
-        return principal(user);
+        return principal(loadAccountByPhone(phone));
     }
     public UserDetails loadUserForToken(Claims claims, JwtService jwt) {
-        UserAccount user = users.findByPhone(claims.getSubject())
-                .orElseThrow(() -> new UsernameNotFoundException("Account not found"));
+        UserAccount user = loadAccountByPhone(claims.getSubject());
         if (!jwt.matchesAccount(claims, user)) throw new UsernameNotFoundException("Token identity is no longer current");
         return principal(user);
     }
@@ -38,5 +36,8 @@ public class AccountDetailsService implements UserDetailsService {
         }
         public Long getAccountId() { return accountId; }
         public long getAccountUpdatedAt() { return accountUpdatedAt; }
+    }
+    public UserAccount loadAccountByPhone(String phone) {
+        return users.findByPhone(phone).orElseThrow(() -> new UsernameNotFoundException("Account not found"));
     }
 }

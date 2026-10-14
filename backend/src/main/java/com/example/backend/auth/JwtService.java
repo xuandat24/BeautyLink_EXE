@@ -23,6 +23,7 @@ public class JwtService {
         return Jwts.builder().subject(user.getPhone()).claim("role", user.getRole().name())
                 .claim("accountId", user.getId())
                 .claim("accountUpdatedAt", user.getUpdatedAt().toEpochMilli())
+                .claim("authVersion", user.getAuthVersion())
                 .issuedAt(Date.from(now)).expiration(Date.from(now.plusMillis(expirationMs)))
                 .signWith(key).compact();
     }
@@ -37,8 +38,10 @@ public class JwtService {
         if (claims.containsKey("accountId") || claims.containsKey("accountUpdatedAt")) {
             Long accountId = claims.get("accountId", Long.class);
             Long updatedAt = claims.get("accountUpdatedAt", Long.class);
-            return user.getId().equals(accountId) && updatedAt != null
-                    && updatedAt == user.getUpdatedAt().toEpochMilli();
+            if (!user.getId().equals(accountId) || updatedAt == null
+                    || updatedAt != user.getUpdatedAt().toEpochMilli()) return false;
+            Number authVersion = claims.get("authVersion", Number.class);
+            return authVersion == null || authVersion.intValue() == user.getAuthVersion();
         }
         // Legacy tokens have only a phone subject. Accept them only when the
         // persisted identity predates issuance; a phone reassignment updates it.

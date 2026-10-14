@@ -56,8 +56,8 @@ public class AuthService {
     @Transactional
     public AuthResponse updatePhone(UserAccount current, UpdatePhoneRequest request) {
         String phone = normalizePhone(request.phone());
-        if (!phone.matches("^0(?:3|8|9)[0-9]{8}$")) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PHONE", "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 08 hoặc 09");
+        if (!phone.matches("^0(?:3|5|7|8|9)[0-9]{8}$")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PHONE", "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 05, 07, 08 hoặc 09");
         }
         UserAccount account = users.findLockedById(current.getId()).orElseThrow(AuthService::invalidCredentials);
         if (!account.getPhone().equals(current.getPhone())

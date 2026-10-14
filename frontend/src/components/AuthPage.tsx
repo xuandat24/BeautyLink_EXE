@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   Sparkles,
@@ -22,11 +22,13 @@ import {
   Radio,
   CreditCard,
   ChevronRight,
+  CalendarDays,
 } from 'lucide-react';
 import { CurrentUser } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { customerAuthSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
+import { PasswordResetPanel } from './PasswordResetPanel';
 
 interface AuthPageProps {
   initialMode: 'login' | 'register';
@@ -75,6 +77,17 @@ const LIVE_BOOKINGS = [
   },
 ];
 
+const formatDateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const latestBirthDate = new Date();
+latestBirthDate.setDate(latestBirthDate.getDate() - 1);
+const MAX_BIRTH_DATE = formatDateInputValue(latestBirthDate);
+
 export const AuthPage: React.FC<AuthPageProps> = ({
   initialMode,
   onBackToHome,
@@ -95,29 +108,43 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [rememberMe, setRememberMe] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [notice, setNotice] = useState<string>('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [verificationChallengeId, setVerificationChallengeId] = useState('');
   const [emailCode, setEmailCode] = useState('');
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const otpInputRef = useRef<HTMLInputElement>(null);
 
   const resetVerification = () => {
     setVerificationChallengeId('');
     setEmailCode('');
+    setNotice('');
   };
 
   useEffect(() => {
     setMode(initialMode);
     setError('');
+    setNotice('');
     setFieldErrors({});
     setVerificationChallengeId('');
     setEmailCode('');
+    setShowPasswordReset(false);
   }, [initialMode]);
 
+  useEffect(() => {
+    if (!verificationChallengeId) return;
+    const frame = window.requestAnimationFrame(() => {
+      otpInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      otpInputRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [verificationChallengeId]);
+
   const passwordStrength = [
-    password.length >= 12,
+    password.length >= 8,
     /[a-z]/.test(password),
     /[A-Z]/.test(password),
     /[0-9]/.test(password),
-    /[^A-Za-z0-9\s]/.test(password),
   ].filter(Boolean).length;
 
   // Dynamic live booking ticker
@@ -178,7 +205,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             channel: verificationChannel,
           });
           setVerificationChallengeId(challenge.challengeId);
-          setError('Mã OTP đã được gửi. Vui lòng nhập mã để xác minh quyền sở hữu liên hệ.');
+          setNotice('Mã OTP đã được gửi đến email của bạn. Nhập 6 chữ số bên dưới để hoàn tất đăng ký.');
           return;
         }
         const verification = await beautyApi.confirmRegistrationVerification({
@@ -278,6 +305,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     setMode('login');
                     setError('');
                     resetVerification();
+                    setShowPasswordReset(false);
                     onModeChange?.('login');
                   }}
                   className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer disabled:cursor-wait disabled:opacity-60 flex items-center justify-center gap-1.5 ${
@@ -297,6 +325,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     setMode('register');
                     setError('');
                     resetVerification();
+                    setShowPasswordReset(false);
                     onModeChange?.('register');
                   }}
                   className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer disabled:cursor-wait disabled:opacity-60 flex items-center justify-center gap-1.5 ${
@@ -313,18 +342,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               {/* Header Title */}
               <div className="mb-5">
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                  <span>{mode === 'login' ? 'Chào mừng bạn quay lại!' : 'Đăng ký tài khoản làm đẹp'}</span>
+                  <span>{showPasswordReset ? 'Khôi phục tài khoản' : mode === 'login' ? 'Chào mừng bạn quay lại!' : 'Đăng ký tài khoản làm đẹp'}</span>
                   <span className="text-lg">🌸</span>
                 </h1>
                 <p className="mt-1 text-xs text-slate-500 font-medium">
-                  {mode === 'login'
+                  {showPasswordReset
+                    ? 'Nhận mã OTP qua email đã đăng ký để tạo mật khẩu mới an toàn.'
+                    : mode === 'login'
                     ? 'Nhập thông tin bên dưới để quản lý lịch hẹn & tích điểm đổi voucher 50K.'
                     : 'Nhận ngay Voucher chào mừng 50.000đ và trải nghiệm hàng trăm spa 5 sao.'}
                 </p>
               </div>
 
               {/* SUPPLIER CTA ON REGISTER MODE */}
-              {mode === 'register' && onNavigateSupplierRegister && (
+              {!showPasswordReset && mode === 'register' && onNavigateSupplierRegister && (
                 <div className="mb-5 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-purple-50 via-pink-50 to-pink-100/90 border border-purple-200/80 shadow-2xs">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -359,7 +390,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               )}
 
               {/* Form */}
-              <form className="space-y-3.5" onSubmit={handleSubmit}>
+              {showPasswordReset ? (
+                <PasswordResetPanel
+                  initialIdentifier={identifier}
+                  onBackToLogin={() => {
+                    setShowPasswordReset(false);
+                    setMode('login');
+                    setError('');
+                    onModeChange?.('login');
+                  }}
+                />
+              ) : (
+                <form className="space-y-3.5" onSubmit={handleSubmit}>
                 {mode === 'register' && (
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -382,21 +424,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       />
                     </div>
                     <FieldError id="fullName-error" message={fieldErrors.fullName} />
-                  </div>
-                )}
-
-                {mode === 'register' && verificationChallengeId && (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        OTP gửi qua email
-                      </label>
-                      <input inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6}
-                        value={emailCode}
-                        onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ''))}
-                        className="w-full rounded-xl border border-emerald-200 px-3 py-2.5 text-xs font-bold tracking-[0.3em] outline-hidden focus:ring-2 focus:ring-emerald-200"
-                        placeholder="000000" />
-                    </div>
                   </div>
                 )}
 
@@ -463,11 +490,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">Ngày sinh</label>
-                      <input type="date" required value={dateOfBirth} min="1900-01-01"
-                        max={new Date().toISOString().slice(0, 10)}
-                        onChange={(event) => { setDateOfBirth(event.target.value); setFieldErrors((prev) => ({ ...prev, dateOfBirth: '' })); }}
-                        aria-invalid={Boolean(fieldErrors.dateOfBirth)} aria-describedby="dateOfBirth-error"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium bg-white" />
+                      <div className="relative">
+                        <input type="date" required value={dateOfBirth} min="1900-01-01"
+                          max={MAX_BIRTH_DATE}
+                          onClick={(event) => event.currentTarget.showPicker?.()}
+                          onChange={(event) => { setDateOfBirth(event.target.value); setFieldErrors((prev) => ({ ...prev, dateOfBirth: '' })); }}
+                          aria-invalid={Boolean(fieldErrors.dateOfBirth)} aria-describedby="dateOfBirth-help dateOfBirth-error"
+                          className="min-h-11 w-full cursor-pointer rounded-xl border border-pink-200 bg-white px-3.5 py-2.5 pr-10 text-xs font-medium text-slate-800 outline-hidden focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0" />
+                        <CalendarDays className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#be185d]" />
+                      </div>
+                      <p id="dateOfBirth-help" className="mt-1 text-[10px] text-slate-500">Chọn ngày trong lịch, từ 01/01/1900 đến hôm qua.</p>
                       <FieldError id="dateOfBirth-error" message={fieldErrors.dateOfBirth} />
                     </div>
                   </div>
@@ -480,7 +512,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     {mode === 'login' && (
                       <button
                         type="button"
-                        onClick={() => alert('Vui lòng liên hệ hotline 1900 8899 để lấy lại mật khẩu.')}
+                        onClick={() => {
+                          setShowPasswordReset(true);
+                          setError('');
+                          setFieldErrors({});
+                        }}
                         className="text-[11px] font-bold text-[#be185d] hover:underline cursor-pointer"
                       >
                         Quên mật khẩu?
@@ -494,7 +530,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       required
                       value={password}
                       onChange={(e) => { setPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, password: '' })); }}
-                      minLength={mode === 'register' ? 12 : 1}
+                      minLength={mode === 'register' ? 8 : 1}
                       maxLength={72}
                       aria-invalid={Boolean(fieldErrors.password)}
                       aria-describedby="password-error"
@@ -512,13 +548,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <FieldError id="password-error" message={fieldErrors.password} />
                   {mode === 'register' && password && (
                     <div className="mt-1.5" aria-live="polite">
-                      <div className="grid grid-cols-5 gap-1">
-                        {[1, 2, 3, 4, 5].map((level) => (
-                          <span key={level} className={`h-1 rounded-full ${passwordStrength >= level ? (passwordStrength === 5 ? 'bg-emerald-500' : 'bg-amber-400') : 'bg-slate-200'}`} />
+                      <div className="grid grid-cols-4 gap-1">
+                        {[1, 2, 3, 4].map((level) => (
+                          <span key={level} className={`h-1 rounded-full ${passwordStrength >= level ? (passwordStrength === 4 ? 'bg-emerald-500' : 'bg-amber-400') : 'bg-slate-200'}`} />
                         ))}
                       </div>
                       <p className="mt-1 text-[10px] text-slate-500">
-                        {passwordStrength === 5 ? 'Mật khẩu mạnh' : 'Cần ít nhất 12 ký tự, chữ hoa, chữ thường, số và ký tự đặc biệt'}
+                        {passwordStrength === 4 ? 'Mật khẩu hợp lệ' : 'Cần ít nhất 8 ký tự, chữ hoa, chữ thường và số; không bắt buộc ký tự đặc biệt'}
                       </p>
                     </div>
                   )}
@@ -536,7 +572,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         required
                         value={confirmPassword}
                         onChange={(e) => { setConfirmPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, confirmPassword: '' })); }}
-                        minLength={12}
+                        minLength={8}
                         maxLength={72}
                         aria-invalid={Boolean(fieldErrors.confirmPassword)}
                         aria-describedby="confirmPassword-error"
@@ -561,11 +597,41 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </label>
                 </div>
 
+                {mode === 'register' && verificationChallengeId && (
+                  <section className="rounded-2xl border-2 border-[#be185d]/35 bg-gradient-to-br from-pink-50 to-white p-4 shadow-sm"
+                    aria-labelledby="registration-otp-label">
+                    <div className="mb-3 flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#be185d] text-white shadow-md shadow-pink-500/20">
+                        <ShieldCheck className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 id="registration-otp-label" className="text-sm font-black text-slate-900">Nhập mã OTP để hoàn tất</h3>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-600">{notice || 'Kiểm tra email và nhập chính xác 6 chữ số.'}</p>
+                      </div>
+                    </div>
+                    <input ref={otpInputRef} inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6}
+                      value={emailCode}
+                      onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ''))}
+                      aria-label="Mã OTP gồm 6 chữ số"
+                      className="min-h-16 w-full rounded-2xl border-2 border-pink-300 bg-white px-4 py-4 text-center text-2xl font-black tracking-[0.45em] text-[#9d174d] shadow-inner outline-hidden transition placeholder:text-pink-200 focus:border-[#be185d] focus:ring-4 focus:ring-pink-200/60 sm:text-3xl"
+                      placeholder="000000" />
+                    <p className="mt-2 text-center text-[10px] font-semibold text-slate-500">Nút xác minh nằm ngay bên dưới để bạn không phải cuộn ngược lên.</p>
+                  </section>
+                )}
+
                 {/* Error Banner */}
                 {error && (
                   <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-start gap-2 animate-in fade-in">
                     <ShieldCheck className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                    <span>{error}</span>
+                    <div>
+                      <span>{error}</span>
+                      {mode === 'register' && error.toLowerCase().includes('khôi phục') && (
+                        <button type="button" onClick={() => { setShowPasswordReset(true); setError(''); }}
+                          className="mt-2 block font-black text-[#be185d] underline underline-offset-2">
+                          Khôi phục tài khoản bằng OTP
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -588,7 +654,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </>
                   )}
                 </button>
-              </form>
+                </form>
+              )}
 
             </div>
           </div>

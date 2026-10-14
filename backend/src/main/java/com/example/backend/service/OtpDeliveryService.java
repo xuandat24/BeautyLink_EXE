@@ -1,13 +1,17 @@
 package com.example.backend.service;
 
 import com.example.backend.exception.ApiException;
+import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.ResourceAccessException;
@@ -15,6 +19,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
@@ -26,14 +31,20 @@ public class OtpDeliveryService {
     private final RestClient resendClient;
     private final String resendApiKey;
     private final String mailFrom;
+    private final String mailHost;
+    private final ObjectProvider<JavaMailSender> mailSender;
 
     @Autowired
     public OtpDeliveryService(@Value("${app.otp.resend.api-key:}") String resendApiKey,
                               @Value("${app.otp.mail-from:}") String mailFrom,
                               @Value("${app.otp.resend.connect-timeout-ms:5000}") long connectTimeoutMs,
-                              @Value("${app.otp.resend.read-timeout-ms:10000}") long readTimeoutMs) {
+                              @Value("${app.otp.resend.read-timeout-ms:10000}") long readTimeoutMs,
+                              @Value("${spring.mail.host:}") String mailHost,
+                              ObjectProvider<JavaMailSender> mailSender) {
         this.resendApiKey = resendApiKey == null ? "" : resendApiKey.trim();
         this.mailFrom = mailFrom == null ? "" : mailFrom.trim();
+        this.mailHost = mailHost == null ? "" : mailHost.trim();
+        this.mailSender = mailSender;
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
         requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
@@ -44,19 +55,37 @@ public class OtpDeliveryService {
         this.resendClient = resendClient;
         this.resendApiKey = resendApiKey == null ? "" : resendApiKey.trim();
         this.mailFrom = mailFrom == null ? "" : mailFrom.trim();
+        this.mailHost = "";
+        this.mailSender = null;
     }
 
     public void sendEmailCode(String email, String code, long expiresMinutes) {
-        if (!isEmailConfigured()) {
-            throw unavailable("Xác minh email chưa được cấu hình trên máy chủ");
+        send(email, "Mã xác minh đăng ký BeautyLink", registrationEmailTemplate(code, expiresMinutes));
+    }
+
+    public void sendPasswordResetCode(String email, String code, long expiresMinutes) {
+        send(email, "Mã đặt lại mật khẩu BeautyLink", passwordResetEmailTemplate(code, expiresMinutes));
+    }
+
+    private void send(String email, String subject, String html) {
+        if (isResendConfigured()) {
+            sendWithResend(email, subject, html);
+            return;
         }
+        if (isSmtpConfigured()) {
+            sendWithSmtp(email, subject, html);
+            return;
+        }
+        throw unavailable("Kênh email OTP chưa được cấu hình");
+    }
+
+    private void sendWithResend(String email, String subject, String html) {
         try {
             ResendEmailResponse response = resendClient.post()
                     .uri("/emails")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + resendApiKey)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(new ResendEmailRequest(mailFrom, List.of(email),
-                            "Mã xác minh đăng ký BeautyLink", emailTemplate(code, expiresMinutes)))
+                    .body(new ResendEmailRequest(mailFrom, List.of(email), subject, html))
                     .retrieve()
                     .body(ResendEmailResponse.class);
             if (response == null || !StringUtils.hasText(response.id())) {
@@ -82,11 +111,36 @@ public class OtpDeliveryService {
         }
     }
 
+    private void sendWithSmtp(String email, String subject, String html) {
+        try {
+            JavaMailSender sender = mailSender.getIfAvailable();
+            MimeMessage mimeMessage = sender.createMimeMessage();
+            MimeMessageHelper message = new MimeMessageHelper(mimeMessage, false, StandardCharsets.UTF_8.name());
+            message.setFrom(mailFrom);
+            message.setTo(email);
+            message.setSubject(subject);
+            message.setText(html, true);
+            sender.send(mimeMessage);
+        } catch (Exception ex) {
+            log.warn("SMTP OTP email request failed type={}", ex.getClass().getSimpleName());
+            throw unavailable("Không thể gửi email OTP. Vui lòng thử lại sau");
+        }
+    }
+
     public boolean isEmailConfigured() {
+        return isResendConfigured() || isSmtpConfigured();
+    }
+
+    private boolean isResendConfigured() {
         return StringUtils.hasText(resendApiKey) && StringUtils.hasText(mailFrom);
     }
 
-    private String emailTemplate(String code, long expiresMinutes) {
+    private boolean isSmtpConfigured() {
+        return mailSender != null && mailSender.getIfAvailable() != null
+                && StringUtils.hasText(mailHost) && StringUtils.hasText(mailFrom);
+    }
+
+    private String registrationEmailTemplate(String code, long expiresMinutes) {
         return """
                 <!doctype html>
                 <html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#fff5f7;font-family:Arial,sans-serif;color:#1f2937">
@@ -101,6 +155,19 @@ public class OtpDeliveryService {
                 <p style="margin:22px 0 0;color:#6b7280;font-size:12px;line-height:1.55">Nếu bạn không yêu cầu đăng ký, hãy bỏ qua email này. Vui lòng kiểm tra cả thư rác nếu chưa thấy email.</p>
                 </td></tr></table></td></tr></table></body></html>
                 """.formatted(code, expiresMinutes);
+    }
+
+    private String passwordResetEmailTemplate(String code, long expiresMinutes) {
+        return """
+                <!doctype html><html lang="vi"><body style="margin:0;background:#fff5f7;font-family:Arial,sans-serif;color:#1f2937">
+                <table role="presentation" width="100%%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:32px 16px">
+                <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#fff;border-radius:20px;overflow:hidden;border:1px solid #fbcfe8">
+                <tr><td style="padding:28px 32px;background:#be185d;color:#fff"><strong style="font-size:24px">BeautyLink</strong><br><span style="font-size:13px">Khôi phục tài khoản an toàn</span></td></tr>
+                <tr><td style="padding:32px"><h1 style="margin:0 0 12px;font-size:22px">Đặt lại mật khẩu</h1><p style="margin:0 0 24px;line-height:1.6">Nhập mã gồm 6 chữ số dưới đây tại BeautyLink để đặt mật khẩu mới. Mã có hiệu lực trong %d phút.</p>
+                <div style="padding:18px;text-align:center;background:#fdf2f8;border-radius:14px;color:#be185d;font-size:30px;font-weight:700;letter-spacing:8px">%s</div>
+                <p style="margin:24px 0 0;line-height:1.6;color:#6b7280;font-size:13px">BeautyLink không bao giờ yêu cầu bạn đọc mã này qua điện thoại. Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.</p></td></tr>
+                </table></td></tr></table></body></html>
+                """.formatted(expiresMinutes, code);
     }
 
     private ApiException unavailable(String message) {

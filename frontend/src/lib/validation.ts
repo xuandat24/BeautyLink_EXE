@@ -6,16 +6,15 @@ export type FieldErrors = Record<string, string>;
 export const vietnamPhoneSchema = z
   .string()
   .trim()
-  .regex(/^0(?:3|8|9)[0-9]{8}$/, 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 08 hoặc 09');
+  .regex(/^0(?:3|5|7|8|9)[0-9]{8}$/, 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 05, 07, 08 hoặc 09');
 
 export const strongPasswordSchema = z
   .string()
-  .min(12, 'Mật khẩu phải có ít nhất 12 ký tự')
+  .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
   .max(72, 'Mật khẩu tối đa 72 ký tự')
   .regex(/[a-z]/, 'Mật khẩu phải có ít nhất một chữ thường')
   .regex(/[A-Z]/, 'Mật khẩu phải có ít nhất một chữ hoa')
   .regex(/[0-9]/, 'Mật khẩu phải có ít nhất một chữ số')
-  .regex(/[^A-Za-z0-9\s]/, 'Mật khẩu phải có ít nhất một ký tự đặc biệt')
   .regex(/^\S+$/, 'Mật khẩu không được chứa khoảng trắng');
 
 const fullNameSchema = z
@@ -53,7 +52,7 @@ export const customerAuthSchema = z
       const valid = identifier.includes('@')
         ? z.string().email().safeParse(identifier).success
         : vietnamPhoneSchema.safeParse(identifier).success;
-      if (!valid) ctx.addIssue({ code: 'custom', path: ['identifier'], message: 'Nhập email hợp lệ hoặc số điện thoại 10 chữ số bắt đầu bằng 03, 08, 09' });
+      if (!valid) ctx.addIssue({ code: 'custom', path: ['identifier'], message: 'Nhập email hợp lệ hoặc số điện thoại 10 chữ số bắt đầu bằng 03, 05, 07, 08, 09' });
       return;
     }
     const name = fullNameSchema.safeParse(data.fullName);

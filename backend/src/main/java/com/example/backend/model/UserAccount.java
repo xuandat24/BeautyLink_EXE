@@ -19,6 +19,7 @@ public class UserAccount {
     @Enumerated(EnumType.STRING) @Column(length = 20) private Gender gender;
     @Column(name = "date_of_birth") private LocalDate dateOfBirth;
     @Column(name = "password_hash", nullable = false) private String passwordHash;
+    @Column(name = "auth_version", nullable = false) private int authVersion = 0;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private Role role = Role.CUSTOMER;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private AccountStatus status = AccountStatus.ACTIVE;
     @Column(nullable = false) private int loyaltyPoints = 0;
@@ -35,6 +36,7 @@ public class UserAccount {
     public Gender getGender() { return gender; } public void setGender(Gender gender) { this.gender = gender; }
     public LocalDate getDateOfBirth() { return dateOfBirth; } public void setDateOfBirth(LocalDate dateOfBirth) { this.dateOfBirth = dateOfBirth; }
     public String getPasswordHash() { return passwordHash; } public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public int getAuthVersion() { return authVersion; } public void setAuthVersion(int authVersion) { this.authVersion = authVersion; }
     public Role getRole() { return role; } public void setRole(Role role) { this.role = role; }
     public AccountStatus getStatus() { return status; } public void setStatus(AccountStatus status) { this.status = status; }
     public int getLoyaltyPoints() { return loyaltyPoints; } public void setLoyaltyPoints(int loyaltyPoints) { this.loyaltyPoints = loyaltyPoints; }

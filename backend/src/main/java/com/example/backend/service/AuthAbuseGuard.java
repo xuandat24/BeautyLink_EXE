@@ -66,10 +66,23 @@ public class AuthAbuseGuard {
         consume("verification-challenge:" + digest(safe(challengeId)), loginMaxPerIdentifier, loginWindowSeconds);
     }
 
+    public void checkPasswordResetStart(String remoteAddress, String identifier) {
+        consume("password-reset-ip:" + digest(safe(remoteAddress)), registrationMaxPerIp, registrationWindowSeconds);
+        consume("password-reset-target:" + digest(normalizeIdentifier(identifier)), verificationMaxPerTarget, verificationWindowSeconds);
+    }
+
+    public void checkPasswordResetAttempt(String remoteAddress, String challengeId) {
+        consume("password-reset-attempt-ip:" + digest(safe(remoteAddress)), loginMaxPerIp, loginWindowSeconds);
+        consume("password-reset-challenge:" + digest(safe(challengeId)), loginMaxPerIdentifier, loginWindowSeconds);
+    }
+
     private String loginIdentifierKey(String identifier) {
+        return "login-id:" + digest(normalizeIdentifier(identifier));
+    }
+
+    private String normalizeIdentifier(String identifier) {
         String raw = safe(identifier).trim().toLowerCase(Locale.ROOT);
-        String normalized = raw.contains("@") ? raw : AuthService.normalizePhone(raw);
-        return "login-id:" + digest(normalized);
+        return raw.contains("@") ? raw : AuthService.normalizePhone(raw);
     }
 
     private void consume(String key, int maxAttempts, long windowSeconds) {

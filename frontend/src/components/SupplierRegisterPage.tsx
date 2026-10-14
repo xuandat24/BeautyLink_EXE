@@ -424,13 +424,13 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Mật khẩu quản trị (ít nhất 6 ký tự) *
+                    Mật khẩu quản trị (ít nhất 8 ký tự) *
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                     <input
                       required
-                      minLength={6}
+                      minLength={8}
                       type={showPassword ? 'text' : 'password'}
                       value={formData.password}
                       onChange={(e) => updateField('password', e.target.value)}
@@ -456,7 +456,7 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
                   <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                   <input
                     required
-                    minLength={6}
+                    minLength={8}
                     type="password"
                     value={formData.confirmPassword}
                     onChange={(e) => updateField('confirmPassword', e.target.value)}

@@ -19,7 +19,7 @@ BeautyLink is a full-stack marketplace that connects customers with third-party 
 - Added browser location handling with a clearly labelled approximate network fallback when device GPS is unavailable. Suppliers can still enter exact store coordinates manually.
 - Uses a server-created PayOS hosted checkout. A booking is marked paid only after the backend verifies the signed PayOS webhook or reconciles it directly with PayOS.
 - PayOS links expire after 15 minutes; expired pending links are marked `EXPIRED` and can be safely regenerated with a new order code.
-- Registration verifies the email address with a six-digit OTP sent through the Resend HTTPS API; challenges and registration tokens are single-use and registration fails closed when delivery is unavailable.
+- Registration and password recovery use single-use six-digit email OTP challenges. Production prefers the Resend HTTPS API, local development can fall back to SMTP, and a password reset invalidates previously issued login tokens.
 - Production authentication and OTP throttling is shared across replicas through Redis; local/test profiles use the in-memory backend.
 - Payment attempts are append-only. A retry keeps the old attempt for audit and reacquires the released slot under a database lock before creating a new PayOS order.
 - Added client- and server-side Vietnamese validation messages for customer and admin forms, including authentication, profiles, bookings, reviews, reports, and admin report resolution.
@@ -36,6 +36,7 @@ PayOS credentials are read only by the backend. The frontend never receives merc
 - Search services, view prices, ratings, availability, and practitioners.
 - Open a supplier shop to browse all of its services, reviews, address, and mapped location, then book without leaving the shop.
 - Register or sign in with JWT authentication.
+- Recover an existing account through an email OTP sent to the address already registered for its phone number or email.
 - Optionally remember the signed-in session on the current browser.
 - Book an available appointment and view it in **Tổng quan & Lịch hẹn**.
 - Allow location access to sort the **Gần bạn** section by device coordinates, with an explicitly labelled approximate network fallback on devices without GPS.
@@ -203,6 +204,13 @@ RATE_LIMIT_BACKEND=memory
 REDIS_URL=redis://localhost:6379
 RESEND_API_KEY=your_resend_api_key
 OTP_MAIL_FROM=no-reply@beautylink.cloud
+# Optional local SMTP fallback when RESEND_API_KEY is empty
+SPRING_MAIL_HOST=smtp.example.com
+SPRING_MAIL_PORT=587
+SPRING_MAIL_USERNAME=your_smtp_username
+SPRING_MAIL_PASSWORD=your_smtp_password
+SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
+SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
 PAYOS_CLIENT_ID=your_payos_client_id
 PAYOS_API_KEY=your_payos_api_key
 PAYOS_CHECKSUM_KEY=your_payos_checksum_key
@@ -224,7 +232,7 @@ The signed PayOS webhook is primary and server-to-server reconciliation is the f
 
 For one production replica, the bounded in-memory login limiter is the default so an unavailable Redis service never blocks valid database-account login. Before scaling to multiple replicas, set `RATE_LIMIT_BACKEND=redis` and point `REDIS_URL` at a private Redis service shared by every backend replica. If Redis becomes unavailable later, the backend logs the outage and retains the same bounded limiter locally rather than rejecting every login.
 
-For Railway registration, create an independent random `OTP_PEPPER` of at least 32 characters. Create a restricted Resend API key and configure `RESEND_API_KEY` plus `OTP_MAIL_FROM=no-reply@beautylink.cloud` only on the backend service. No Gmail SMTP password, Twilio account, SMS OTP or Zalo OTP is required. After changing Railway variables, redeploy the backend. Missing/short `OTP_PEPPER` returns `OTP_NOT_CONFIGURED`; missing or rejected Resend configuration makes only the OTP endpoint fail closed with a safe `503`, without crashing the rest of the website. OTP values, provider secrets, authorization headers and email bodies are never logged.
+For Railway registration and password recovery, create an independent random `OTP_PEPPER` of at least 32 characters. Production should use a restricted Resend API key with `RESEND_API_KEY` and `OTP_MAIL_FROM=no-reply@beautylink.cloud`; it works over HTTPS and does not require Gmail, Twilio, SMS OTP, or Zalo OTP. Local development may instead configure the optional `SPRING_MAIL_*` SMTP fallback. If Gmail is used locally, enable 2-Step Verification and use an App Password rather than the normal Gmail password. After changing Railway variables, redeploy the backend. Missing/short `OTP_PEPPER` returns `OTP_NOT_CONFIGURED`; unavailable delivery returns a safe `503` without crashing the rest of the website. OTP values, provider secrets, authorization headers, email bodies, and raw contact identifiers are never logged.
 
 On the first MySQL startup after this upgrade, an idempotent compatibility migration removes only the legacy unique indexes on `payment_transactions.booking_id` and the practitioner/date/time booking slot, then adds non-unique lookup indexes. It backfills missing merchant references from the original PayOS order code. Back up the database before deployment and treat the change as roll-forward once a booking has multiple attempts. Existing transaction rows and legacy columns are retained.
 
@@ -378,7 +386,7 @@ All application endpoints use the `/api/v1` prefix.
 
 | Area | Important endpoints |
 |---|---|
-| Authentication | `POST /auth/registration-verification/start`, `POST /auth/registration-verification/confirm`, `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/me/phone` |
+| Authentication | `POST /auth/registration-verification/start`, `POST /auth/registration-verification/confirm`, `POST /auth/register`, `POST /auth/login`, `POST /auth/password-reset/start`, `POST /auth/password-reset/confirm`, `GET /auth/me`, `PATCH /auth/me/phone` |
 | Supplier registration | `POST /auth/register-supplier` |
 | Catalog | `GET /locations`, `GET /categories`, `GET /categories/{slug}/services`, `GET /suppliers/{id}` |
 | Availability | `GET /services/{serviceId}/availability` |
