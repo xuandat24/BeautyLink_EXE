@@ -15,6 +15,7 @@ import { FieldError } from './FieldError';
 
 interface ReportsPageProps {
   onBack: () => void;
+  onOpenCustomers?: () => void;
 }
 
 const statusLabel: Record<string, string> = {
@@ -24,7 +25,7 @@ const statusLabel: Record<string, string> = {
   REJECTED: 'Từ chối',
 };
 
-export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack }) => {
+export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomers }) => {
   const [reports, setReports] = useState<BackendReport[]>([]);
   const [selected, setSelected] = useState<BackendReport | null>(null);
   const [status, setStatus] = useState<string>('IN_REVIEW');
@@ -90,9 +91,20 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack }) => {
           >
             <ArrowLeft className="h-4 w-4" /> Trang chủ
           </button>
-          <span className="text-lg font-black tracking-tight">
-            Beauty<span className="text-pink-600">Link</span> Operations
-          </span>
+          <div className="flex items-center gap-2">
+            {onOpenCustomers && (
+              <button
+                type="button"
+                onClick={onOpenCustomers}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 transition hover:border-pink-200 hover:text-pink-700"
+              >
+                Tài khoản khách hàng
+              </button>
+            )}
+            <span className="text-lg font-black tracking-tight">
+              Beauty<span className="text-pink-600">Link</span> Operations
+            </span>
+          </div>
         </div>
       </header>
 

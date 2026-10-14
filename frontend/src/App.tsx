@@ -16,6 +16,7 @@ import { SupplierDashboard } from './components/SupplierDashboard';
 import { SupplierRegisterPage } from './components/SupplierRegisterPage';
 import { BookingsPage } from './components/BookingsPage';
 import { ReportsPage } from './components/ReportsPage';
+import { AdminCustomersPage } from './components/AdminCustomersPage';
 import { AuthPage } from './components/AuthPage';
 import { AccountPage } from './components/AccountPage';
 import { CheckoutPage } from './components/CheckoutPage';
@@ -177,6 +178,7 @@ type AppView =
   | 'supplier-register'
   | 'bookings'
   | 'reports'
+  | 'admin-customers'
   | 'login'
   | 'register'
   | 'account'
@@ -303,6 +305,8 @@ export default function App() {
         setCurrentPage('bookings');
       } else if (hash === '#reports') {
         setCurrentPage('reports');
+      } else if (hash === '#admin-customers') {
+        setCurrentPage('admin-customers');
       } else if (hash === '#checkout') {
         setCurrentPage('checkout');
       } else if (hash === '#filter-explore' || hash === '#filter' || hash === '#explore') {
@@ -332,7 +336,11 @@ export default function App() {
       navigateTo('supplier-dashboard');
       return;
     }
-    if (currentUser?.role === 'STAFF' || currentUser?.role === 'ADMIN') {
+    if (currentUser?.role === 'ADMIN') {
+      navigateTo('admin-customers');
+      return;
+    }
+    if (currentUser?.role === 'STAFF') {
       navigateTo('reports');
       return;
     }
@@ -353,6 +361,7 @@ export default function App() {
       '#service',
       '#bookings',
       '#reports',
+      '#admin-customers',
       '#checkout',
       '#filter-explore',
       '#filter',
@@ -497,7 +506,9 @@ export default function App() {
     setCurrentUser(user);
     if (user.role === 'SUPPLIER') {
       navigateTo('supplier-dashboard');
-    } else if (user.role === 'STAFF' || user.role === 'ADMIN') {
+    } else if (user.role === 'ADMIN') {
+      navigateTo('admin-customers');
+    } else if (user.role === 'STAFF') {
       navigateTo('reports');
     } else if (returnTarget === 'bookings') {
       navigateTo('bookings');
@@ -724,7 +735,21 @@ export default function App() {
   }
 
   if (currentPage === 'reports') {
-    return <ReportsPage onBack={handleBackToHome} />;
+    return (
+      <ReportsPage
+        onBack={handleBackToHome}
+        onOpenCustomers={currentUser?.role === 'ADMIN' ? () => navigateTo('admin-customers') : undefined}
+      />
+    );
+  }
+
+  if (currentPage === 'admin-customers') {
+    return (
+      <AdminCustomersPage
+        onBack={handleBackToHome}
+        onOpenReports={() => navigateTo('reports')}
+      />
+    );
   }
 
   if (currentPage === 'login' || currentPage === 'register') {

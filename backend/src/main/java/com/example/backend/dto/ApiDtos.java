@@ -38,6 +38,8 @@ public final class ApiDtos {
     public record ConfirmPasswordResetResponse(String message) {}
     public record UserResponse(Long id, String fullName, String phone, String email, Gender gender,
                                LocalDate dateOfBirth, Role role, int loyaltyPoints) {}
+    public record AdminCustomerResponse(Long id, String fullName, Gender gender, LocalDate dateOfBirth,
+                                        String phone, String email) {}
     public record AuthResponse(String accessToken, String tokenType, long expiresInMs, UserResponse user) {}
     public record UpdatePhoneRequest(
             @NotBlank(message = "Số điện thoại không được để trống")

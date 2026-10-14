@@ -181,6 +181,15 @@ export interface BackendReport {
   createdAt: string;
 }
 
+export interface AdminCustomer {
+  id: number;
+  fullName: string;
+  gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
+  dateOfBirth: string | null;
+  phone: string;
+  email: string;
+}
+
 // ==========================================
 // Frontend Domain Entity Interfaces
 // ==========================================

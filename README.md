@@ -59,6 +59,8 @@ PayOS credentials are read only by the backend. The frontend never receives merc
 - View customer reports.
 - Move reports through open, in-review, resolved, or rejected states.
 - Record resolution notes and the assigned staff member.
+- Admins can view a searchable table of customer accounts with name, gender, date of birth, phone number, and email. Supplier, staff, and admin identities are excluded.
+- Admins can download the complete customer list as a UTF-8 CSV for Google Sheets while preserving leading-zero phone numbers.
 
 ### Demo catalog
 
@@ -396,6 +398,7 @@ All application endpoints use the `/api/v1` prefix.
 | Supplier services | `GET/POST /supplier/services`, `PUT/DELETE /supplier/services/{id}` |
 | Supplier bookings | `GET /bookings/supplier` |
 | Support | `POST /reports`, staff/admin `GET` and `PATCH /reports` |
+| Admin customer data | admin-only `GET /admin/customers`, `GET /admin/customers/export` |
 
 Protected requests send the JWT as:
 

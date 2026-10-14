@@ -9,6 +9,7 @@ import {
   BackendSupplierProfile,
   ScheduleRule,
   BackendReport,
+  AdminCustomer,
   CurrentUser,
   HotDeal,
   Salon,
@@ -820,6 +821,18 @@ export const beautyApi = {
 
   async createReport(data: { targetType: string; targetId: number; reason: string; details: string }): Promise<BackendReport> {
     return unwrap(apiClient.post('/v1/reports', data));
+  },
+
+  // ==========================================
+  // Admin / Customer accounts
+  // ==========================================
+  async adminCustomers(): Promise<AdminCustomer[]> {
+    return unwrap(apiClient.get('/v1/admin/customers'));
+  },
+
+  async exportAdminCustomers(): Promise<Blob> {
+    const response = await apiClient.get('/v1/admin/customers/export', { responseType: 'blob' });
+    return response.data;
   },
 
   // ==========================================

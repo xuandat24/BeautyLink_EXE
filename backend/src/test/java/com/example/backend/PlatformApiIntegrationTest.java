@@ -141,6 +141,70 @@ class PlatformApiIntegrationTest {
     }
 
     @Test
+    void adminCanListAndExportOnlyCustomerAccounts() throws Exception {
+        String adminToken = login("0900000004", "BeautyLinkTest123!", "192.0.2.210");
+        String staffToken = login("0900000003", "BeautyLinkTest123!", "192.0.2.211");
+        String customerToken = login("0900000001", "BeautyLinkTest123!", "192.0.2.212");
+
+        mvc.perform(get("/api/v1/admin/customers"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/admin/customers")
+                        .header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/customers")
+                        .header("Authorization", "Bearer " + staffToken))
+                .andExpect(status().isForbidden());
+
+        com.example.backend.model.UserAccount seededCustomer = users.findByPhone("0900000001").orElseThrow();
+        com.example.backend.model.DomainEnums.Gender originalGender = seededCustomer.getGender();
+        LocalDate originalBirthDate = seededCustomer.getDateOfBirth();
+        try {
+            seededCustomer.setGender(com.example.backend.model.DomainEnums.Gender.FEMALE);
+            seededCustomer.setDateOfBirth(LocalDate.of(1995, 6, 15));
+            users.saveAndFlush(seededCustomer);
+
+            String body = mvc.perform(get("/api/v1/admin/customers")
+                            .header("Authorization", "Bearer " + adminToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[*].phone", hasItem("0900000001")))
+                    .andExpect(jsonPath("$[*].phone", not(hasItem("0900000002"))))
+                    .andExpect(jsonPath("$[*].phone", not(hasItem("0900000003"))))
+                    .andExpect(jsonPath("$[*].phone", not(hasItem("0900000004"))))
+                    .andExpect(jsonPath("$[?(@.phone == '0900000001')].gender", hasItem("FEMALE")))
+                    .andExpect(jsonPath("$[?(@.phone == '0900000001')].dateOfBirth", hasItem("1995-06-15")))
+                    .andReturn().getResponse().getContentAsString();
+
+            JsonNode rows = objectMapper.readTree(body);
+            long previousId = 0;
+            for (JsonNode row : rows) {
+                long id = row.path("id").asLong();
+                assertTrue(id > previousId);
+                previousId = id;
+                org.junit.jupiter.api.Assertions.assertEquals(
+                        com.example.backend.model.DomainEnums.Role.CUSTOMER,
+                        users.findById(id).orElseThrow().getRole());
+                assertFalse(row.has("passwordHash"));
+                assertFalse(row.has("role"));
+            }
+
+            String csv = mvc.perform(get("/api/v1/admin/customers/export")
+                            .header("Authorization", "Bearer " + adminToken))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentTypeCompatibleWith("text/csv"))
+                    .andExpect(header().string("Content-Disposition", containsString("attachment")))
+                    .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+            assertTrue(csv.startsWith("\uFEFFSTT,Tên người dùng,Giới tính,Ngày sinh,Số điện thoại,Email"));
+            assertTrue(csv.contains("0900000001"));
+            assertFalse(csv.contains("0900000002"));
+            assertFalse(csv.contains("supplier@beautylink.vn"));
+        } finally {
+            seededCustomer.setGender(originalGender);
+            seededCustomer.setDateOfBirth(originalBirthDate);
+            users.saveAndFlush(seededCustomer);
+        }
+    }
+
+    @Test
     void customerCanRegisterAndUseProtectedProfileEndpoint() throws Exception {
         String registerBody = """
                 {"fullName":"Nguyen An","phone":"0912345678","email":"an@example.com","password":"StrongPass123!","gender":"MALE","dateOfBirth":"1995-06-15","verificationToken":"verified-test-token"}
