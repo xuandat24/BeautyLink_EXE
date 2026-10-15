@@ -324,12 +324,12 @@ export default function App() {
     return () => { window.removeEventListener('hashchange', handleHash); window.removeEventListener('popstate', handleHash); };
   }, []);
 
-  const navigateTo = (view: AppView, fallbackReturn = 'home') => {
+  const navigateTo = useCallback((view: AppView, fallbackReturn = 'home') => {
     setReturnTarget(fallbackReturn);
     setCurrentPage(view);
     window.location.hash = view;
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, []);
 
   const handleOpenAccount = () => {
     if (currentUser?.role === 'SUPPLIER') {
@@ -601,6 +601,19 @@ export default function App() {
     [rawServices, showToast]
   );
 
+  const handleProceedToCheckout = useCallback(
+    (service: BackendService, date: string, slot: string) => {
+      setActiveBookingService(null);
+      setDirectCheckoutConfig({
+        service,
+        preselectedDate: date,
+        preselectedTime: slot,
+      });
+      navigateTo('checkout');
+    },
+    [navigateTo]
+  );
+
   // Search Filter & Chips State
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({
@@ -850,6 +863,7 @@ export default function App() {
             currentUser={currentUser}
             onClose={() => setActiveBookingService(null)}
             onNeedLogin={() => navigateTo('login')}
+            onProceedToCheckout={handleProceedToCheckout}
             onCreated={(bookingCode) => {
               showToast(`Đặt lịch thành công · Mã ${bookingCode}. Bạn có thể chia sẻ lịch hẹn ngay.`);
             }}
@@ -956,6 +970,7 @@ export default function App() {
             currentUser={currentUser}
             onClose={() => setActiveBookingService(null)}
             onNeedLogin={() => navigateTo('login')}
+            onProceedToCheckout={handleProceedToCheckout}
             onCreated={(bookingCode) => {
               showToast(`Đặt lịch thành công · Mã ${bookingCode}. Bạn có thể chia sẻ lịch hẹn ngay.`);
             }}
@@ -1157,6 +1172,7 @@ export default function App() {
           currentUser={currentUser}
           onClose={() => setActiveBookingService(null)}
           onNeedLogin={() => navigateTo('login')}
+          onProceedToCheckout={handleProceedToCheckout}
           onCreated={(bookingCode) => {
             showToast(`Đặt lịch thành công · Mã ${bookingCode}. Bạn có thể chia sẻ lịch hẹn ngay bên dưới.`);
           }}

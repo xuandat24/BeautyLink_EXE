@@ -16,7 +16,7 @@ interface BookingModalProps {
   onViewMyBookings?: () => void;
   initialDate?: string;
   initialSlot?: string;
-  onProceedToCheckout?: (service: BackendService, date: string, slot: string) => void;
+  onProceedToCheckout: (service: BackendService, date: string, slot: string) => void;
 }
 
 const formatCurrency = (val: number) => {
@@ -386,42 +386,24 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {onProceedToCheckout ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!currentUser) {
-                        onNeedLogin();
-                        return;
-                      }
-                      if (!selectedSlot) {
-                        setError('Vui lòng chọn khung giờ hẹn trước khi tiếp tục.');
-                        return;
-                      }
-                      onProceedToCheckout(service, date, selectedSlot);
-                    }}
-                    disabled={Boolean(currentUser && !selectedSlot) || submitting}
-                    className="inline-flex min-h-12 items-center gap-1.5 rounded-2xl bg-gradient-to-r from-[#e1146c] to-[#be185d] px-6 text-xs sm:text-sm font-black text-white transition hover:opacity-95 disabled:opacity-40 cursor-pointer shadow-md shadow-pink-600/20"
-                  >
-                    <span>{currentUser ? 'Tiến hành đặt lịch & Thanh toán' : 'Đăng nhập để đặt lịch'}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={Boolean(currentUser && !canSubmit) || submitting}
-                    className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-gradient-to-r from-[#e1146c] to-[#be185d] px-6 text-xs sm:text-sm font-extrabold text-white transition hover:opacity-95 disabled:opacity-40 cursor-pointer shadow-md shadow-pink-600/20"
-                  >
-                    {submitting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : currentUser ? (
-                      <CheckCircle className="h-4 w-4" />
-                    ) : (
-                      <ShieldCheck className="h-4 w-4" />
-                    )}
-                    {currentUser ? 'Xác nhận đặt lịch' : 'Đăng nhập để đặt'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!currentUser) {
+                      onNeedLogin();
+                      return;
+                    }
+                    if (!selectedSlot) {
+                      setError('Vui lòng chọn khung giờ hẹn trước khi tiếp tục.');
+                      return;
+                    }
+                    onProceedToCheckout(service, date, selectedSlot);
+                  }}
+                  disabled={Boolean(currentUser && !selectedSlot) || submitting}
+                  className="inline-flex min-h-12 items-center gap-1.5 rounded-2xl bg-gradient-to-r from-[#e1146c] to-[#be185d] px-6 text-xs sm:text-sm font-black text-white transition hover:opacity-95 disabled:opacity-40 cursor-pointer shadow-md shadow-pink-600/20"
+                >
+                  <span>{currentUser ? 'Tiến hành đặt lịch & Thanh toán' : 'Đăng nhập để đặt lịch'}</span>
+                </button>
               </div>
             </div>
           </>
