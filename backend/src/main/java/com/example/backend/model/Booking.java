@@ -8,7 +8,7 @@ import static com.example.backend.model.DomainEnums.*;
 @Entity
 @Table(name = "bookings", uniqueConstraints = {
         @UniqueConstraint(name = "uk_booking_code", columnNames = "booking_code")
-}, indexes = {@Index(name = "idx_booking_customer", columnList = "customer_id"), @Index(name = "idx_booking_supplier_date", columnList = "supplier_id,appointment_date"), @Index(name = "idx_booking_practitioner_slot_v2", columnList = "practitioner_id,appointment_date,start_time")})
+}, indexes = {@Index(name = "idx_booking_customer", columnList = "customer_id"), @Index(name = "idx_booking_supplier_date", columnList = "supplier_id,appointment_date"), @Index(name = "idx_booking_practitioner_slot_v2", columnList = "practitioner_id,appointment_date,start_time"), @Index(name = "idx_booking_admin_created", columnList = "created_at,id"), @Index(name = "idx_booking_customer_created", columnList = "customer_id,created_at")})
 public class Booking {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(nullable = false, unique = true, length = 24) private String bookingCode;

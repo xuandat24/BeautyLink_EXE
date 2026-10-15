@@ -203,6 +203,81 @@ export interface AdminCustomer {
   dateOfBirth: string | null;
   phone: string;
   email: string;
+  bookingsPlaced: number;
+  paidBookings: number;
+  completedBookings: number;
+  lastBookingAt: string | null;
+  totalVerifiedOnlineAmount: number;
+}
+
+export interface AdminDateRange {
+  fromDate: string;
+  toDate: string;
+  timezone: string;
+  includeDemo: boolean;
+}
+
+export interface AdminBooking {
+  id: number;
+  bookingCode: string;
+  customerId: number;
+  customerName: string;
+  customerPhone: string;
+  supplierId: number;
+  supplierName: string;
+  serviceName: string;
+  practitionerName: string;
+  appointmentDate: string;
+  startTime: string;
+  endTime: string;
+  totalAmount: number;
+  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+  paymentStatus: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'REFUNDED';
+  createdAt: string;
+  verifiedPaymentOption: PaymentOption | null;
+  verifiedOnlineAmount: number | null;
+  remainingAtSalon: number | null;
+  verifiedPaidAt: string | null;
+  paymentReviewRequired: boolean;
+}
+
+export interface AdminPage<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+}
+
+export interface AdminDashboardSummary {
+  range: AdminDateRange;
+  registeredCustomers: number;
+  customersWhoBooked: number;
+  totalBookings: number;
+  paidBookingCustomers: number;
+  verifiedPaidBookings: number;
+  upcomingBookings: number;
+  reconciliationIssues: number;
+  completedBookings: number;
+  cancelledBookings: number;
+  repeatCustomers: number;
+  bookingToPaymentConversion: number;
+  generatedAt: string;
+  bookingTrends: Array<{ date: string; bookings: number; uniqueCustomers: number }>;
+  recentBookings: AdminBooking[];
+}
+
+export interface AdminPaymentSummary {
+  range: AdminDateRange;
+  verifiedOnlineCollected: number;
+  verifiedDeposits: number;
+  verifiedFullPayments: number;
+  remainingAtSalon: number;
+  verifiedPaymentBookings: number;
+  depositBookings: number;
+  fullPaymentBookings: number;
+  reconciliationIssues: number;
+  generatedAt: string;
 }
 
 // ==========================================

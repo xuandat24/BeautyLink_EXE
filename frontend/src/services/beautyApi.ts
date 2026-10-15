@@ -10,6 +10,10 @@ import {
   ScheduleRule,
   BackendReport,
   AdminCustomer,
+  AdminBooking,
+  AdminDashboardSummary,
+  AdminPaymentSummary,
+  AdminPage,
   CurrentUser,
   HotDeal,
   Salon,
@@ -854,13 +858,36 @@ export const beautyApi = {
   // ==========================================
   // Admin / Customer accounts
   // ==========================================
-  async adminCustomers(): Promise<AdminCustomer[]> {
-    return unwrap(apiClient.get('/v1/admin/customers'));
+  async adminCustomers(params?: { from?: string; to?: string; bookedOnly?: boolean; includeDemo?: boolean }): Promise<AdminCustomer[]> {
+    return unwrap(apiClient.get('/v1/admin/customers', { params }));
   },
 
   async exportAdminCustomers(): Promise<Blob> {
     const response = await apiClient.get('/v1/admin/customers/export', { responseType: 'blob' });
     return response.data;
+  },
+
+  async adminDashboardSummary(params: { from: string; to: string; includeDemo: boolean }): Promise<AdminDashboardSummary> {
+    return unwrap(apiClient.get('/v1/admin/dashboard/summary', { params }));
+  },
+
+  async adminPaymentSummary(params: { from: string; to: string; includeDemo: boolean }): Promise<AdminPaymentSummary> {
+    return unwrap(apiClient.get('/v1/admin/dashboard/payments', { params }));
+  },
+
+  async adminBookings(params: {
+    from: string; to: string; includeDemo: boolean; status?: string; paymentStatus?: string;
+    query?: string; page?: number; size?: number;
+  }): Promise<AdminPage<AdminBooking>> {
+    return unwrap(apiClient.get('/v1/admin/bookings', { params }));
+  },
+
+  async adminBooking(id: number): Promise<AdminBooking> {
+    return unwrap(apiClient.get(`/v1/admin/bookings/${id}`));
+  },
+
+  async adminCustomerBookings(customerId: number, page = 0): Promise<AdminPage<AdminBooking>> {
+    return unwrap(apiClient.get(`/v1/admin/customers/${customerId}/bookings`, { params: { page, size: 20 } }));
   },
 
   // ==========================================

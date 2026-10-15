@@ -17,6 +17,7 @@ import { SupplierRegisterPage } from './components/SupplierRegisterPage';
 import { BookingsPage } from './components/BookingsPage';
 import { ReportsPage } from './components/ReportsPage';
 import { AdminCustomersPage } from './components/AdminCustomersPage';
+import type { AdminSection } from './components/admin/AdminNav';
 import { AuthPage } from './components/AuthPage';
 import { AccountPage } from './components/AccountPage';
 import { CheckoutPage } from './components/CheckoutPage';
@@ -34,6 +35,8 @@ import { LocationSelectModal } from './components/LocationSelectModal';
 import { BlogModal } from './components/BlogModal';
 import { ViewAllServicesModal, ViewAllContext } from './components/ViewAllServicesModal';
 import { FavoriteToast, FavoriteToastInfo } from './components/FavoriteToast';
+
+const AdminDashboardPage = React.lazy(() => import('./components/admin/AdminDashboardPage').then((module) => ({ default: module.AdminDashboardPage })));
 
 // Central Store & Types
 import { useBeautyStore } from './store/beautyStore';
@@ -179,6 +182,9 @@ type AppView =
   | 'bookings'
   | 'reports'
   | 'admin-customers'
+  | 'admin-dashboard'
+  | 'admin-bookings'
+  | 'admin-payments'
   | 'login'
   | 'register'
   | 'account'
@@ -277,6 +283,7 @@ export default function App() {
     preselectedDate?: string;
     preselectedTime?: string;
   } | null>(null);
+  const [adminBookedCustomerRange, setAdminBookedCustomerRange] = useState<{ from: string; to: string } | null>(null);
 
   // Load categories
   useEffect(() => {
@@ -307,6 +314,12 @@ export default function App() {
         setCurrentPage('reports');
       } else if (hash === '#admin-customers') {
         setCurrentPage('admin-customers');
+      } else if (hash === '#admin-dashboard' || hash === '#admin') {
+        setCurrentPage('admin-dashboard');
+      } else if (hash === '#admin-bookings') {
+        setCurrentPage('admin-bookings');
+      } else if (hash === '#admin-payments') {
+        setCurrentPage('admin-payments');
       } else if (hash === '#checkout') {
         setCurrentPage('checkout');
       } else if (hash === '#filter-explore' || hash === '#filter' || hash === '#explore') {
@@ -337,7 +350,7 @@ export default function App() {
       return;
     }
     if (currentUser?.role === 'ADMIN') {
-      navigateTo('admin-customers');
+      navigateTo('admin-dashboard');
       return;
     }
     if (currentUser?.role === 'STAFF') {
@@ -362,6 +375,10 @@ export default function App() {
       '#bookings',
       '#reports',
       '#admin-customers',
+      '#admin-dashboard',
+      '#admin',
+      '#admin-bookings',
+      '#admin-payments',
       '#checkout',
       '#filter-explore',
       '#filter',
@@ -507,7 +524,7 @@ export default function App() {
     if (user.role === 'SUPPLIER') {
       navigateTo('supplier-dashboard');
     } else if (user.role === 'ADMIN') {
-      navigateTo('admin-customers');
+      navigateTo('admin-dashboard');
     } else if (user.role === 'STAFF') {
       navigateTo('reports');
     } else if (returnTarget === 'bookings') {
@@ -613,6 +630,18 @@ export default function App() {
     },
     [navigateTo]
   );
+
+  const handleAdminNavigate = useCallback((section: AdminSection) => {
+    const destinations: Record<AdminSection, AppView> = {
+      overview: 'admin-dashboard',
+      bookings: 'admin-bookings',
+      customers: 'admin-customers',
+      payments: 'admin-payments',
+      reports: 'reports',
+    };
+    if (section !== 'customers') setAdminBookedCustomerRange(null);
+    navigateTo(destinations[section]);
+  }, [navigateTo]);
 
   // Search Filter & Chips State
   const [searchQuery, setSearchQuery] = useState('');
@@ -729,6 +758,22 @@ export default function App() {
   // =========================================================================
   // STANDALONE ROUTING SCREENS (No background overlay)
   // =========================================================================
+  const adminPages: AppView[] = ['admin-dashboard', 'admin-bookings', 'admin-customers', 'admin-payments'];
+  if (adminPages.includes(currentPage) && currentUser?.role !== 'ADMIN') {
+    if (!currentUser) {
+      return <AuthPage initialMode="login" onBackToHome={handleBackToHome} onSuccess={handleUserSuccess}
+        onNavigateSupplierRegister={() => navigateTo('supplier-register')} onModeChange={(mode) => navigateTo(mode)} />;
+    }
+    return <div className="grid min-h-screen place-items-center bg-slate-50 p-6 text-center"><div><h1 className="text-2xl font-black">Không có quyền truy cập</h1><p className="mt-2 text-sm text-slate-500">Trang quản trị chỉ dành cho tài khoản ADMIN.</p><button onClick={handleBackToHome} className="mt-5 rounded-2xl bg-pink-600 px-5 py-3 text-sm font-black text-white">Về trang chủ</button></div></div>;
+  }
+
+  if (currentPage === 'admin-dashboard' || currentPage === 'admin-bookings' || currentPage === 'admin-payments') {
+    const mode = currentPage === 'admin-bookings' ? 'bookings' : currentPage === 'admin-payments' ? 'payments' : 'overview';
+    return <React.Suspense fallback={<div className="grid min-h-screen place-items-center bg-slate-50 text-sm font-bold text-slate-500">Đang tải trang quản trị...</div>}><AdminDashboardPage mode={mode} adminName={currentUser?.name || 'Quản trị viên'}
+      onNavigate={handleAdminNavigate} onHome={handleBackToHome} onLogout={handleLogout}
+      onOpenBookedCustomers={(from, to) => { setAdminBookedCustomerRange({ from, to }); navigateTo('admin-customers'); }} /></React.Suspense>;
+  }
+
   if (currentPage === 'supplier-dashboard') {
     return <SupplierDashboard onBack={handleBackToHome} onLogout={handleLogout} />;
   }
@@ -748,10 +793,16 @@ export default function App() {
   }
 
   if (currentPage === 'reports') {
+    if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'STAFF')) {
+      return <div className="grid min-h-screen place-items-center bg-slate-50 p-6 text-center"><div><h1 className="text-2xl font-black">Không có quyền truy cập</h1><button onClick={handleBackToHome} className="mt-5 rounded-2xl bg-pink-600 px-5 py-3 text-sm font-black text-white">Về trang chủ</button></div></div>;
+    }
     return (
       <ReportsPage
         onBack={handleBackToHome}
-        onOpenCustomers={currentUser?.role === 'ADMIN' ? () => navigateTo('admin-customers') : undefined}
+        onOpenCustomers={currentUser.role === 'ADMIN' ? () => navigateTo('admin-customers') : undefined}
+        adminName={currentUser.role === 'ADMIN' ? currentUser.name : undefined}
+        onAdminNavigate={currentUser.role === 'ADMIN' ? handleAdminNavigate : undefined}
+        onLogout={currentUser.role === 'ADMIN' ? handleLogout : undefined}
       />
     );
   }
@@ -760,7 +811,10 @@ export default function App() {
     return (
       <AdminCustomersPage
         onBack={handleBackToHome}
-        onOpenReports={() => navigateTo('reports')}
+        onNavigate={handleAdminNavigate}
+        onLogout={handleLogout}
+        adminName={currentUser?.name || 'Quản trị viên'}
+        bookedRange={adminBookedCustomerRange}
       />
     );
   }

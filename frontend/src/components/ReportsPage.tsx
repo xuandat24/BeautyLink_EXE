@@ -12,10 +12,14 @@ import { BackendReport } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { adminReportSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
+import { AdminNav, type AdminSection } from './admin/AdminNav';
 
 interface ReportsPageProps {
   onBack: () => void;
   onOpenCustomers?: () => void;
+  adminName?: string;
+  onAdminNavigate?: (section: AdminSection) => void;
+  onLogout?: () => void;
 }
 
 const statusLabel: Record<string, string> = {
@@ -25,7 +29,7 @@ const statusLabel: Record<string, string> = {
   REJECTED: 'Từ chối',
 };
 
-export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomers }) => {
+export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomers, adminName, onAdminNavigate, onLogout }) => {
   const [reports, setReports] = useState<BackendReport[]>([]);
   const [selected, setSelected] = useState<BackendReport | null>(null);
   const [status, setStatus] = useState<string>('IN_REVIEW');
@@ -83,7 +87,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomer
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
+      {adminName && onAdminNavigate && onLogout ? (
+        <AdminNav active="reports" adminName={adminName} onNavigate={onAdminNavigate} onHome={onBack} onLogout={onLogout} />
+      ) : <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
           <button
             onClick={onBack}
@@ -106,7 +112,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomer
             </span>
           </div>
         </div>
-      </header>
+      </header>}
 
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
         <div className="mb-8">

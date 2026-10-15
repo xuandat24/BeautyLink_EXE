@@ -1,45 +1,40 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeft,
   Download,
-  FileText,
+  Eye,
   Loader2,
   RefreshCw,
   Search,
   Users,
+  X,
 } from 'lucide-react';
-import { AdminCustomer } from '../types';
+import { AdminBooking, AdminCustomer } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { AdminNav, type AdminSection } from './admin/AdminNav';
 
 interface AdminCustomersPageProps {
   onBack: () => void;
-  onOpenReports: () => void;
+  onNavigate: (section: AdminSection) => void;
+  onLogout: () => void;
+  adminName: string;
+  bookedRange?: { from: string; to: string } | null;
 }
 
-const genderLabel: Record<Exclude<AdminCustomer['gender'], null>, string> = {
-  MALE: 'Nam',
-  FEMALE: 'Nữ',
-  OTHER: 'Khác',
-};
-
-const displayBirthDate = (value: string | null) => {
-  if (!value) return 'Chưa cập nhật';
-  const [year, month, day] = value.split('-');
-  return year && month && day ? `${day}/${month}/${year}` : value;
-};
-
-export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, onOpenReports }) => {
+export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, onNavigate, onLogout, adminName, bookedRange }) => {
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomer | null>(null);
+  const [history, setHistory] = useState<AdminBooking[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const loadCustomers = async () => {
     setLoading(true);
     setError('');
     try {
-      setCustomers(await beautyApi.adminCustomers());
+      setCustomers(await beautyApi.adminCustomers(bookedRange ? { ...bookedRange, bookedOnly: true } : undefined));
     } catch (err) {
       setError(getApiErrorMessage(err, 'Không thể tải danh sách tài khoản khách hàng.'));
     } finally {
@@ -49,7 +44,14 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
 
   useEffect(() => {
     void loadCustomers();
-  }, []);
+  }, [bookedRange]);
+
+  const openHistory = async (customer: AdminCustomer) => {
+    setSelectedCustomer(customer); setHistoryLoading(true); setHistory([]);
+    try { setHistory((await beautyApi.adminCustomerBookings(customer.id)).content); }
+    catch (err) { setError(getApiErrorMessage(err, 'Không thể tải lịch sử đặt lịch.')); }
+    finally { setHistoryLoading(false); }
+  };
 
   const visibleCustomers = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('vi-VN');
@@ -84,29 +86,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-2 text-sm font-extrabold text-slate-600 transition hover:text-pink-700"
-          >
-            <ArrowLeft className="h-4 w-4" /> Trang chủ
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onOpenReports}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 transition hover:border-pink-200 hover:text-pink-700"
-            >
-              <FileText className="h-4 w-4" /> Phản hồi
-            </button>
-            <span className="text-lg font-black tracking-tight">
-              Beauty<span className="text-pink-600">Link</span> Admin
-            </span>
-          </div>
-        </div>
-      </header>
+      <AdminNav active="customers" adminName={adminName} onNavigate={onNavigate} onHome={onBack} onLogout={onLogout} />
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
         <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
@@ -115,6 +95,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
             <h1 className="mt-2 text-3xl font-black">Tài khoản khách hàng</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
               Danh sách chỉ bao gồm tài khoản khách hàng; nhà cung cấp, nhân viên và quản trị viên được loại trừ.
+              {bookedRange && <span className="mt-1 block font-bold text-pink-700">Đang lọc khách đã đặt lịch từ {bookedRange.from} đến {bookedRange.to}.</span>}
             </p>
           </div>
           <button
@@ -183,15 +164,19 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] border-collapse text-left">
+              <table className="w-full min-w-[1200px] border-collapse text-left">
                 <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="w-16 px-5 py-4 text-center">STT</th>
                     <th className="px-5 py-4">Tên người dùng</th>
-                    <th className="px-5 py-4">Giới tính</th>
-                    <th className="px-5 py-4">Ngày sinh</th>
                     <th className="px-5 py-4">Số điện thoại</th>
                     <th className="px-5 py-4">Email</th>
+                    <th className="px-5 py-4 text-center">Đã đặt</th>
+                    <th className="px-5 py-4 text-center">Đã trả</th>
+                    <th className="px-5 py-4 text-center">Hoàn thành</th>
+                    <th className="px-5 py-4">Thu online</th>
+                    <th className="px-5 py-4">Lần đặt cuối</th>
+                    <th className="px-5 py-4">Lịch sử</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -206,12 +191,14 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
                           <span className="text-sm font-black text-slate-800">{customer.fullName}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-sm font-semibold text-slate-600">
-                        {customer.gender ? genderLabel[customer.gender] : 'Chưa cập nhật'}
-                      </td>
-                      <td className="px-5 py-4 text-sm font-semibold text-slate-600">{displayBirthDate(customer.dateOfBirth)}</td>
                       <td className="px-5 py-4 font-mono text-sm font-bold text-slate-700">{customer.phone}</td>
                       <td className="px-5 py-4 text-sm font-semibold text-slate-600">{customer.email || 'Chưa cập nhật'}</td>
+                      <td className="px-5 py-4 text-center font-black">{customer.bookingsPlaced}</td>
+                      <td className="px-5 py-4 text-center font-black text-emerald-700">{customer.paidBookings}</td>
+                      <td className="px-5 py-4 text-center font-black">{customer.completedBookings}</td>
+                      <td className="px-5 py-4 text-sm font-black text-pink-700">{new Intl.NumberFormat('vi-VN').format(customer.totalVerifiedOnlineAmount)}đ</td>
+                      <td className="px-5 py-4 text-xs font-semibold text-slate-500">{customer.lastBookingAt ? new Date(customer.lastBookingAt).toLocaleString('vi-VN') : 'Chưa đặt'}</td>
+                      <td className="px-5 py-4"><button type="button" onClick={() => void openHistory(customer)} className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black hover:border-pink-300 hover:text-pink-700"><Eye className="h-4 w-4" /> Xem</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -226,6 +213,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
           </p>
         )}
       </main>
+      {selectedCustomer && <div className="fixed inset-0 z-[120] flex justify-end bg-slate-950/50" role="dialog" aria-modal="true" aria-label="Lịch sử khách hàng"><button type="button" className="absolute inset-0" onClick={() => setSelectedCustomer(null)} aria-label="Đóng" /><aside className="relative h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase text-pink-600">Khách hàng #{selectedCustomer.id}</p><h2 className="mt-2 text-2xl font-black">{selectedCustomer.fullName}</h2><p className="mt-1 text-sm text-slate-500">{selectedCustomer.phone} · {selectedCustomer.email}</p></div><button onClick={() => setSelectedCustomer(null)} aria-label="Đóng" className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100"><X className="h-5 w-5" /></button></div>{historyLoading ? <Loader2 className="mx-auto mt-20 h-8 w-8 animate-spin text-pink-600" /> : history.length === 0 ? <p className="mt-20 text-center text-sm font-bold text-slate-400">Khách hàng chưa có lịch hẹn thực.</p> : <div className="mt-6 space-y-3">{history.map((booking) => <article key={booking.id} className="rounded-2xl border border-slate-200 p-4"><div className="flex justify-between gap-3"><div><strong>{booking.bookingCode} · {booking.serviceName}</strong><p className="mt-1 text-xs text-slate-500">{booking.supplierName} · {booking.appointmentDate} {booking.startTime.slice(0, 5)}</p></div><span className="text-xs font-black text-pink-700">{new Intl.NumberFormat('vi-VN').format(booking.totalAmount)}đ</span></div><p className="mt-2 text-[11px] font-bold text-slate-400">{booking.status} · {booking.paymentStatus}</p></article>)}</div>}</aside></div>}
     </div>
   );
 };
