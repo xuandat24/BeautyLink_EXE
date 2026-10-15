@@ -14,6 +14,9 @@ public final class DomainEnums {
     /** DEPOSIT_50 is retained only for persisted legacy attempts and safe continuation. */
     public enum PaymentOption { DEPOSIT_50, DEPOSIT_05, FULL_100 }
     public enum PaymentTransactionStatus { PENDING, PAID, CANCELLED, EXPIRED, FAILED, REVIEW_REQUIRED }
+    public enum EmailNotificationType { BOOKING_PAYMENT_CONFIRMED }
+    public enum EmailRecipientRole { CUSTOMER, SUPPLIER }
+    public enum EmailNotificationStatus { PENDING, PROCESSING, RETRY, SENT, SKIPPED, FAILED_PERMANENT }
     public enum ReviewTargetType { SERVICE, SUPPLIER }
     public enum ReportStatus { OPEN, IN_REVIEW, RESOLVED, REJECTED }
     public enum ReportTargetType { SUPPLIER, SERVICE, BOOKING, REVIEW, USER }

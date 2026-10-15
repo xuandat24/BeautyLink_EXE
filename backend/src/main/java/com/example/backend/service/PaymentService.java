@@ -52,12 +52,13 @@ public class PaymentService {
     private final AvailabilityService availability;
     private final BookingCompletionPolicy time;
     private final PaymentQuoteService paymentQuotes;
+    private final BookingConfirmationNotificationService bookingNotifications;
     private final TransactionTemplate checkoutTransactions;
 
     public PaymentService(PaymentTransactionRepository payments, BookingRepository bookings,
                           PractitionerRepository practitioners, PayOSGateway gateway, AvailabilityService availability,
                           PlatformTransactionManager transactionManager, BookingCompletionPolicy time,
-                          PaymentQuoteService paymentQuotes,
+                          PaymentQuoteService paymentQuotes, BookingConfirmationNotificationService bookingNotifications,
                           @Value("${app.payos.return-url}") String returnUrl,
                           @Value("${app.payos.cancel-url}") String cancelUrl,
                           @Value("${app.payos.reconciliation-min-age-seconds:60}") long reconciliationMinAgeSeconds,
@@ -69,6 +70,7 @@ public class PaymentService {
         this.availability = availability;
         this.time = time;
         this.paymentQuotes = paymentQuotes;
+        this.bookingNotifications = bookingNotifications;
         this.checkoutTransactions = new TransactionTemplate(transactionManager);
         this.checkoutTransactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.checkoutTransactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
@@ -351,6 +353,7 @@ public class PaymentService {
         booking.setStatus(BookingStatus.CONFIRMED);
         booking.setPaymentRetryAllowed(false);
         closeSupersededAttempts(payment);
+        bookingNotifications.enqueueVerifiedPayment(payment);
         log.info("PayOS payment verified orderCode={} paymentLinkId={} source={}", payment.getOrderCode(), payment.getPaymentLinkId(), source);
     }
 

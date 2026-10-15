@@ -15,6 +15,8 @@ import com.example.backend.service.PaymentService;
 import com.example.backend.service.PaymentQuoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -38,6 +40,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,12 +51,13 @@ class PaymentServiceSecurityTest {
     @Mock BookingRepository bookings;
     @Mock PayOSGateway gateway;
     @Mock PractitionerRepository practitioners;
+    @Mock com.example.backend.service.BookingConfirmationNotificationService bookingNotifications;
     PaymentService service;
 
     @BeforeEach
     void setUp() {
         service = new PaymentService(payments, bookings, practitioners, gateway, mock(com.example.backend.service.AvailabilityService.class), mock(org.springframework.transaction.PlatformTransactionManager.class), new com.example.backend.service.BookingCompletionPolicy(),
-                new PaymentQuoteService(mock(com.example.backend.repository.ServiceOfferingRepository.class)),
+                new PaymentQuoteService(mock(com.example.backend.repository.ServiceOfferingRepository.class)), bookingNotifications,
                 "https://frontend/success", "https://frontend/cancel", 60, 120);
     }
 
@@ -68,6 +74,7 @@ class PaymentServiceSecurityTest {
         assertEquals(BookingStatus.CANCELLED, payment.getBooking().getStatus());
         assertEquals(PaymentStatus.UNPAID, payment.getBooking().getPaymentStatus());
         assertEquals(true, payment.getBooking().isPaymentRetryAllowed());
+        verify(bookingNotifications, never()).enqueueVerifiedPayment(any());
     }
 
     @Test
@@ -81,6 +88,7 @@ class PaymentServiceSecurityTest {
 
         assertEquals(PaymentTransactionStatus.CANCELLED, payment.getStatus());
         assertEquals(BookingStatus.CANCELLED, payment.getBooking().getStatus());
+        verify(bookingNotifications, never()).enqueueVerifiedPayment(any());
     }
 
     @Test
@@ -104,6 +112,32 @@ class PaymentServiceSecurityTest {
         assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, payment.getStatus());
         assertEquals(PaymentStatus.UNPAID, payment.getBooking().getPaymentStatus());
         assertEquals(BookingStatus.CANCELLED, payment.getBooking().getStatus());
+        verify(bookingNotifications, never()).enqueueVerifiedPayment(any());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = PaymentOption.class, names = {"DEPOSIT_05", "FULL_100"})
+    void everyCurrentVerifiedPaymentOptionQueuesBothLogicalRecipients(PaymentOption option) {
+        PaymentTransaction payment = pendingPayment();
+        payment.setPaymentOption(option);
+        if (option == PaymentOption.DEPOSIT_05) {
+            payment.setAmount(new BigDecimal("25000"));
+            payment.setRemainingAmount(new BigDecimal("475000"));
+        } else {
+            payment.setAmount(new BigDecimal("500000"));
+            payment.setRemainingAmount(BigDecimal.ZERO);
+        }
+        Webhook webhook = successfulWebhook(payment, payment.getAmount().longValueExact(), payment.getPaymentLinkId());
+        lockPayment(payment);
+        when(payments.findAllByBookingIdForUpdate(payment.getBooking().getId())).thenReturn(List.of(payment));
+
+        assertTrue(service.handleWebhook(webhook));
+
+        assertEquals(PaymentTransactionStatus.PAID, payment.getStatus());
+        assertEquals(BookingStatus.CONFIRMED, payment.getBooking().getStatus());
+        assertEquals(option == PaymentOption.FULL_100 ? PaymentStatus.PAID : PaymentStatus.PARTIALLY_PAID,
+                payment.getBooking().getPaymentStatus());
+        verify(bookingNotifications).enqueueVerifiedPayment(payment);
     }
 
     @Test
@@ -235,6 +269,7 @@ class PaymentServiceSecurityTest {
         assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, linkMismatch.getStatus());
         org.junit.jupiter.api.Assertions.assertNull(linkMismatch.getPaymentReference());
         org.junit.jupiter.api.Assertions.assertNull(linkMismatch.getPaidAt());
+        verify(bookingNotifications, never()).enqueueVerifiedPayment(any());
     }
 
     @Test
@@ -254,6 +289,7 @@ class PaymentServiceSecurityTest {
         assertEquals(firstPaidAt, payment.getPaidAt());
         assertEquals("BANK-REF", payment.getPaymentReference());
         assertEquals(PaymentTransactionStatus.PAID, payment.getStatus());
+        verify(bookingNotifications, times(1)).enqueueVerifiedPayment(payment);
     }
 
     @Test
@@ -269,6 +305,7 @@ class PaymentServiceSecurityTest {
         service.reconcileById(71L);
         assertEquals(PaymentTransactionStatus.PAID, paid.getStatus());
         assertEquals(BookingStatus.CONFIRMED, paid.getBooking().getStatus());
+        verify(bookingNotifications, times(1)).enqueueVerifiedPayment(paid);
 
         PaymentTransaction pending = pendingPayment();
         pending.setOrderCode(610000053L);

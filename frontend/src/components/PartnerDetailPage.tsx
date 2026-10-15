@@ -25,7 +25,6 @@ import {
   Users,
   ZoomIn,
   X,
-  BadgeCheck,
 } from 'lucide-react';
 import { NewPartner } from '../data/mockData';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
@@ -142,14 +141,6 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
       { icon: CreditCard, label: 'Hỗ trợ thanh toán trực tuyến qua PayOS' },
       { icon: Award, label: '100% Kỹ thuật viên có chứng chỉ hành nghề' },
     ],
-    founder: {
-      name: 'Master / Bác sĩ Nguyễn Thùy Trang',
-      title: 'Nhà sáng lập & Giám đốc Chuyên môn',
-      experience: '12+ năm kinh nghiệm Da liễu & Thẩm mỹ Y khoa',
-      bio: 'Bác sĩ chuyên khoa Da liễu Thẩm mỹ tốt nghiệp Đại học Y Dược TP.HCM, từng có 5 năm tu nghiệp chuyên sâu tại Seoul, Hàn Quốc. Tác giả nhiều phác đồ phục hồi da nhạy cảm không xâm lấn được ứng dụng trên toàn quốc. Đạt giải thưởng Bàn Tay Vàng Ngành Làm Đẹp Châu Á 2024.',
-      philosophy: 'Vẻ đẹp tự nhiên và sự an toàn của khách hàng là kim chỉ nam trong từng thao tác của chúng tôi.',
-      verifiedBadge: 'Chứng thực Y tế Cấp độ 1',
-    },
     certificates: [
       {
         id: 'cert-1',
@@ -222,9 +213,9 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
       {/* NGAY ĐẦU TRANG ĐỂ NGƯỜI DÙNG NHÌN THẤY NGAY TỪ ĐẦU, KHÔNG CẦN CUỘN XUỐNG */}
       {/* ========================================================================= */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5">
-        <div className="bg-white rounded-3xl border-2 border-pink-200 shadow-md p-5 sm:p-7 space-y-6">
+        <div className="bg-white rounded-3xl border-2 border-pink-200 shadow-md p-5 sm:p-7">
           {/* Top Row: Partner Shop Branding & Key Stats */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 border-b border-pink-100 pb-5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
             <div className="flex items-start sm:items-center gap-4">
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-pink-50 to-pink-100 border-2 border-pink-300 flex items-center justify-center text-xl sm:text-2xl font-black text-[#be185d] shadow-sm shrink-0">
                 {partnerProfile.logo}
@@ -284,102 +275,6 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
             </div>
           </div>
 
-          {/* ========================================================================= */}
-          {/* PROFILE CHỨNG CHỈ HÀNH NGHỀ & CHUYÊN MÔN (HIỂN THỊ ĐẦU TRANG THEO YÊU CẦU) */}
-          {/* (Đã lược bỏ phần ảnh đại diện thừa ở dưới theo yêu cầu người dùng) */}
-          {/* ========================================================================= */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-pink-100 text-[#be185d] flex items-center justify-center">
-                  <BadgeCheck className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">
-                    Hồ sơ Chuyên gia & Danh mục Chứng chỉ Hành nghề Y Tế Đã Thẩm Định
-                  </h2>
-                  <span className="text-[11px] text-pink-600 font-bold block">
-                    Được bảo chứng tính pháp lý & y tế bởi BeautyLink
-                  </span>
-                </div>
-              </div>
-
-              <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
-                ✓ Đầy đủ giấy phép hoạt động
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-              {/* Founder / Specialist Information (Clean summary without redundant lower avatar) */}
-              <div className="lg:col-span-4 p-4 rounded-2xl bg-gradient-to-br from-[#FFF5F7] via-white to-pink-50/50 border border-pink-200 flex flex-col justify-between space-y-3">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-pink-100 text-[#be185d] text-[10px] font-black uppercase mb-1.5">
-                    <Award className="w-3 h-3" />
-                    <span>{partnerProfile.founder.experience}</span>
-                  </div>
-                  <h3 className="text-sm font-black text-slate-900">
-                    {partnerProfile.founder.name}
-                  </h3>
-                  <p className="text-xs text-pink-700 font-bold">
-                    {partnerProfile.founder.title}
-                  </p>
-                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                    {partnerProfile.founder.bio}
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-xl bg-white border border-pink-100 text-xs text-slate-700 font-medium flex items-start gap-2 shadow-2xs">
-                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Triết lý:</strong> "{partnerProfile.founder.philosophy}"
-                  </span>
-                </div>
-              </div>
-
-              {/* Verified Certificates Grid with Click-To-Zoom Lightbox */}
-              <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {partnerProfile.certificates.map((cert) => (
-                  <div
-                    key={cert.id}
-                    onClick={() => setPreviewCert(cert)}
-                    className="group bg-white rounded-2xl border border-pink-100 hover:border-pink-300 p-2.5 shadow-2xs hover:shadow-md transition cursor-pointer flex flex-col justify-between"
-                  >
-                    <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2">
-                      <img
-                        src={cert.image}
-                        alt={cert.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                      <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-black/60 px-2 py-1 rounded-full">
-                          <ZoomIn className="w-3 h-3" /> Phóng to
-                        </span>
-                      </div>
-                      <div className="absolute top-1.5 right-1.5 bg-emerald-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-xs flex items-center gap-0.5">
-                        <Check className="w-2.5 h-2.5 stroke-[3]" />
-                        <span>Đã duyệt</span>
-                      </div>
-                    </div>
-
-                    <div className="min-w-0">
-                      <span className="text-[9px] font-bold text-pink-600 block uppercase">
-                        Năm {cert.year}
-                      </span>
-                      <h4 className="text-[11px] font-black text-slate-900 leading-tight line-clamp-2 mt-0.5 group-hover:text-[#be185d] transition-colors">
-                        {cert.title}
-                      </h4>
-                      <p className="text-[10px] text-slate-500 mt-1 line-clamp-1">
-                        {cert.issuer}
-                      </p>
-                      <span className="text-[9px] font-mono font-bold text-slate-400 block mt-1">
-                        Mã: {cert.code}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -434,21 +329,6 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
           <div id="services-section" className="space-y-6 mb-10 animate-in fade-in duration-200">
             {shopState.loading && <p role="status">Đang tải dịch vụ…</p>}
             {shopState.error && <div role="alert">{shopState.error}<button type="button" onClick={() => setShopAttempt(v => v + 1)}>Thử lại</button></div>}
-            {/* Section Heading */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <span>Dịch vụ nổi bật & Bảng giá ưu đãi</span>
-                  <span className="text-xs font-bold text-pink-600 bg-pink-100 px-2 py-0.5 rounded-full">
-                    {partnerProfile.services.length} dịch vụ
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Đánh giá riêng theo dịch vụ, từ lịch hẹn đã thanh toán và được khách hàng xác nhận hoàn thành
-                </p>
-              </div>
-            </div>
-
             {/* Services Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               {partnerProfile.services.map((svc) => (

@@ -1,143 +1,62 @@
 package com.example.backend.service;
 
 import com.example.backend.exception.ApiException;
-import jakarta.mail.internet.MimeMessage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
-
-import java.time.Duration;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
 
 @Service
 public class OtpDeliveryService {
-    private static final Logger log = LoggerFactory.getLogger(OtpDeliveryService.class);
-
-    private final RestClient resendClient;
-    private final String resendApiKey;
+    private final TransactionalEmailSender emailSender;
     private final String mailFrom;
-    private final String mailHost;
-    private final ObjectProvider<JavaMailSender> mailSender;
 
     @Autowired
-    public OtpDeliveryService(@Value("${app.otp.resend.api-key:}") String resendApiKey,
-                              @Value("${app.otp.mail-from:}") String mailFrom,
-                              @Value("${app.otp.resend.connect-timeout-ms:5000}") long connectTimeoutMs,
-                              @Value("${app.otp.resend.read-timeout-ms:10000}") long readTimeoutMs,
-                              @Value("${spring.mail.host:}") String mailHost,
-                              ObjectProvider<JavaMailSender> mailSender) {
-        this.resendApiKey = resendApiKey == null ? "" : resendApiKey.trim();
+    public OtpDeliveryService(TransactionalEmailSender emailSender,
+                              @Value("${app.otp.mail-from:}") String mailFrom) {
+        this.emailSender = emailSender;
         this.mailFrom = mailFrom == null ? "" : mailFrom.trim();
-        this.mailHost = mailHost == null ? "" : mailHost.trim();
-        this.mailSender = mailSender;
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
-        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
-        this.resendClient = RestClient.builder().baseUrl("https://api.resend.com").requestFactory(requestFactory).build();
     }
 
     public OtpDeliveryService(RestClient resendClient, String resendApiKey, String mailFrom) {
-        this.resendClient = resendClient;
-        this.resendApiKey = resendApiKey == null ? "" : resendApiKey.trim();
-        this.mailFrom = mailFrom == null ? "" : mailFrom.trim();
-        this.mailHost = "";
-        this.mailSender = null;
+        this(new ResendTransactionalEmailSender(resendClient, resendApiKey), mailFrom);
     }
 
     public void sendEmailCode(String email, String code, long expiresMinutes) {
-        send(email, "Mã xác minh đăng ký BeautyLink", registrationEmailTemplate(code, expiresMinutes));
+        send(email, "Mã xác minh đăng ký BeautyLink",
+                "Mã xác minh đăng ký BeautyLink của bạn là " + code + ". Mã có hiệu lực trong "
+                        + expiresMinutes + " phút và chỉ được sử dụng một lần.",
+                registrationEmailTemplate(code, expiresMinutes));
     }
 
     public void sendPasswordResetCode(String email, String code, long expiresMinutes) {
-        send(email, "Mã đặt lại mật khẩu BeautyLink", passwordResetEmailTemplate(code, expiresMinutes));
+        send(email, "Mã đặt lại mật khẩu BeautyLink",
+                "Mã đặt lại mật khẩu BeautyLink của bạn là " + code + ". Mã có hiệu lực trong "
+                        + expiresMinutes + " phút và chỉ được sử dụng một lần.",
+                passwordResetEmailTemplate(code, expiresMinutes));
     }
 
-    private void send(String email, String subject, String html) {
-        if (isResendConfigured()) {
-            sendWithResend(email, subject, html);
-            return;
-        }
-        if (isSmtpConfigured()) {
-            sendWithSmtp(email, subject, html);
-            return;
-        }
-        throw unavailable("Kênh email OTP chưa được cấu hình");
-    }
-
-    private void sendWithResend(String email, String subject, String html) {
+    private void send(String email, String subject, String text, String html) {
         try {
-            ResendEmailResponse response = resendClient.post()
-                    .uri("/emails")
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + resendApiKey)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(new ResendEmailRequest(mailFrom, List.of(email), subject, html))
-                    .retrieve()
-                    .body(ResendEmailResponse.class);
-            if (response == null || !StringUtils.hasText(response.id())) {
-                log.warn("Resend accepted no identifiable OTP email request");
-                throw unavailable("Dịch vụ email chưa xác nhận yêu cầu gửi OTP. Vui lòng thử lại sau");
+            if (!StringUtils.hasText(mailFrom) || !emailSender.isConfigured()) {
+                throw unavailable("Kênh email OTP chưa được cấu hình");
             }
-        } catch (ApiException ex) {
-            throw ex;
-        } catch (RestClientResponseException ex) {
-            int status = ex.getStatusCode().value();
-            log.warn("Resend rejected OTP email request status={}", status);
-            if (status == 429) {
+            emailSender.send(new TransactionalEmailSender.EmailMessage(
+                    mailFrom, null, email, subject, text, html, null));
+        } catch (TransactionalEmailSender.EmailDeliveryException ex) {
+            if ("EMAIL_PROVIDER_RATE_LIMITED".equals(ex.getSafeCode())) {
                 throw new ApiException(SERVICE_UNAVAILABLE, "OTP_PROVIDER_RATE_LIMITED",
                         "Dịch vụ email đang giới hạn tần suất. Vui lòng thử lại sau");
             }
-            throw unavailable("Không thể gửi email OTP. Vui lòng kiểm tra cấu hình người gửi hoặc thử lại sau");
-        } catch (ResourceAccessException ex) {
-            log.warn("Resend OTP email request failed due to network or timeout type={}", ex.getClass().getSimpleName());
-            throw unavailable("Dịch vụ email tạm thời không phản hồi. Vui lòng thử lại sau");
-        } catch (RuntimeException ex) {
-            log.warn("Resend OTP email request failed unexpectedly type={}", ex.getClass().getSimpleName());
-            throw unavailable("Không thể gửi email OTP. Vui lòng thử lại sau");
-        }
-    }
-
-    private void sendWithSmtp(String email, String subject, String html) {
-        try {
-            JavaMailSender sender = mailSender.getIfAvailable();
-            MimeMessage mimeMessage = sender.createMimeMessage();
-            MimeMessageHelper message = new MimeMessageHelper(mimeMessage, false, StandardCharsets.UTF_8.name());
-            message.setFrom(mailFrom);
-            message.setTo(email);
-            message.setSubject(subject);
-            message.setText(html, true);
-            sender.send(mimeMessage);
-        } catch (Exception ex) {
-            log.warn("SMTP OTP email request failed type={}", ex.getClass().getSimpleName());
             throw unavailable("Không thể gửi email OTP. Vui lòng thử lại sau");
         }
     }
 
     public boolean isEmailConfigured() {
-        return isResendConfigured() || isSmtpConfigured();
-    }
-
-    private boolean isResendConfigured() {
-        return StringUtils.hasText(resendApiKey) && StringUtils.hasText(mailFrom);
-    }
-
-    private boolean isSmtpConfigured() {
-        return mailSender != null && mailSender.getIfAvailable() != null
-                && StringUtils.hasText(mailHost) && StringUtils.hasText(mailFrom);
+        return StringUtils.hasText(mailFrom) && emailSender.isConfigured();
     }
 
     private String registrationEmailTemplate(String code, long expiresMinutes) {
@@ -174,6 +93,4 @@ public class OtpDeliveryService {
         return new ApiException(SERVICE_UNAVAILABLE, "OTP_DELIVERY_UNAVAILABLE", message);
     }
 
-    private record ResendEmailRequest(String from, List<String> to, String subject, String html) {}
-    private record ResendEmailResponse(String id) {}
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Flower2, Hand, Palette, Scissors, Sparkles, type LucideIcon } from 'lucide-react';
 import { BackendCategory } from '../types';
 import { beautyApi, DEFAULT_CATEGORIES } from '../services/beautyApi';
-import { OptimizedImage } from './OptimizedImage';
 
 export interface FeaturedCategoriesProps {
   onSelectCategory: (category: BackendCategory) => void;
@@ -15,6 +15,13 @@ const FEATURED_CATEGORY_NAMES: Record<(typeof FEATURED_CATEGORY_SLUGS)[number], 
   spa: 'Spa & Massage',
   nails: 'Nail',
   skincare: 'Chăm sóc da',
+};
+const FEATURED_CATEGORY_ICONS: Record<(typeof FEATURED_CATEGORY_SLUGS)[number], LucideIcon> = {
+  makeup: Palette,
+  hair: Scissors,
+  spa: Flower2,
+  nails: Hand,
+  skincare: Sparkles,
 };
 
 export const FeaturedCategories: React.FC<FeaturedCategoriesProps> = React.memo(
@@ -61,29 +68,25 @@ export const FeaturedCategories: React.FC<FeaturedCategoriesProps> = React.memo(
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {categories.map((category) => {
             const isActive = activeCategorySlug === category.slug;
+            const Icon = FEATURED_CATEGORY_ICONS[
+              category.slug as (typeof FEATURED_CATEGORY_SLUGS)[number]
+            ];
             return (
               <button
                 key={category.slug}
                 type="button"
                 onClick={() => onSelectCategory(category)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-pink-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e1146c] ${
+                className={`group flex min-h-24 items-center gap-3 rounded-2xl border bg-white px-4 py-4 text-left shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-pink-300 hover:bg-pink-50/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e1146c] sm:flex-col sm:justify-center sm:text-center ${
                   isActive ? 'border-[#e1146c] ring-1 ring-pink-200' : 'border-pink-100'
                 }`}
               >
-                <div className="relative aspect-[4/3] overflow-hidden bg-pink-50">
-                  <OptimizedImage
-                    src={category.imageUrl}
-                    alt={category.name}
-                    preset="category-thumb"
-                    vignette
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    containerClassName="h-full w-full"
-                  />
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/75 to-transparent px-3 pb-2.5 pt-8">
-                    <span className="text-sm font-black text-white">{category.name}</span>
-                  </div>
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-pink-100 to-rose-50 text-[#e1146c] ring-1 ring-pink-200 transition group-hover:scale-105 group-hover:bg-pink-100">
+                  <Icon className="h-5 w-5" strokeWidth={2.2} />
                 </div>
+                <span className="text-sm font-black text-slate-800 transition group-hover:text-[#be185d]">
+                  {category.name}
+                </span>
               </button>
             );
           })}

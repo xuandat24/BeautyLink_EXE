@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Star,
@@ -29,7 +29,16 @@ interface HotDealsSectionProps {
   onResetSearch?: () => void;
   favorites?: string[];
   onToggleFavorite?: (deal: HotDeal) => void;
+  onSelectPartner?: (deal: HotDeal) => void;
 }
+
+const getDealsPageSize = () => {
+  if (typeof window === 'undefined') return 10;
+  if (window.innerWidth >= 1280) return 10;
+  if (window.innerWidth >= 1024) return 8;
+  if (window.innerWidth >= 640) return 6;
+  return 4;
+};
 
 // Isolated Countdown Component so 1-second ticks do not trigger re-render of deal cards
 const FlashSaleCountdown = React.memo(() => {
@@ -81,10 +90,10 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
   onResetSearch,
   favorites = [],
   onToggleFavorite,
+  onSelectPartner,
 }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
+  const [pageSize, setPageSize] = useState(getDealsPageSize);
+  const [currentPage, setCurrentPage] = useState(0);
   const [addedDealId, setAddedDealId] = useState<string | null>(null);
 
   const handleFavoriteClick = (e: React.MouseEvent, deal: HotDeal) => {
@@ -94,28 +103,30 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
     }
   };
 
-  const checkScroll = () => {
-    if (scrollRef.current) {
-      const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
-      setCanScrollLeft(scrollLeft > 20);
-      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 20);
-    }
-  };
+  useEffect(() => {
+    const handleResize = () => setPageSize(getDealsPageSize());
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const pageCount = Math.min(2, Math.max(1, Math.ceil(deals.length / pageSize)));
+  const visibleDeals = deals.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  const canScrollLeft = currentPage > 0;
+  const canScrollRight = currentPage < pageCount - 1;
 
   useEffect(() => {
-    checkScroll();
-    const el = scrollRef.current;
-    if (el) {
-      el.addEventListener('scroll', checkScroll);
-      return () => el.removeEventListener('scroll', checkScroll);
-    }
-  }, [deals, isLoading]);
+    setCurrentPage((page) => Math.min(page, pageCount - 1));
+  }, [pageCount]);
 
   const scroll = (direction: 'left' | 'right') => {
-    if (scrollRef.current) {
-      const scrollAmount = direction === 'left' ? -480 : 480;
-      scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-    }
+    setCurrentPage((page) =>
+      direction === 'left' ? Math.max(0, page - 1) : Math.min(pageCount - 1, page + 1)
+    );
+  };
+
+  const handlePartnerClick = (event: React.MouseEvent, deal: HotDeal) => {
+    event.stopPropagation();
+    onSelectPartner?.(deal);
   };
 
   const handleAddClick = (e: React.MouseEvent, deal: HotDeal) => {
@@ -232,8 +243,8 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
       {/* Deals Display Area: Skeletons vs Real Content (Zero Layout Shift) */}
       {isLoading ? (
         <div className="relative group/carousel">
-          <div className="flex items-stretch gap-3.5 sm:gap-4 overflow-x-auto no-scrollbar py-3 px-1.5">
-            {Array.from({ length: 5 }).map((_, index) => (
+          <div className="grid grid-cols-2 items-stretch gap-3.5 px-1.5 py-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+            {Array.from({ length: pageSize }).map((_, index) => (
               <HotDealCardSkeleton key={index} />
             ))}
           </div>
@@ -299,17 +310,14 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
           )}
 
           {/* Scrollable Deals Container */}
-          <div
-            ref={scrollRef}
-            className="flex items-stretch gap-3.5 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-3 px-1.5"
-          >
-            {deals.map((deal, idx) => {
+          <div className="grid grid-cols-2 items-stretch gap-3.5 px-1.5 py-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+            {visibleDeals.map((deal, idx) => {
               const isFav = favorites.includes(deal.id);
               return (
                 <div
                   key={deal.id}
                   onClick={() => onBookDeal(deal)}
-                  className={`group flex flex-col justify-between bg-white rounded-2xl border border-pink-100/90 hover:border-pink-300 shadow-sm hover:shadow-2xl hover:shadow-pink-500/25 hover:scale-[1.045] sm:hover:scale-[1.05] hover:-translate-y-2 hover:ring-2 hover:ring-pink-200/60 transition-all duration-300 ease-out overflow-hidden cursor-pointer w-[215px] sm:w-[235px] shrink-0 will-change-transform transform-gpu stagger-item stagger-delay-${Math.min(
+                  className={`group flex w-full flex-col justify-between overflow-hidden rounded-2xl border border-pink-100/90 bg-white shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:border-pink-300 hover:shadow-xl hover:shadow-pink-500/20 hover:ring-2 hover:ring-pink-200/60 cursor-pointer will-change-transform transform-gpu stagger-item stagger-delay-${Math.min(
                     idx,
                     7
                   )}`}
@@ -359,9 +367,15 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
                     </button>
 
                     {/* Brand Tag overlay on image */}
-                    <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-bold text-white max-w-[130px] truncate">
+                    <button
+                      type="button"
+                      onClick={(event) => handlePartnerClick(event, deal)}
+                      disabled={!onSelectPartner || !deal.supplierId}
+                      aria-label={`Mở cửa hàng ${deal.brandName}`}
+                      className="absolute bottom-2 left-2 z-10 max-w-[165px] truncate rounded bg-black/65 px-2 py-1 text-left text-[10px] font-bold text-white backdrop-blur-md transition hover:bg-[#be185d] hover:underline disabled:cursor-default disabled:hover:bg-black/65 disabled:hover:no-underline"
+                    >
                       {deal.brandName}
-                    </div>
+                    </button>
                   </div>
 
                 {/* Content Details */}
@@ -417,6 +431,22 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
             );
           })}
           </div>
+          {pageCount > 1 && (
+            <div className="mt-2 flex items-center justify-center gap-2" aria-label="Trang khuyến mãi">
+              {Array.from({ length: pageCount }).map((_, page) => (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  aria-label={`Xem trang khuyến mãi ${page + 1}`}
+                  aria-current={currentPage === page ? 'page' : undefined}
+                  className={`h-2 rounded-full transition-all ${
+                    currentPage === page ? 'w-7 bg-[#e1146c]' : 'w-2 bg-pink-200 hover:bg-pink-300'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>

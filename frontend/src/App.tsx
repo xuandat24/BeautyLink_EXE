@@ -627,6 +627,19 @@ export default function App() {
     [handleOpenService, rawServices, showToast]
   );
 
+  const handleOpenPartnerBySupplier = useCallback(
+    (supplierId?: number) => {
+      const supplierService = rawServices.find((service) => service.supplierId === supplierId);
+      if (!supplierService) {
+        showToast('Không tìm thấy cửa hàng của đối tác này.');
+        return;
+      }
+      setSelectedPartner(mapServiceToPartner(supplierService));
+      navigateTo('partner-detail');
+    },
+    [navigateTo, rawServices, showToast]
+  );
+
   const handleProceedToCheckout = useCallback(
     (service: BackendService, date: string, slot: string) => {
       if (service.price <= 0) {
@@ -1188,6 +1201,7 @@ export default function App() {
               onViewAll={() => openViewAll('deals')}
               favorites={favorites}
               onToggleFavorite={handleToggleFavoriteDeal}
+              onSelectPartner={(deal) => handleOpenPartnerBySupplier(deal.supplierId)}
             />
 
             <NearYouSection
