@@ -130,34 +130,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
 
   // Booking modal state
   const [selectedServiceForBooking, setSelectedServiceForBooking] = useState<BackendService | null>(null);
-  const [preselectedSlot, setPreselectedSlot] = useState<string | null>(null);
-  const [preselectedDate, setPreselectedDate] = useState<string | null>(null);
   const [addedServiceId, setAddedServiceId] = useState<number | null>(null);
-
-  // Floating Schedule Popover state (hover or tap / "dí vào")
-  const [hoveredScheduleServiceId, setHoveredScheduleServiceId] = useState<number | null>(null);
-  const [pinnedScheduleServiceId, setPinnedScheduleServiceId] = useState<number | null>(null);
-  const [activePopoverDate, setActivePopoverDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [activePopoverSlot, setActivePopoverSlot] = useState<string | null>(null);
-
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const tomorrowStr = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
-  }, []);
-  const dayAfterStr = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 2);
-    return d.toISOString().split('T')[0];
-  }, []);
-
-  const getServiceSlotsForDate = (service: BackendService, targetDate: string) => {
-    if (targetDate === todayStr && service.availableTodaySlots && service.availableTodaySlots.length > 0) {
-      return service.availableTodaySlots;
-    }
-    return ['09:00', '10:00', '11:30', '13:30', '14:30', '15:30', '16:30', '17:30', '18:30', '19:30'];
-  };
 
   // Sync internal active slug when category prop changes
   useEffect(() => {
@@ -307,16 +280,12 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
     }
   };
 
-  const handleOpenBooking = (service: BackendService, slot?: string, date?: string) => {
+  const handleOpenBooking = (service: BackendService) => {
     if (service.price <= 0) {
       setPreviewService(service);
       return;
     }
     setSelectedServiceForBooking(service);
-    setPreselectedSlot(slot || null);
-    setPreselectedDate(date || null);
-    setPinnedScheduleServiceId(null);
-    setHoveredScheduleServiceId(null);
   };
 
   const handleQuickAdd = (e: React.MouseEvent, service: BackendService) => {
@@ -700,23 +669,10 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                 item.originalPrice && item.originalPrice > item.price
                   ? item.originalPrice - item.price
                   : 0;
-              const isPopoverOpen =
-                hoveredScheduleServiceId === item.id || pinnedScheduleServiceId === item.id;
-              const slotsForPopover = getServiceSlotsForDate(item, activePopoverDate);
-
               return (
                 <article
                   key={item.id}
-                  onMouseLeave={() => {
-                    if (pinnedScheduleServiceId !== item.id) {
-                      setHoveredScheduleServiceId(null);
-                    }
-                  }}
-                  className={`group relative flex flex-col justify-between bg-white rounded-2xl border transition-all duration-200 ${
-                    isPopoverOpen
-                      ? 'z-30 border-pink-400 shadow-xl shadow-pink-500/15 ring-2 ring-pink-300/40'
-                      : 'z-10 border-pink-100 hover:border-pink-300 shadow-2xs hover:shadow-lg hover:shadow-pink-500/8'
-                  }`}
+                  className="group relative z-10 flex flex-col justify-between rounded-2xl border border-pink-100 bg-white shadow-2xs transition-all duration-200 hover:border-pink-300 hover:shadow-lg hover:shadow-pink-500/8"
                 >
                   {/* Top Thumbnail Image & Overlay Badges */}
                   <div>
@@ -826,157 +782,8 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                         </button>
                       </div>
 
-                      {/* Schedule & Available Slots Trigger Bar (Hover or Click to float up) */}
-                      <div
-                        onMouseEnter={() => setHoveredScheduleServiceId(item.id)}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPinnedScheduleServiceId((prev) => (prev === item.id ? null : item.id));
-                        }}
-                        className="mt-2 py-1.5 px-2 rounded-xl bg-pink-50/80 hover:bg-pink-100/70 border border-pink-200/70 hover:border-[#e1146c]/50 flex items-center justify-between text-[11px] cursor-pointer transition-all group/bar"
-                        title="Rê chuột hoặc bấm để xem lịch & khung giờ trống"
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <Calendar className="w-3.5 h-3.5 text-[#e1146c] shrink-0" />
-                          <span className="font-bold text-[#be185d] truncate">
-                            {item.availableTodaySlots && item.availableTodaySlots.length > 0
-                              ? `${item.availableTodaySlots.length} slot trống hôm nay`
-                              : 'Xem lịch & slot trống'}
-                          </span>
-                        </div>
-                        <span className="text-[10px] font-extrabold text-[#e1146c] shrink-0 flex items-center gap-0.5 group-hover/bar:translate-x-0.5 transition-transform">
-                          <span>Xem giờ</span>
-                          <ChevronRight className="w-3 h-3" />
-                        </span>
-                      </div>
                     </div>
                   </div>
-
-                  {/* FLOATING SCHEDULE POPOVER (Nổi lên khi di chuột hoặc dí vào) */}
-                  {isPopoverOpen && (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute bottom-[66px] left-1 right-1 sm:-left-2 sm:-right-2 z-40 bg-white/98 backdrop-blur-md rounded-2xl border border-pink-200 shadow-2xl shadow-pink-900/25 p-3.5 animate-in fade-in zoom-in-95 duration-150"
-                    >
-                      <div className="flex items-center justify-between pb-2 border-b border-pink-100 mb-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <Sparkles className="w-3.5 h-3.5 text-[#e1146c] shrink-0" />
-                          <span className="text-xs font-black text-slate-900 truncate">
-                            Lịch hẹn & Slot trống
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPinnedScheduleServiceId(null);
-                            setHoveredScheduleServiceId(null);
-                          }}
-                          className="w-5 h-5 rounded-full bg-pink-100 hover:bg-pink-200 text-slate-600 flex items-center justify-center text-xs transition cursor-pointer shrink-0"
-                          title="Đóng lịch"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-
-                      {/* Quick links to Steps & Reviews right inside popover */}
-                      <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-pink-100/80">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewTab('steps');
-                            setPreviewService(item);
-                          }}
-                          className="flex-1 py-1 px-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer border border-purple-200/60"
-                        >
-                          <Camera className="w-3 h-3 text-purple-600" />
-                          <span>Xem ảnh các bước</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewTab('reviews');
-                            setPreviewService(item);
-                          }}
-                          className="flex-1 py-1 px-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer border border-amber-200/60"
-                        >
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
-                          <span>Xem đánh giá</span>
-                        </button>
-                      </div>
-
-                      {/* Quick Day Selector Tabs */}
-                      <div className="flex gap-1 mb-2">
-                        {[
-                          { label: 'Hôm nay', val: todayStr },
-                          { label: 'Ngày mai', val: tomorrowStr },
-                          { label: 'Ngày kia', val: dayAfterStr },
-                        ].map((tab) => (
-                          <button
-                            key={tab.label}
-                            type="button"
-                            onClick={() => {
-                              setActivePopoverDate(tab.val);
-                              setActivePopoverSlot(null);
-                            }}
-                            className={`flex-1 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                              activePopoverDate === tab.val
-                                ? 'bg-[#e1146c] text-white border-[#e1146c] shadow-xs'
-                                : 'bg-pink-50/50 text-slate-600 border-pink-100 hover:bg-pink-100'
-                            }`}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Available Time Slots Chips */}
-                      <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto pr-0.5">
-                        {slotsForPopover.map((slot) => {
-                          const isSelected = activePopoverSlot === slot;
-                          return (
-                            <button
-                              key={slot}
-                              type="button"
-                              onClick={() => setActivePopoverSlot(slot)}
-                              className={`py-1 rounded-lg text-[10px] font-bold border transition text-center cursor-pointer ${
-                                isSelected
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                  : 'bg-pink-50/40 text-slate-700 border-pink-200 hover:border-[#e1146c] hover:bg-pink-100/50'
-                              }`}
-                            >
-                              {slot}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Popover Action: Đặt lịch với slot đã chọn */}
-                      <div className="mt-2.5 pt-2 border-t border-pink-100 flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-slate-500 font-semibold truncate">
-                          {activePopoverSlot ? `Giờ: ${activePopoverSlot}` : 'Chọn một khung giờ'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const slotToUse = activePopoverSlot || slotsForPopover[0] || '10:00';
-                            setPinnedScheduleServiceId(null);
-                            setHoveredScheduleServiceId(null);
-                            handleOpenBooking(item, slotToUse, activePopoverDate);
-                          }}
-                          className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-[11px] font-black shadow-xs hover:opacity-95 transition cursor-pointer flex items-center gap-1 shrink-0"
-                        >
-                          <Calendar className="w-3 h-3" />
-                          <span>{item.price > 0 ? 'Đặt lịch ngay' : 'Xem liên hệ'}</span>
-                        </button>
-                      </div>
-
-                      {/* Popover Arrow */}
-                      <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-r border-b border-pink-200 rotate-45" />
-                    </div>
-                  )}
 
                   {/* Card Bottom: Price, Savings & Đặt Lịch Action */}
                   <div className="p-3.5 sm:p-4 pt-2 border-t border-pink-50 flex items-center justify-between gap-2">
@@ -1041,23 +848,10 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                 item.originalPrice && item.originalPrice > item.price
                   ? item.originalPrice - item.price
                   : 0;
-              const isPopoverOpen =
-                hoveredScheduleServiceId === item.id || pinnedScheduleServiceId === item.id;
-              const slotsForPopover = getServiceSlotsForDate(item, activePopoverDate);
-
               return (
                 <article
                   key={item.id}
-                  onMouseLeave={() => {
-                    if (pinnedScheduleServiceId !== item.id) {
-                      setHoveredScheduleServiceId(null);
-                    }
-                  }}
-                  className={`relative bg-white rounded-2xl border transition-all duration-200 p-3.5 sm:p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 ${
-                    isPopoverOpen
-                      ? 'z-30 border-pink-400 shadow-xl shadow-pink-500/15 ring-2 ring-pink-300/40'
-                      : 'z-10 border-pink-100 hover:border-pink-300 shadow-2xs hover:shadow-md'
-                  }`}
+                  className="relative z-10 flex flex-col items-stretch justify-between gap-4 rounded-2xl border border-pink-100 bg-white p-3.5 shadow-2xs transition-all duration-200 hover:border-pink-300 hover:shadow-md sm:p-4 md:flex-row md:items-center"
                 >
                   {/* Left: Thumbnail & Info */}
                   <div className="flex items-start gap-3.5 min-w-0 flex-1">
@@ -1106,24 +900,6 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                           <Clock className="w-3 h-3 text-pink-400" />
                           <span>{item.durationMinutes} phút</span>
                         </span>
-
-                        {/* Interactive schedule trigger button */}
-                        <button
-                          type="button"
-                          onMouseEnter={() => setHoveredScheduleServiceId(item.id)}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPinnedScheduleServiceId((prev) => (prev === item.id ? null : item.id));
-                          }}
-                          className="flex items-center gap-1 text-[#be185d] font-bold hover:text-[#e1146c] bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200 transition cursor-pointer"
-                        >
-                          <Zap className="w-3 h-3 text-amber-500 fill-amber-500" />
-                          <span>
-                            {item.availableTodaySlots && item.availableTodaySlots.length > 0
-                              ? `${item.availableTodaySlots.length} slot trống hôm nay`
-                              : 'Xem lịch & slot'}
-                          </span>
-                        </button>
                       </div>
 
                       {/* Xem chi tiết ảnh các bước & Đánh giá */}
@@ -1158,100 +934,6 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                       </div>
                     </div>
                   </div>
-
-                  {/* FLOATING SCHEDULE POPOVER FOR LIST VIEW */}
-                  {isPopoverOpen && (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute top-full mt-2 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 z-40 bg-white/98 backdrop-blur-md rounded-2xl border border-pink-200 shadow-2xl shadow-pink-900/25 p-3.5 animate-in fade-in zoom-in-95 duration-150"
-                    >
-                      <div className="flex items-center justify-between pb-2 border-b border-pink-100 mb-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <Sparkles className="w-3.5 h-3.5 text-[#e1146c] shrink-0" />
-                          <span className="text-xs font-black text-slate-900 truncate">
-                            Lịch hẹn & Slot trống
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPinnedScheduleServiceId(null);
-                            setHoveredScheduleServiceId(null);
-                          }}
-                          className="w-5 h-5 rounded-full bg-pink-100 hover:bg-pink-200 text-slate-600 flex items-center justify-center text-xs transition cursor-pointer shrink-0"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-
-                      {/* Day tabs */}
-                      <div className="flex gap-1 mb-2">
-                        {[
-                          { label: 'Hôm nay', val: todayStr },
-                          { label: 'Ngày mai', val: tomorrowStr },
-                          { label: 'Ngày kia', val: dayAfterStr },
-                        ].map((tab) => (
-                          <button
-                            key={tab.label}
-                            type="button"
-                            onClick={() => {
-                              setActivePopoverDate(tab.val);
-                              setActivePopoverSlot(null);
-                            }}
-                            className={`flex-1 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                              activePopoverDate === tab.val
-                                ? 'bg-[#e1146c] text-white border-[#e1146c]'
-                                : 'bg-pink-50/50 text-slate-600 border-pink-100 hover:bg-pink-100'
-                            }`}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Slots grid */}
-                      <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto pr-0.5">
-                        {slotsForPopover.map((slot) => {
-                          const isSelected = activePopoverSlot === slot;
-                          return (
-                            <button
-                              key={slot}
-                              type="button"
-                              onClick={() => setActivePopoverSlot(slot)}
-                              className={`py-1 rounded-lg text-[10px] font-bold border transition text-center cursor-pointer ${
-                                isSelected
-                                  ? 'bg-emerald-600 text-white border-emerald-600'
-                                  : 'bg-pink-50/40 text-slate-700 border-pink-200 hover:border-[#e1146c] hover:bg-pink-100/50'
-                              }`}
-                            >
-                              {slot}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Action */}
-                      <div className="mt-2.5 pt-2 border-t border-pink-100 flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-slate-500 font-semibold truncate">
-                          {activePopoverSlot ? `Giờ: ${activePopoverSlot}` : 'Chọn khung giờ'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const slotToUse = activePopoverSlot || slotsForPopover[0] || '10:00';
-                            setPinnedScheduleServiceId(null);
-                            setHoveredScheduleServiceId(null);
-                            handleOpenBooking(item, slotToUse, activePopoverDate);
-                          }}
-                          className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-[11px] font-black shadow-xs hover:opacity-95 transition cursor-pointer flex items-center gap-1 shrink-0"
-                        >
-                          <Calendar className="w-3 h-3" />
-                          <span>{item.price > 0 ? 'Đặt lịch' : 'Xem liên hệ'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Right: Price & Đặt Lịch (NO direct payment button) */}
                   <div className="flex flex-row md:flex-col items-center md:items-end justify-between gap-2.5 pt-2.5 md:pt-0 border-t md:border-t-0 border-pink-50 shrink-0">
@@ -1788,17 +1470,13 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
         />
       )}
 
-      {/* 7. Booking Modal when user clicks "Đặt lịch" or time slot */}
+      {/* 7. Booking Modal when user clicks "Đặt lịch" */}
       {selectedServiceForBooking && (
         <BookingModal
           service={selectedServiceForBooking}
           currentUser={currentUser}
-          initialDate={preselectedDate || undefined}
-          initialSlot={preselectedSlot || undefined}
           onClose={() => {
             setSelectedServiceForBooking(null);
-            setPreselectedSlot(null);
-            setPreselectedDate(null);
           }}
           onNeedLogin={onNeedLogin}
           onCreated={(code) => {
@@ -1806,16 +1484,12 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
           }}
           onProceedToCheckout={(svc, date, slot) => {
             setSelectedServiceForBooking(null);
-            setPreselectedSlot(null);
-            setPreselectedDate(null);
             if (onDirectCheckout) {
               onDirectCheckout(svc, date, slot);
             }
           }}
           onViewMyBookings={() => {
             setSelectedServiceForBooking(null);
-            setPreselectedSlot(null);
-            setPreselectedDate(null);
             window.location.hash = '#bookings';
           }}
         />
