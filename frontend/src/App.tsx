@@ -608,18 +608,27 @@ export default function App() {
     [rawServices, showToast]
   );
 
+  const handleOpenService = useCallback(
+    (service: BackendService) => {
+      if (service.price <= 0) {
+        showToast('Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá.');
+      } else {
+        setActiveBookingService(service);
+      }
+    },
+    [showToast]
+  );
+
   const handleOpenServiceById = useCallback(
     (id: number) => {
       const found = rawServices.find((s) => s.id === id);
-      if (found && found.price <= 0) {
-        showToast('Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá.');
-      } else if (found) {
-        setActiveBookingService(found);
+      if (found) {
+        handleOpenService(found);
       } else {
         showToast('Không tìm thấy dịch vụ trong cơ sở dữ liệu.');
       }
     },
-    [rawServices, showToast]
+    [handleOpenService, rawServices, showToast]
   );
 
   const handleProceedToCheckout = useCallback(
@@ -992,7 +1001,7 @@ export default function App() {
             partner={selectedPartner || partners[0]}
             currentUser={currentUser}
             onBack={handleBackToHome}
-            onBookService={handleBookDeal}
+            onBookService={handleOpenService}
             onNeedLogin={() => navigateTo('login')}
           />
         </main>

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import axios from 'axios';
 import {
   ArrowLeft,
   ShieldCheck,
@@ -159,6 +160,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // Submission state
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const paymentFeedbackRef = useRef<HTMLDivElement>(null);
   const [resumeId, setResumeId] = useState<number | null>(() => paymentBookingId());
   useEffect(() => { const pop = () => setResumeId(paymentBookingId()); window.addEventListener('popstate', pop); return () => window.removeEventListener('popstate', pop); }, []);
   const submissionBusy = useRef(false);
@@ -168,6 +170,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const context = JSON.stringify([currentUser?.id, items[0]?.deal.serviceId, selectedDate, selectedTimeSlot]);
   const latestContext = useRef(context); latestContext.current = context;
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    if (currentStep !== 3 || !errorMsg) return;
+    paymentFeedbackRef.current?.focus({ preventScroll: true });
+    paymentFeedbackRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [currentStep, errorMsg]);
   // Calculations
   const subtotal = useMemo(() => {
     return items.reduce((sum, item) => sum + item.deal.salePrice * item.quantity, 0);
@@ -254,7 +261,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
     if (quoteLoading || !paymentQuote || quoteError || !paymentQuote.paymentAvailable) {
-      setErrorMsg(quoteError || 'Số tiền chưa được máy chủ xác minh hoặc chưa đủ mức tối thiểu để thanh toán PayOS.');
+      setErrorMsg(quoteError || quoteUnavailableMessage(paymentQuote) || 'Số tiền chưa được máy chủ xác minh hoặc chưa đủ mức tối thiểu để thanh toán PayOS.');
       return;
     }
     const validation = bookingSchema.safeParse({
@@ -309,7 +316,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
       window.location.assign(checkout);
     } catch (err: unknown) {
-      if (current()) setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng kiểm tra lịch hẹn trước khi thử lại.'));
+      if (current()) {
+        setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng kiểm tra lịch hẹn trước khi thử lại.'));
+        if (axios.isAxiosError(err) && err.response?.status === 401) onNeedLogin();
+      }
     } finally {
       submissionBusy.current = false;
       if (alive.current) setSubmitting(false);
@@ -458,7 +468,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           </div>
         </div>
 
-        {errorMsg && (
+        {errorMsg && currentStep !== 3 && (
           <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs sm:text-sm font-semibold text-rose-700 flex items-center gap-2.5">
             <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
             <span>{errorMsg}</span>
@@ -1034,7 +1044,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
 
               {/* Final Submit Button */}
-              <div className="mt-6 pt-4 border-t border-pink-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="mt-6 pt-4 border-t border-pink-100">
+                {errorMsg && (
+                  <div
+                    ref={paymentFeedbackRef}
+                    role="alert"
+                    tabIndex={-1}
+                    className="mb-4 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs sm:text-sm font-semibold text-rose-700 flex items-start gap-2.5 outline-none"
+                  >
+                    <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+                    <span>{errorMsg}</span>
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
@@ -1046,9 +1068,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                 <button
                   type="button"
-                  disabled={submitting || quoteLoading || !paymentQuote?.paymentAvailable || Boolean(quoteError)}
+                  disabled={submitting || quoteLoading}
                   onClick={handleFinalSubmit}
-                  className="w-full sm:flex-1 py-3.5 px-6 rounded-full bg-gradient-to-r from-[#e1146c] via-[#db2777] to-[#be185d] text-white text-xs sm:text-sm font-black shadow-lg shadow-pink-600/30 hover:opacity-95 active:scale-98 transition flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                  className="w-full sm:flex-1 py-3.5 px-6 rounded-full bg-gradient-to-r from-[#e1146c] via-[#db2777] to-[#be185d] text-white text-xs sm:text-sm font-black shadow-lg shadow-pink-600/30 hover:opacity-95 active:scale-98 transition flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer disabled:cursor-wait disabled:opacity-50"
                 >
                   <Lock className="w-4 h-4" />
                   <span>
@@ -1059,6 +1081,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       : `Xác nhận thanh toán ${formatCurrency(amountDueNow)}`}
                   </span>
                 </button>
+                </div>
               </div>
             </div>
           </div>

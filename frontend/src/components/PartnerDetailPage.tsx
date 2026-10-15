@@ -30,7 +30,7 @@ import {
 import { NewPartner } from '../data/mockData';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { serviceReviewSummary, validDatabaseId } from '../lib/reviewScope';
-import { CurrentUser } from '../types';
+import { BackendService, CurrentUser } from '../types';
 import { ReviewListStatus } from './ReviewListStatus';
 import { useBookingReviews } from '../hooks/useBookingReviews';
 import { ServiceReviewModal } from './ServiceReviewModal';
@@ -40,7 +40,7 @@ interface PartnerDetailPageProps {
   partner: NewPartner;
   currentUser: CurrentUser | null;
   onBack: () => void;
-  onBookService: (serviceTitle: string, salonName: string, price: number, originalPrice?: number) => void;
+  onBookService: (service: BackendService) => void;
   onNeedLogin: () => void;
 }
 
@@ -55,7 +55,8 @@ interface PartnerCertificate {
 }
 
 interface PartnerServiceOffer {
-  id: string;
+  id: number;
+  service: BackendService;
   name: string;
   price: number;
   originalPrice: number;
@@ -93,7 +94,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
       return () => { active = false; };
     }
     beautyApi.publicSupplierServices(partner.supplierId).then((items) => {
-      if (active) setShopState({ ...empty, loading: false, services: items.map(item => ({ id: String(item.id), name: item.name, price: item.price,
+      if (active) setShopState({ ...empty, loading: false, services: items.map(item => ({ id: item.id, service: item, name: item.name, price: item.price,
         originalPrice: item.originalPrice ?? item.price, durationMinutes: item.durationMinutes,
         highlight: item.highlightText ?? '', category: item.categorySlug, image: item.imageUrl,
         ...serviceReviewSummary(item) })) });
@@ -106,7 +107,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
     const nextState = !favorites[svc.id];
     setFavorites((prev) => ({ ...prev, [svc.id]: nextState }));
     setFavoriteToast({
-      id: svc.id,
+      id: String(svc.id),
       title: svc.name,
       salonName: partner.name,
       image: svc.image,
@@ -542,7 +543,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => onBookService(svc.name, partner.name, svc.price, svc.originalPrice)}
+                      onClick={() => onBookService(svc.service)}
                       className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-[#be185d] text-white text-xs font-black shadow-xs hover:opacity-95 hover:shadow-md transition flex items-center gap-1.5 cursor-pointer"
                     >
                       <Calendar className="w-3.5 h-3.5" />
