@@ -21,6 +21,7 @@ final class PartnerCatalogData {
                                 service("makeup", "Phun môi pha lê", 5_000_000, 120, "Phun xăm thẩm mỹ", makeup(4)),
                                 service("makeup", "Phun môi Nano", 7_000_000, 120, "Phun xăm thẩm mỹ", makeup(5)),
                                 service("makeup", "Khử thâm môi", 2_500_000, 90, "Phun xăm thẩm mỹ", makeup(6)),
+                                service("spa", "Gội thường", 50_000, 30, "Gội đầu", hairWash()),
                                 service("spa", "Gội dưỡng sinh", 120_000, 70, "Gội đầu thư giãn", spa(0)))),
 
                 partner("trang-tuti", "Trang Tuti", "Trang Tuti", "Chuyên viên Trang Tuti",
@@ -171,6 +172,9 @@ final class PartnerCatalogData {
     private static String spa(int index) { return SPA_IMAGES[index]; }
     private static String skin(int index) { return SKIN_IMAGES[index]; }
     private static String makeup(int index) { return MAKEUP_IMAGES[index]; }
+    private static String hairWash() {
+        return "https://live.staticflickr.com/65535/51213255408_6f57033e09_o.jpg";
+    }
 
     private static final String[] NAIL_IMAGES = {
             "https://www.sytongli.com/uploads/20251202/d59dfda7a0b790834f331d41680adeda.png",

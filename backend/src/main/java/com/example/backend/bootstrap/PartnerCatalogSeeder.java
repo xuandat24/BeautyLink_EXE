@@ -75,6 +75,12 @@ public class PartnerCatalogSeeder implements CommandLineRunner {
     private void seed(PartnerCatalogData.PartnerEntry entry, Location hanoi,
             Map<String, ServiceCategory> categoryMap) {
         Supplier supplier = suppliers.findBySlug(entry.slug()).orElseGet(() -> createSupplier(entry, hanoi));
+        // Imported workbook suppliers are public catalog partners. Keep this repair
+        // idempotent so previously seeded suppliers also expose their complete service list.
+        if (!supplier.isNewPartner()) {
+            supplier.setNewPartner(true);
+            supplier = suppliers.save(supplier);
+        }
         Practitioner practitioner = ensurePractitioner(supplier, entry);
         ensureSchedule(practitioner);
 

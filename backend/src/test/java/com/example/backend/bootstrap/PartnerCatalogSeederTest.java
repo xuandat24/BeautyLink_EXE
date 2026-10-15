@@ -41,17 +41,18 @@ class PartnerCatalogSeederTest {
     @Test
     void importsWorkbookPartnersOnceWithDistinctServiceImagesAndSafeOwners() throws Exception {
         assertEquals(10, suppliers.count());
-        assertEquals(77, services.count());
+        assertEquals(78, services.count());
         assertEquals(3, services.findAll().stream().filter(service -> service.getPrice().signum() == 0).count());
 
         List<String> images = services.findAll().stream().map(ServiceOffering::getImageUrl).toList();
         assertTrue(images.stream().allMatch(image -> image != null && image.startsWith("https://")));
-        assertEquals(77, images.stream().distinct().count());
+        assertEquals(78, images.stream().distinct().count());
 
         for (PartnerCatalogData.PartnerEntry entry : PartnerCatalogData.partners()) {
             Supplier supplier = suppliers.findBySlug(entry.slug()).orElseThrow();
             assertEquals(VERIFIED, supplier.getVerificationStatus());
             assertFalse(supplier.isDemoData());
+            assertTrue(supplier.isNewPartner());
             assertEquals(entry.services().size(), services.findBySupplierIdAndActiveTrue(supplier.getId()).size());
             var people = practitioners.findBySupplierIdAndActiveTrue(supplier.getId());
             assertEquals(1, people.size());
@@ -60,9 +61,12 @@ class PartnerCatalogSeederTest {
 
         assertEquals(10, users.findByRole(SUPPLIER).size());
         assertTrue(users.findByRole(SUPPLIER).stream().allMatch(user -> user.getStatus() == DISABLED));
+        assertEquals(78, services.findHomepageServices(null).size());
+        var hienTran = suppliers.findBySlug("tham-my-hien-tran").orElseThrow();
+        assertTrue(services.findBySupplierIdAndName(hienTran.getId(), "Gội thường").isPresent());
 
         seeder.run();
         assertEquals(10, suppliers.count());
-        assertEquals(77, services.count());
+        assertEquals(78, services.count());
     }
 }
