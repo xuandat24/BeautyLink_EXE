@@ -15,6 +15,7 @@ export interface OptimizedImageProps
   priority?: boolean;
   fallbackSrc?: string;
   containerClassName?: string;
+  vignette?: boolean;
 }
 
 const DEFAULT_FALLBACK =
@@ -29,6 +30,7 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   fallbackSrc = DEFAULT_FALLBACK,
   className = '',
   containerClassName = '',
+  vignette = false,
   ...restProps
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -65,6 +67,12 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
         } ${className}`}
         {...restProps}
       />
+      {vignette && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 shadow-[inset_0_0_48px_rgba(15,23,42,0.38)]"
+        />
+      )}
     </div>
   );
 };

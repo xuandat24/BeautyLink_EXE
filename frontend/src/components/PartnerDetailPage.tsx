@@ -75,7 +75,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
   onBookService,
   onNeedLogin,
 }) => {
-  const [activeTab, setActiveTab] = useState<'all' | 'services' | 'certificates' | 'reviews'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'certificates' | 'reviews'>('all');
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [selectedServiceForReview, setSelectedServiceForReview] = useState<string>(partner.specialty || partner.name);
   const [reviewsUpdateTrigger, setReviewsUpdateTrigger] = useState(0);
@@ -401,19 +401,6 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
 
           <button
             type="button"
-            onClick={() => setActiveTab('services')}
-            className={`pb-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              activeTab === 'services'
-                ? 'border-[#e1146c] text-[#be185d]'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            <span>Bảng giá dịch vụ ({partnerProfile.services.length})</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setActiveTab('certificates')}
             className={`pb-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'certificates'
@@ -443,7 +430,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
         {/* YÊU CẦU NGƯỜI DÙNG: CÓ RATING CHO TỪNG DỊCH VỤ VÀ SỐ LƯỢT NGƯỜI ĐÃ TRẢI NGHIỆM */}
         {/* ĐỂ NGƯỜI DÙNG NHÌN VÀO SẼ BIẾT KHI MỚI CHỈ NHÌN SƠ QUA BÊN NGOÀI */}
         {/* ========================================================================= */}
-        {(activeTab === 'all' || activeTab === 'services') && (
+        {activeTab === 'all' && (
           <div id="services-section" className="space-y-6 mb-10 animate-in fade-in duration-200">
             {shopState.loading && <p role="status">Đang tải dịch vụ…</p>}
             {shopState.error && <div role="alert">{shopState.error}<button type="button" onClick={() => setShopAttempt(v => v + 1)}>Thử lại</button></div>}
@@ -471,11 +458,15 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                 >
                   <div>
                     <div className="flex items-start gap-3.5 mb-3">
-                      <div className="relative shrink-0">
+                      <div className="relative shrink-0 overflow-hidden rounded-2xl">
                         <img
                           src={svc.image}
                           alt={svc.name}
                           className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-pink-100 bg-pink-50 group-hover:scale-105 transition-transform"
+                        />
+                        <div
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-0 shadow-[inset_0_0_32px_rgba(15,23,42,0.32)]"
                         />
                         <button
                           type="button"

@@ -644,6 +644,7 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
                         <OptimizedImage
                           src={item.image}
                           alt={item.title}
+                          vignette
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                         {/* Top Badges */}

@@ -125,6 +125,10 @@ export const NewPartnersSection: React.FC<NewPartnersSectionProps> = React.memo(
                     target.style.display = 'none';
                   }}
                 />
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 shadow-[inset_0_0_48px_rgba(15,23,42,0.38)]"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
 
                 {/* Verified badge top left */}

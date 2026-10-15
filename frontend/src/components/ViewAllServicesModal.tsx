@@ -595,6 +595,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
                       src={item.image}
                       alt={item.title}
                       preset="deal-card"
+                      vignette
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       containerClassName="w-full h-full"
                     />

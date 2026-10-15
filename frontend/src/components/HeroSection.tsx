@@ -1,273 +1,125 @@
-import React, { useState, useEffect } from 'react';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Sparkles,
-  Users,
-  CalendarCheck,
-  TicketPercent,
-  Gift,
-  ArrowRight,
-  ShieldCheck,
-  CheckCircle2,
-  Clock,
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ArrowRight, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 
 interface HeroSectionProps {
-  onOpenCommunity: () => void;
-  onOpenAppointments: () => void;
-  onOpenVouchers: () => void;
-  onOpenRewards: () => void;
   onBookDirect: (title: string, price: number, originalPrice: number) => void;
 }
 
-export const HeroSection: React.FC<HeroSectionProps> = ({
-  onOpenCommunity,
-  onOpenAppointments,
-  onOpenVouchers,
-  onOpenRewards,
-  onBookDirect,
-}) => {
-  const slides = [
-    {
-      id: 1,
-      badge: 'DEAL ĐỘC QUYỀN BEAUTYLINK',
-      title: 'MASSAGE BODY TINH DẦU',
-      subtitle: 'THƯ GIÃN TOÀN THÂN & ĐẢ THÔNG KINH LẠC',
-      price: '225K',
-      priceNum: 225000,
-      originalPrice: '449K',
-      originalPriceNum: 449000,
-      discount: '-50%',
-      image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1200&q=80',
-      tagline: 'Tặng xông hơi đá muối thảo dược Himalaya',
-      partnerName: 'PARADISE SKIN CLINIC & SPA',
-      accentColor: 'from-[#be185d] to-[#e1146c]',
-    },
-    {
-      id: 2,
-      badge: 'CÔNG NGHỆ CHÂU ÂU',
-      title: 'TRẺ HÓA CĂNG BÓNG DA HOA HỒNG',
-      subtitle: 'PEEL VI SINH & CẤY TINH CHẤT HOA HỒNG SEN',
-      price: '380K',
-      priceNum: 380000,
-      originalPrice: '850K',
-      originalPriceNum: 850000,
-      discount: '-55%',
-      image: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=1200&q=80',
-      tagline: 'Da sáng mịn căng bóng, mờ thâm sạm sau 1 buổi',
-      partnerName: 'VENUS BEAUTY INSTITUTE',
-      accentColor: 'from-[#e1146c] to-[#ec4899]',
-    },
-    {
-      id: 3,
-      badge: 'DƯỠNG SINH CỔ TRUYỀN',
-      title: 'GỘI ĐẦU DƯỠNG SINH AN MIÊN',
-      subtitle: 'BỒ KẾT THẢO DƯỢC & MASSAGE CỔ VAI GÁY',
-      price: '199K',
-      priceNum: 199000,
-      originalPrice: '350K',
-      originalPriceNum: 350000,
-      discount: '-43%',
-      image: 'https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&w=1200&q=80',
-      tagline: 'Xua tan mệt mỏi, ngủ sâu giấc và thư thái tinh thần',
-      partnerName: 'HỆ THỐNG AN MIÊN SPA',
-      accentColor: 'from-[#9d174d] to-[#be185d]',
-    },
-  ];
+const HERO_SLIDES = [
+  {
+    id: 1,
+    badge: 'DEAL ĐỘC QUYỀN BEAUTYLINK',
+    title: 'MASSAGE BODY TINH DẦU',
+    price: '225K',
+    priceNum: 225000,
+    originalPrice: '449K',
+    originalPriceNum: 449000,
+    discount: '-50%',
+    image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1600&q=82',
+    partnerName: 'PARADISE SKIN CLINIC & SPA',
+  },
+  {
+    id: 2,
+    badge: 'CÔNG NGHỆ CHÂU ÂU',
+    title: 'TRẺ HÓA CĂNG BÓNG DA HOA HỒNG',
+    price: '380K',
+    priceNum: 380000,
+    originalPrice: '850K',
+    originalPriceNum: 850000,
+    discount: '-55%',
+    image: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=1600&q=82',
+    partnerName: 'VENUS BEAUTY INSTITUTE',
+  },
+  {
+    id: 3,
+    badge: 'DƯỠNG SINH CỔ TRUYỀN',
+    title: 'GỘI ĐẦU DƯỠNG SINH AN MIÊN',
+    price: '199K',
+    priceNum: 199000,
+    originalPrice: '350K',
+    originalPriceNum: 350000,
+    discount: '-43%',
+    image: 'https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&w=1600&q=82',
+    partnerName: 'HỆ THỐNG AN MIÊN SPA',
+  },
+] as const;
 
+export const HeroSection: React.FC<HeroSectionProps> = ({ onBookDirect }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
 
-  // Auto slide
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % slides.length);
+    const timer = window.setInterval(() => {
+      setCurrentSlide((previous) => (previous + 1) % HERO_SLIDES.length);
     }, 6000);
-    return () => clearInterval(timer);
-  }, [slides.length]);
+    return () => window.clearInterval(timer);
+  }, []);
 
-  const prevSlide = () => {
-    setCurrentSlide((prev) => (prev === 0 ? slides.length - 1 : prev - 1));
-  };
-
-  const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % slides.length);
-  };
-
-  const slide = slides[currentSlide];
+  const slide = HERO_SLIDES[currentSlide];
+  const previousSlide = () =>
+    setCurrentSlide((previous) => (previous === 0 ? HERO_SLIDES.length - 1 : previous - 1));
+  const nextSlide = () =>
+    setCurrentSlide((previous) => (previous + 1) % HERO_SLIDES.length);
 
   return (
-    <section className="py-4 md:py-6 max-w-7xl mx-auto px-4 sm:px-6">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-stretch">
-        {/* Left Side: Large Hero Banner Slider */}
-        <div className="lg:col-span-8 relative rounded-3xl overflow-hidden shadow-lg shadow-pink-900/5 min-h-[380px] md:min-h-[420px] bg-slate-900 flex flex-col justify-between group">
-          {/* Background Image with Gentle Overlay */}
-          <div
-            className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out transform scale-105 group-hover:scale-100"
-            style={{ backgroundImage: `url(${slide.image})` }}
-          >
-            {/* Ambient Pink Tint & Contrast Scrim */}
-            <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/60 to-black/35" />
-            <div className="absolute inset-0 bg-gradient-to-t from-pink-950/40 via-transparent to-transparent mix-blend-multiply" />
-          </div>
+    <section className="mx-auto max-w-7xl px-4 py-3 sm:px-6 md:py-4">
+      <div className="group relative h-[210px] overflow-hidden rounded-3xl bg-slate-900 shadow-lg shadow-pink-900/5 sm:h-[220px]">
+        <div
+          className="absolute inset-0 scale-105 bg-cover bg-center transition-transform duration-700 ease-out group-hover:scale-100"
+          style={{ backgroundImage: `url(${slide.image})` }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/62 to-black/20" />
+        <div className="absolute inset-0 shadow-[inset_0_0_72px_rgba(15,23,42,0.5)]" />
 
-          {/* Top content on hero slide */}
-          <div className="relative z-10 p-6 md:p-8 flex flex-col items-start gap-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-pink-200 text-xs font-semibold tracking-wide border border-white/20">
-              <Sparkles className="w-3.5 h-3.5 text-pink-300" />
+        <div className="relative z-10 flex h-full flex-col justify-between p-4 sm:p-5 md:p-6">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/15 px-2.5 py-1 text-[10px] font-bold tracking-wide text-pink-100 backdrop-blur-md">
+              <Sparkles className="h-3 w-3 text-pink-300" />
               <span>{slide.badge}</span>
             </div>
-
-            <div className="text-pink-300 text-xs font-bold uppercase tracking-wider mt-1">
+            <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-pink-300">
               {slide.partnerName}
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight leading-tight mt-1 max-w-xl">
+            </p>
+            <h1 className="mt-1 max-w-2xl text-xl font-black leading-tight tracking-tight text-white sm:text-2xl md:text-3xl">
               {slide.title}
             </h1>
+          </div>
 
-            <p className="text-pink-100/90 text-sm sm:text-base font-medium max-w-lg mt-1">
-              {slide.subtitle}
-            </p>
-
-            {/* Price badge block */}
-            <div className="mt-4 flex items-baseline gap-3 bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/20">
-              <span className="text-3xl md:text-4xl font-black bg-gradient-to-r from-pink-300 to-rose-200 bg-clip-text text-transparent">
-                {slide.price}
-              </span>
-              <span className="text-xs sm:text-sm text-pink-200 line-through">
-                [Giá gốc: {slide.originalPrice}]
-              </span>
-              <span className="px-2 py-0.5 rounded-md bg-[#e1146c] text-white text-xs font-black shadow-sm">
+          <div className="flex items-end justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <span className="text-2xl font-black text-pink-200 sm:text-3xl">{slide.price}</span>
+              <span className="hidden text-xs text-pink-100/80 line-through sm:inline">{slide.originalPrice}</span>
+              <span className="rounded-md bg-[#e1146c] px-2 py-0.5 text-[10px] font-black text-white">
                 {slide.discount}
               </span>
+              <button
+                type="button"
+                onClick={() => onBookDirect(slide.title, slide.priceNum, slide.originalPriceNum)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#e1146c] to-[#ec4899] px-3 py-2 text-xs font-bold text-white shadow-md shadow-pink-600/30 transition hover:opacity-95 sm:px-4"
+              >
+                <span>Đặt lịch ngay</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs text-pink-200/90 mt-2 font-medium">
-              <CheckCircle2 className="w-3.5 h-3.5 text-pink-400" />
-              <span>{slide.tagline}</span>
-            </div>
-          </div>
-
-          {/* Bottom Hero Controls */}
-          <div className="relative z-10 p-6 md:p-8 pt-0 flex items-center justify-between">
-            <button
-              onClick={() =>
-                onBookDirect(
-                  slide.title,
-                  slide.priceNum,
-                  slide.originalPriceNum
-                )
-              }
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-[#e1146c] via-[#db2777] to-[#ec4899] text-white text-sm font-bold shadow-lg shadow-pink-600/40 hover:opacity-95 hover:scale-[1.02] active:scale-95 transition-all"
-            >
-              <span>Đặt lịch ngay</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-
-            {/* Pagination dots & navigation buttons */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                {slides.map((s, idx) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setCurrentSlide(idx)}
-                    className={`h-2 rounded-full transition-all duration-300 ${
-                      idx === currentSlide
-                        ? 'w-7 bg-[#f472b6]'
-                        : 'w-2 bg-white/40 hover:bg-white/70'
-                    }`}
-                    aria-label={`Slide ${idx + 1}`}
-                  />
-                ))}
-              </div>
-
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={prevSlide}
-                  className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md hover:bg-white/40 text-white flex items-center justify-center transition-colors"
-                  aria-label="Previous slide"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={nextSlide}
-                  className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md hover:bg-white/40 text-white flex items-center justify-center transition-colors"
-                  aria-label="Next slide"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={previousSlide}
+                aria-label="Banner trước"
+                className="grid h-8 w-8 place-items-center rounded-full bg-white/20 text-white backdrop-blur-md transition hover:bg-white/35"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={nextSlide}
+                aria-label="Banner tiếp theo"
+                className="grid h-8 w-8 place-items-center rounded-full bg-white/20 text-white backdrop-blur-md transition hover:bg-white/35"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
           </div>
-        </div>
-
-        {/* Right Side: 4 Quick Actions (Exact UI/UX from the screenshot) */}
-        <div className="lg:col-span-4 grid grid-cols-2 gap-3 sm:gap-4">
-          {/* 1. Cộng đồng */}
-          <button
-            onClick={onOpenCommunity}
-            className="group flex flex-col items-center justify-center p-6 rounded-3xl bg-white border border-pink-100 hover:border-pink-300 shadow-sm hover:shadow-md hover:shadow-pink-500/10 transition-all text-center relative overflow-hidden"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-pink-100 to-pink-50 flex items-center justify-center text-[#be185d] mb-3 group-hover:scale-110 group-hover:bg-gradient-to-tr group-hover:from-pink-500 group-hover:to-rose-500 group-hover:text-white transition-all shadow-inner">
-              <Users className="w-7 h-7" />
-            </div>
-            <span className="text-base font-bold text-slate-800 group-hover:text-[#be185d] transition-colors">
-              Cộng đồng
-            </span>
-            <span className="text-[11px] text-slate-500 mt-0.5">
-              Review & Bí quyết làm đẹp
-            </span>
-            <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-pink-400 group-hover:animate-ping" />
-          </button>
-
-          {/* 2. Lịch hẹn */}
-          <button
-            onClick={onOpenAppointments}
-            className="group flex flex-col items-center justify-center p-6 rounded-3xl bg-white border border-pink-100 hover:border-pink-300 shadow-sm hover:shadow-md hover:shadow-pink-500/10 transition-all text-center relative overflow-hidden"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-pink-100 to-pink-50 flex items-center justify-center text-[#be185d] mb-3 group-hover:scale-110 group-hover:bg-gradient-to-tr group-hover:from-pink-500 group-hover:to-rose-500 group-hover:text-white transition-all shadow-inner">
-              <CalendarCheck className="w-7 h-7" />
-            </div>
-            <span className="text-base font-bold text-slate-800 group-hover:text-[#be185d] transition-colors">
-              Lịch hẹn
-            </span>
-            <span className="text-[11px] text-slate-500 mt-0.5">
-              Quản lý lịch & Nhắc hẹn
-            </span>
-          </button>
-
-          {/* 3. Mã giảm giá */}
-          <button
-            onClick={onOpenVouchers}
-            className="group flex flex-col items-center justify-center p-6 rounded-3xl bg-white border border-pink-100 hover:border-pink-300 shadow-sm hover:shadow-md hover:shadow-pink-500/10 transition-all text-center relative overflow-hidden"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-pink-100 to-pink-50 flex items-center justify-center text-[#be185d] mb-3 group-hover:scale-110 group-hover:bg-gradient-to-tr group-hover:from-pink-500 group-hover:to-rose-500 group-hover:text-white transition-all shadow-inner">
-              <TicketPercent className="w-7 h-7" />
-            </div>
-            <span className="text-base font-bold text-slate-800 group-hover:text-[#be185d] transition-colors">
-              Mã giảm giá
-            </span>
-            <span className="text-[11px] text-slate-500 mt-0.5">
-              Săn voucher tới 50%
-            </span>
-          </button>
-
-          {/* 4. Rewards */}
-          <button
-            onClick={onOpenRewards}
-            className="group flex flex-col items-center justify-center p-6 rounded-3xl bg-white border border-pink-100 hover:border-pink-300 shadow-sm hover:shadow-md hover:shadow-pink-500/10 transition-all text-center relative overflow-hidden"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-pink-100 to-pink-50 flex items-center justify-center text-[#be185d] mb-3 group-hover:scale-110 group-hover:bg-gradient-to-tr group-hover:from-pink-500 group-hover:to-rose-500 group-hover:text-white transition-all shadow-inner">
-              <Gift className="w-7 h-7" />
-            </div>
-            <span className="text-base font-bold text-slate-800 group-hover:text-[#be185d] transition-colors">
-              Rewards
-            </span>
-            <span className="text-[11px] text-slate-500 mt-0.5">
-              Đổi điểm nhận quà VIP
-            </span>
-          </button>
         </div>
       </div>
     </section>

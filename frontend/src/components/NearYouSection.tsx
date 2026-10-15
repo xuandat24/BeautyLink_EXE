@@ -241,6 +241,7 @@ export const NearYouSection: React.FC<NearYouSectionProps> = React.memo(({
                     src={salon.image}
                     alt={salon.name}
                     preset="salon-card"
+                      vignette
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     containerClassName="w-full h-full"
                   />

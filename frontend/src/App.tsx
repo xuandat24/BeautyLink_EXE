@@ -29,8 +29,6 @@ import { PartnerDetailPage } from './components/PartnerDetailPage';
 import { BookingModal } from './components/BookingModal';
 import { CartDrawer } from './components/CartDrawer';
 import { VoucherModal } from './components/VoucherModal';
-import { CommunityModal } from './components/CommunityModal';
-import { RewardsModal } from './components/RewardsModal';
 import { LocationSelectModal } from './components/LocationSelectModal';
 import { BlogModal } from './components/BlogModal';
 import { ViewAllServicesModal, ViewAllContext } from './components/ViewAllServicesModal';
@@ -253,8 +251,6 @@ export default function App() {
   // Modals state
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
-  const [isCommunityModalOpen, setIsCommunityModalOpen] = useState(false);
-  const [isRewardsModalOpen, setIsRewardsModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(isVisitorOnboardingRequired);
   const [isBlogModalOpen, setIsBlogModalOpen] = useState(false);
 
@@ -1120,6 +1116,10 @@ export default function App() {
             category={selectedCategory}
             categories={serviceCategories}
             onSelectCategory={handleSelectServiceCategory}
+            onSelectPartner={(partner) => {
+              setSelectedPartner(partner);
+              navigateTo('partner-detail');
+            }}
             locationId={selectedLocationId}
             locationLabel={selectedCity}
             currentUser={currentUser}
@@ -1161,10 +1161,6 @@ export default function App() {
         ) : (
           <>
             <HeroSection
-              onOpenCommunity={() => setIsCommunityModalOpen(true)}
-              onOpenAppointments={handleOpenAppointments}
-              onOpenVouchers={() => setIsVoucherModalOpen(true)}
-              onOpenRewards={() => setIsRewardsModalOpen(true)}
               onBookDirect={(title, price, orig) =>
                 handleBookDeal(title, 'Paradise Skin Clinic')
               }
@@ -1273,16 +1269,6 @@ export default function App() {
         onApplyVoucher={(code) => {
           showToast(`Đã kích hoạt voucher: ${code}!`);
         }}
-      />
-
-      <CommunityModal
-        isOpen={isCommunityModalOpen}
-        onClose={() => setIsCommunityModalOpen(false)}
-      />
-
-      <RewardsModal
-        isOpen={isRewardsModalOpen}
-        onClose={() => setIsRewardsModalOpen(false)}
       />
 
       <LocationSelectModal
