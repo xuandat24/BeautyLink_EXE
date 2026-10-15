@@ -8,7 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import java.time.*;
+import java.math.BigDecimal;
 import java.util.Optional;
+import com.example.backend.dto.ApiDtos.CreateBookingRequest;
 import static com.example.backend.model.DomainEnums.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -17,8 +19,9 @@ class BookingLifecycleTest {
     private final Instant now = Instant.parse("2026-10-12T10:00:00Z"); // 17:00 Vietnam
     private final BookingCompletionPolicy policy = new BookingCompletionPolicy(Clock.fixed(now, ZoneOffset.UTC));
     private final BookingRepository bookings = mock(BookingRepository.class);
+    private final ServiceOfferingRepository services = mock(ServiceOfferingRepository.class);
     private final BookingReviewRepository reviews = mock(BookingReviewRepository.class);
-    private final BookingService service = new BookingService(bookings, mock(ServiceOfferingRepository.class),
+    private final BookingService service = new BookingService(bookings, services,
             mock(PractitionerRepository.class), mock(SupplierRepository.class), mock(AvailabilityService.class), reviews, policy, mock(PaymentService.class), mock(PaymentTransactionRepository.class), mock(org.springframework.transaction.PlatformTransactionManager.class));
 
     @ParameterizedTest
@@ -105,6 +108,22 @@ class BookingLifecycleTest {
         when(bookings.findByIdForUpdate(1L)).thenReturn(Optional.of(booking));
         assertThrows(ApiException.class, () -> service.complete(booking.getCustomer(), 1L));
         assertEquals(BookingStatus.CONFIRMED, booking.getStatus());
+    }
+
+    @Test void serviceWithoutPublishedPriceCannotBeBooked() {
+        ServiceOffering offering = new ServiceOffering();
+        offering.setId(9L);
+        offering.setPrice(BigDecimal.ZERO);
+        offering.setActive(true);
+        when(services.findById(9L)).thenReturn(Optional.of(offering));
+
+        CreateBookingRequest request = new CreateBookingRequest(
+                9L, null, LocalDate.of(2026, 10, 20), LocalTime.of(10, 0), null);
+        ApiException error = assertThrows(ApiException.class,
+                () -> service.create(new UserAccount(), request));
+
+        assertEquals("SERVICE_PRICE_ON_REQUEST", error.getCode());
+        verifyNoInteractions(bookings);
     }
 
     private Booking booking(BookingStatus status, PaymentStatus payment) {

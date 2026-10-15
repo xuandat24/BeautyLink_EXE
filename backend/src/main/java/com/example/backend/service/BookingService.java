@@ -31,6 +31,10 @@ public class BookingService {
     }
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED) public BookingResponse create(UserAccount customer, CreateBookingRequest request) {
         ServiceOffering service = services.findById(request.serviceId()).filter(ServiceOffering::isActive).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SERVICE_NOT_FOUND", "Không tìm thấy dịch vụ"));
+        if (service.getPrice().signum() <= 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "SERVICE_PRICE_ON_REQUEST",
+                    "Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá trước khi đặt lịch.");
+        }
         Practitioner practitioner;
         if (request.practitionerId() != null) {
             practitioner = practitioners.findByIdForUpdate(request.practitionerId()).filter(Practitioner::isActive)

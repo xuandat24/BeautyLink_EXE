@@ -597,7 +597,9 @@ export default function App() {
       const found =
         rawServices.find((s) => s.name === dealTitle || s.supplierName === salonName) ||
         rawServices[0];
-      if (found) {
+      if (found && found.price <= 0) {
+        showToast('Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá.');
+      } else if (found) {
         setActiveBookingService(found);
       } else {
         showToast('Dịch vụ này chưa sẵn sàng để đặt lịch.');
@@ -609,7 +611,9 @@ export default function App() {
   const handleOpenServiceById = useCallback(
     (id: number) => {
       const found = rawServices.find((s) => s.id === id);
-      if (found) {
+      if (found && found.price <= 0) {
+        showToast('Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá.');
+      } else if (found) {
         setActiveBookingService(found);
       } else {
         showToast('Không tìm thấy dịch vụ trong cơ sở dữ liệu.');
@@ -620,6 +624,10 @@ export default function App() {
 
   const handleProceedToCheckout = useCallback(
     (service: BackendService, date: string, slot: string) => {
+      if (service.price <= 0) {
+        showToast('Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá.');
+        return;
+      }
       setActiveBookingService(null);
       setDirectCheckoutConfig({
         service,
@@ -628,7 +636,7 @@ export default function App() {
       });
       navigateTo('checkout');
     },
-    [navigateTo]
+    [navigateTo, showToast]
   );
 
   const handleAdminNavigate = useCallback((section: AdminSection) => {

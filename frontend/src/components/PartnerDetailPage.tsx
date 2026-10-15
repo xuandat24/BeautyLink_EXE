@@ -531,7 +531,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                   <div className="pt-3 border-t border-pink-50 flex items-center justify-between gap-3 mt-2">
                     <div>
                       <div className="text-base sm:text-lg font-black text-[#e1146c]">
-                        {formatVND(svc.price)}
+                        {svc.price > 0 ? formatVND(svc.price) : 'Liên hệ báo giá'}
                       </div>
                       {svc.originalPrice > svc.price && (
                         <span className="text-[11px] text-slate-400 line-through">
@@ -546,7 +546,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                       className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-[#be185d] text-white text-xs font-black shadow-xs hover:opacity-95 hover:shadow-md transition flex items-center gap-1.5 cursor-pointer"
                     >
                       <Calendar className="w-3.5 h-3.5" />
-                      <span>Đặt lịch ngay</span>
+                      <span>{svc.price > 0 ? 'Đặt lịch ngay' : 'Liên hệ cơ sở'}</span>
                     </button>
                   </div>
                 </div>

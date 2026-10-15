@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
         "app.security.rate-limit.backend=memory",
         "app.cors.allowed-origins=https://beautylink.example",
         "app.demo-data.enabled=false",
+        "app.partner-catalog.enabled=false",
         "app.supplier.auto-verify=false"
 })
 @ActiveProfiles("prod")

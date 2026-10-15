@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
         "app.cors.allowed-origins=https://beautylink.example",
         "app.demo-data.enabled=true",
         "app.demo-data.password=PrivateDeployDemo123!",
+        "app.partner-catalog.enabled=false",
         "app.supplier.auto-verify=true"
 })
 @ActiveProfiles("prod")

@@ -308,6 +308,10 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
   };
 
   const handleOpenBooking = (service: BackendService, slot?: string, date?: string) => {
+    if (service.price <= 0) {
+      setPreviewService(service);
+      return;
+    }
     setSelectedServiceForBooking(service);
     setPreselectedSlot(slot || null);
     setPreselectedDate(date || null);
@@ -317,6 +321,10 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
 
   const handleQuickAdd = (e: React.MouseEvent, service: BackendService) => {
     e.stopPropagation();
+    if (service.price <= 0) {
+      setPreviewService(service);
+      return;
+    }
     if (onAddToCart) {
       onAddToCart(service);
     }
@@ -961,7 +969,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                           className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-[11px] font-black shadow-xs hover:opacity-95 transition cursor-pointer flex items-center gap-1 shrink-0"
                         >
                           <Calendar className="w-3 h-3" />
-                          <span>Đặt lịch ngay</span>
+                          <span>{item.price > 0 ? 'Đặt lịch ngay' : 'Xem liên hệ'}</span>
                         </button>
                       </div>
 
@@ -974,7 +982,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                   <div className="p-3.5 sm:p-4 pt-2 border-t border-pink-50 flex items-center justify-between gap-2">
                     <div>
                       <div className="text-base sm:text-lg font-black text-[#e1146c] leading-none">
-                        {formatCurrency(item.price)}
+                        {item.price > 0 ? formatCurrency(item.price) : 'Liên hệ báo giá'}
                       </div>
                       {savingsAmount > 0 && (
                         <span className="text-[10px] text-slate-400 line-through block mt-0.5">
@@ -1009,7 +1017,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                         className="py-2 px-3 sm:px-3.5 rounded-xl bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs font-bold shadow-xs hover:opacity-95 active:scale-98 transition flex items-center justify-center gap-1 cursor-pointer"
                       >
                         <Calendar className="w-3.5 h-3.5" />
-                        <span>Đặt lịch</span>
+                        <span>{item.price > 0 ? 'Đặt lịch' : 'Xem liên hệ'}</span>
                       </button>
                     </div>
                   </div>
@@ -1239,7 +1247,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                           className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-[11px] font-black shadow-xs hover:opacity-95 transition cursor-pointer flex items-center gap-1 shrink-0"
                         >
                           <Calendar className="w-3 h-3" />
-                          <span>Đặt lịch</span>
+                          <span>{item.price > 0 ? 'Đặt lịch' : 'Xem liên hệ'}</span>
                         </button>
                       </div>
                     </div>
@@ -1249,7 +1257,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                   <div className="flex flex-row md:flex-col items-center md:items-end justify-between gap-2.5 pt-2.5 md:pt-0 border-t md:border-t-0 border-pink-50 shrink-0">
                     <div className="text-left md:text-right">
                       <div className="text-base sm:text-lg font-black text-[#e1146c]">
-                        {formatCurrency(item.price)}
+                        {item.price > 0 ? formatCurrency(item.price) : 'Liên hệ báo giá'}
                       </div>
                       {savingsAmount > 0 && (
                         <div className="text-[10px] text-slate-400 line-through">
@@ -1282,7 +1290,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                         className="py-2 px-3.5 rounded-xl bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs font-bold shadow-xs hover:opacity-95 transition cursor-pointer flex items-center gap-1"
                       >
                         <Calendar className="w-3.5 h-3.5" />
-                        <span>Đặt lịch</span>
+                        <span>{item.price > 0 ? 'Đặt lịch' : 'Xem liên hệ'}</span>
                       </button>
                     </div>
                   </div>
@@ -1501,7 +1509,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                       <div>
                         <span className="text-[11px] text-slate-500 block">Giá dịch vụ niêm yết</span>
                         <div className="text-xl font-black text-[#e1146c]">
-                          {formatCurrency(previewService.price)}
+                          {previewService.price > 0 ? formatCurrency(previewService.price) : 'Liên hệ báo giá'}
                         </div>
                       </div>
                       {previewService.originalPrice && previewService.originalPrice > previewService.price && (
@@ -1725,29 +1733,37 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
 
               {/* Modal Actions */}
               <div className="p-4 sm:p-5 border-t border-pink-100 bg-pink-50/30 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    handleQuickAdd(e, previewService);
-                    setPreviewService(null);
-                  }}
-                  className="py-3 px-4 rounded-xl border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 text-xs font-bold transition cursor-pointer"
-                >
-                  + Thêm vào giỏ
-                </button>
+                {previewService.price > 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        handleQuickAdd(e, previewService);
+                        setPreviewService(null);
+                      }}
+                      className="py-3 px-4 rounded-xl border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 text-xs font-bold transition cursor-pointer"
+                    >
+                      + Thêm vào giỏ
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const svc = previewService;
-                    setPreviewService(null);
-                    handleOpenBooking(svc);
-                  }}
-                  className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs sm:text-sm font-bold shadow-md hover:opacity-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Calendar className="w-4 h-4" />
-                  <span>Đặt lịch hẹn</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const svc = previewService;
+                        setPreviewService(null);
+                        handleOpenBooking(svc);
+                      }}
+                      className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs sm:text-sm font-bold shadow-md hover:opacity-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Calendar className="w-4 h-4" />
+                      <span>Đặt lịch hẹn</span>
+                    </button>
+                  </>
+                ) : (
+                  <p className="w-full rounded-xl bg-amber-50 px-4 py-3 text-center text-sm font-bold text-amber-800">
+                    Vui lòng dùng thông tin liên hệ trong mô tả để được tư vấn và báo giá.
+                  </p>
+                )}
               </div>
             </div>
           </div>
