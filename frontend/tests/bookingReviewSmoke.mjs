@@ -71,12 +71,13 @@ try {
   assert.equal(await page.getByText('SMOKE-SERVICE-updated', { exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Đã hiểu' }).click();
   await page.getByRole('button', { name: 'Partner', exact: true }).click();
-  const reviewedPartnerName = (await page.locator('h1').first().textContent())?.trim();
+  const reviewedPartnerName = (await page.getByTestId('partner-shop-name').textContent())?.trim();
   assert.ok(reviewedPartnerName);
   await page.getByText('SMOKE-SUPPLIER-updated', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Service', exact: true }).click();
   await page.getByRole('button', { name: `Xem cửa hàng ${reviewedPartnerName}`, exact: true }).click();
-  await page.getByRole('heading', { name: reviewedPartnerName, exact: true }).waitFor();
+  await page.getByTestId('partner-shop-name').waitFor();
+  assert.equal((await page.getByTestId('partner-shop-name').textContent())?.trim(), reviewedPartnerName);
   await page.getByRole('button', { name: 'Tất cả dịch vụ & Đánh giá', exact: true }).waitFor();
   await page.getByText('SMOKE-SUPPLIER-updated', { exact: true }).waitFor();
   // Real createBooking -> real createPayment persistence, but never contact PayOS:

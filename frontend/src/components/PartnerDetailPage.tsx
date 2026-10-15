@@ -236,7 +236,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                   </span>
                 </div>
 
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+                <h1 data-testid="partner-shop-name" className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
                   {partnerProfile.name}
                 </h1>
                 <p className="text-xs sm:text-sm text-pink-700 font-bold mt-0.5">
