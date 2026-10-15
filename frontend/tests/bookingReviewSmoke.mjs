@@ -71,11 +71,14 @@ try {
   assert.equal(await page.getByText('SMOKE-SERVICE-updated', { exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Đã hiểu' }).click();
   await page.getByRole('button', { name: 'Partner', exact: true }).click();
+  const reviewedPartnerName = (await page.locator('h1').first().textContent())?.trim();
+  assert.ok(reviewedPartnerName);
   await page.getByText('SMOKE-SUPPLIER-updated', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Service', exact: true }).click();
-  await page.getByRole('button', { name: 'Đánh giá (1)', exact: true }).first().click();
-  await page.getByText('SMOKE-SERVICE-updated', { exact: true }).waitFor();
-  await page.locator('.fixed.inset-0.z-50').getByRole('button').filter({ has: page.locator('svg.lucide-x') }).first().click();
+  await page.getByRole('button', { name: `Xem cửa hàng ${reviewedPartnerName}`, exact: true }).click();
+  await page.getByRole('heading', { name: reviewedPartnerName, exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Tất cả dịch vụ & Đánh giá', exact: true }).waitFor();
+  await page.getByText('SMOKE-SUPPLIER-updated', { exact: true }).waitFor();
   // Real createBooking -> real createPayment persistence, but never contact PayOS:
   // block the redirect and replace it with a visibly test-only local document.
   await page.route('https://pay.payos.vn/**', route => route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<h1>FAKE GATEWAY — NO MONEY TRANSFER</h1>' }));

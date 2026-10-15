@@ -418,6 +418,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
                   key={partner.supplierId}
                   type="button"
                   onClick={() => openPartner(partner)}
+                  aria-label={`Xem cửa hàng ${partner.name}`}
                   className="group overflow-hidden rounded-3xl border border-pink-100 bg-white text-left shadow-xs transition duration-200 hover:-translate-y-1 hover:border-pink-300 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e1146c]"
                 >
                   <div className="relative aspect-[16/10] overflow-hidden bg-pink-50">

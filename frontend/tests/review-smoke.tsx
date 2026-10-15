@@ -27,6 +27,7 @@ const checkoutDate = pending.appointmentDate;
 function Harness() {
   const [view, setView] = useState('Bookings');
   const [service, setService] = useState(initial);
+  const [selectedPartner, setSelectedPartner] = useState<NewPartner | null>(null);
   const deal: HotDeal = { id: `display-service-${service.id}`, serviceId: service.id, supplierId: service.supplierId,
     title: service.name, brandName: service.supplierName, brandLogo: '', image: service.imageUrl,
     originalPrice: service.price, salePrice: service.price, discountPercent: 0, duration: '60 phút', category: 'spa', highlightText: '', ...serviceReviewSummary(service) };
@@ -40,8 +41,8 @@ function Harness() {
     {view === 'Appointments' && <AppointmentsModal isOpen appointments={[]} onClose={() => setView('Bookings')} onBookNew={() => {}} />}
     {view === 'Checkout' && <CheckoutPage currentUser={user} directService={service} preselectedDate={checkoutDate} preselectedTime="13:00" onBack={() => setView('Bookings')} onViewBookings={() => setView('Bookings')} onNeedLogin={() => {}} />}
     {view === 'Explore' && <FilterExplorePage onBack={() => {}} onBookDeal={() => {}} onAddToCart={() => {}} deals={[deal]} salons={[]} partners={[partner]} />}
-    {view === 'Service' && <CategoryServicePage category={{ id: 1, slug: service.categorySlug, name: 'Smoke services', description: '', imageUrl: '' }} currentUser={user} locationId={null} locationLabel="Smoke" onBack={() => {}} onNeedLogin={() => {}} onBookingCreated={() => {}} />}
-    {view === 'Partner' && <PartnerDetailPage partner={partner} currentUser={user} onBack={() => {}} onNeedLogin={() => {}} onBookService={() => {}} />}
+    {view === 'Service' && <CategoryServicePage category={{ id: 1, slug: service.categorySlug, name: 'Smoke services', description: '', imageUrl: '' }} currentUser={user} locationId={null} locationLabel="Smoke" onBack={() => {}} onNeedLogin={() => {}} onBookingCreated={() => {}} onSelectPartner={(nextPartner) => { setSelectedPartner(nextPartner); setView('Partner'); }} />}
+    {view === 'Partner' && <PartnerDetailPage partner={selectedPartner || partner} currentUser={user} onBack={() => {}} onNeedLogin={() => {}} onBookService={() => {}} />}
   </>;
 }
 createRoot(document.getElementById('root')!).render(<Harness />);
