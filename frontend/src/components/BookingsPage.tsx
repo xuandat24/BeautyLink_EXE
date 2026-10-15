@@ -260,7 +260,11 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
                       {item.paymentStatus === 'PAID'
                         ? 'Đã thanh toán đủ'
                         : item.paymentStatus === 'PARTIALLY_PAID'
-                          ? 'Đã cọc 50%'
+                          ? item.paymentOption === 'DEPOSIT_50'
+                            ? 'Đã cọc 50% (giao dịch cũ)'
+                            : item.paymentOption === 'DEPOSIT_05'
+                              ? 'Đã cọc 5%'
+                              : 'Đã đặt cọc'
                           : item.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : 'Chờ thanh toán'}
                     </span>
                   </div>

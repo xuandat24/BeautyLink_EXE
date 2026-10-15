@@ -3,15 +3,20 @@ import { beautyApi, getAccessToken, getApiErrorMessage } from '../services/beaut
 import { useBeautyStore } from '../store/beautyStore';
 import { canPayBooking, safeCheckout } from '../lib/bookingPolicy';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
-import type { BackendBooking } from '../types';
+import type { BackendBooking, PaymentOption, PaymentQuote } from '../types';
+
+const formatMoney = (value: number | null | undefined) => value == null ? 'Đang xác minh' : `${value.toLocaleString('vi-VN')}đ`;
 
 export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: number; onClose: () => void }) {
   const { currentUser } = useBeautyStore();
   const [sessionRevision, setSessionRevision] = useState(0);
   const session = `${getAccessToken() ?? ''}:${currentUser?.id ?? ''}:${sessionRevision}`;
   const [booking, setBooking] = useState<BackendBooking | null>(null);
-  const [option, setOption] = useState<'DEPOSIT_50' | 'FULL_100'>('DEPOSIT_50');
+  const [option, setOption] = useState<PaymentOption>('DEPOSIT_05');
   const [voucher, setVoucher] = useState('');
+  const [quote, setQuote] = useState<PaymentQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState('');
   const [error, setError] = useState(''); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const generation = useRef(0); const submitting = useRef(false); const latestId = useRef(bookingId); latestId.current = bookingId;
@@ -26,13 +31,32 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
     beautyApi.myBooking(bookingId).then(data => {
       if (version !== generation.current || token !== getAccessToken()) return;
       if (data.id !== bookingId) throw new Error('Máy chủ trả về lịch hẹn không khớp.');
-      setBooking(data); setOption(data.paymentOption ?? 'DEPOSIT_50'); setVoucher(data.paymentVoucherCode ?? '');
+      setBooking(data);
+      setOption(data.paymentAttemptActive && data.paymentOption ? data.paymentOption : 'DEPOSIT_05');
+      setVoucher(data.paymentAttemptActive ? data.paymentVoucherCode ?? '' : '');
     }).catch(err => { if (version === generation.current && token === getAccessToken()) setError(getApiErrorMessage(err, 'Không tải được lịch hẹn.')); })
       .finally(() => { if (version === generation.current) setLoading(false); });
     return () => { generation.current++; };
   }, [bookingId, session, revision]);
+  useEffect(() => {
+    let active = true;
+    setQuote(null);
+    setQuoteError('');
+    setQuoteLoading(false);
+    if (!booking || booking.paymentAttemptActive || option === 'DEPOSIT_50' || !canPayBooking(booking)) return () => { active = false; };
+    setQuoteLoading(true);
+    beautyApi.bookingPaymentQuote(booking.id, option, voucher.trim() || undefined)
+      .then(value => { if (active) setQuote(value); })
+      .catch(err => { if (active) setQuoteError(getApiErrorMessage(err, 'Không thể xác minh số tiền với máy chủ.')); })
+      .finally(() => { if (active) setQuoteLoading(false); });
+    return () => { active = false; };
+  }, [booking, option, voucher]);
   const pay = async () => {
     if (submitting.current || !booking || !canPayBooking(booking)) return;
+    if (!booking.paymentAttemptActive && (quoteLoading || quoteError || !quote?.paymentAvailable)) {
+      setError(quoteError || 'Số tiền chưa được máy chủ xác minh hoặc chưa thể thanh toán qua PayOS.');
+      return;
+    }
     submitting.current = true; setBusy(true); setError('');
     const version = generation.current, token = getAccessToken();
     const current = () => version === generation.current && bookingId === latestId.current && token !== null && token === getAccessToken();
@@ -44,6 +68,10 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
       // Options are from server or explicit customer input, never restored browser payment data.
       const payment = await beautyApi.createPayOSPayment(bookingId, { paymentOption: option, voucherCode: voucher.trim() || undefined });
       if (!current()) return;
+      if (!booking.paymentAttemptActive && quote && (payment.paymentOption !== quote.paymentOption
+          || payment.amount !== quote.amount || payment.remainingAmount !== quote.remainingAmount)) {
+        throw new Error('Giá thanh toán đã thay đổi sau khi máy chủ xác minh. Phiên PayOS được giữ nguyên để bạn kiểm tra trước khi tiếp tục.');
+      }
       const url = safeCheckout(payment, bookingId);
       if (!url) throw new Error('Chưa có checkout an toàn. Không thanh toán lại; vui lòng làm mới hoặc liên hệ hỗ trợ.');
       sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
@@ -76,11 +104,18 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
       {error && <p role="alert" className="text-rose-700">{error}</p>}
       {booking && <><p>{booking.bookingCode} — {booking.serviceName}</p><p>{booking.appointmentDate} {booking.startTime.slice(0, 5)} — {booking.totalAmount.toLocaleString('vi-VN')}đ</p>
         {!canPayBooking(booking) && <p role="alert">Lịch hẹn không thể mở checkout ({booking.paymentBlockerReason ?? booking.status}). Vui lòng liên hệ hỗ trợ khi cần đối soát.</p>}
-        <label className="block">Hình thức thanh toán<select aria-label="Hình thức thanh toán" value={option} disabled={busy || !canPayBooking(booking) || booking.paymentAttemptActive === true} onChange={e => setOption(e.target.value as typeof option)}>
-          <option value="DEPOSIT_50">Đặt cọc 50%</option><option value="FULL_100">Thanh toán 100%</option></select></label>
+        <label className="block">Hình thức thanh toán<select aria-label="Hình thức thanh toán" value={option} disabled={busy || !canPayBooking(booking) || booking.paymentAttemptActive === true} onChange={e => setOption(e.target.value as PaymentOption)}>
+          {option === 'DEPOSIT_50' && <option value="DEPOSIT_50">Đặt cọc 50% (giao dịch cũ)</option>}
+          <option value="DEPOSIT_05">Đặt cọc 5%</option><option value="FULL_100">Thanh toán 100%</option></select></label>
         <label className="block">Voucher<input aria-label="Voucher" maxLength={40} value={voucher} disabled={busy || !canPayBooking(booking) || booking.paymentAttemptActive === true} onChange={e => setVoucher(e.target.value)} /></label>
         {booking.paymentAttemptActive && <p>Phiên đang hoạt động giữ nguyên hình thức thanh toán/voucher; không tạo lại link để thay đổi.</p>}
-        <button type="button" disabled={loading || busy || !canPayBooking(booking)} onClick={() => void pay()} className="rounded-xl bg-pink-600 p-3 text-white">{busy ? 'Đang kiểm tra...' : 'Tiếp tục tới PayOS'}</button>
+        <div className="rounded-xl border border-pink-100 bg-pink-50/50 p-3 text-sm">
+          <p>Cần thanh toán ngay: <strong>{formatMoney(booking.paymentAttemptActive ? booking.paymentAmount : quote?.amount)}</strong></p>
+          <p>Còn lại tại salon: <strong>{formatMoney(booking.paymentAttemptActive ? booking.paymentRemainingAmount : quote?.remainingAmount)}</strong></p>
+        </div>
+        {quoteError && <p role="alert" className="text-rose-700">{quoteError}</p>}
+        {quote && !quote.paymentAvailable && <p role="alert">Số tiền này chưa đạt mức tối thiểu của PayOS. Hãy chọn thanh toán 100% nếu tùy chọn đó hợp lệ.</p>}
+        <button type="button" disabled={loading || busy || !canPayBooking(booking) || (!booking.paymentAttemptActive && (quoteLoading || Boolean(quoteError) || !quote?.paymentAvailable))} onClick={() => void pay()} className="rounded-xl bg-pink-600 p-3 text-white">{busy ? 'Đang kiểm tra...' : quoteLoading ? 'Đang xác minh giá...' : 'Tiếp tục tới PayOS'}</button>
       </>}
       <button type="button" disabled={busy || loading} onClick={() => setRevision(n => n + 1)}>Làm mới trạng thái</button>
     </div>

@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import {
   BackendCategory,
   BackendService,
@@ -20,6 +20,8 @@ import {
   BookingDetails,
   BookingSchema,
   PayOSPayment,
+  PaymentOption,
+  PaymentQuote,
 } from '../types';
 import {
   HOT_DEALS,
@@ -151,6 +153,24 @@ export function getApiErrorMessage(err: unknown, defaultMessage = 'Đã xảy ra
     return err.message;
   }
   return defaultMessage;
+}
+
+export function getAuthErrorMessage(err: unknown): string {
+  if (!axios.isAxiosError(err)) return getApiErrorMessage(err, 'Không thể xác thực tài khoản. Vui lòng thử lại.');
+  const data = err.response?.data as { code?: string; message?: string; fields?: Record<string, string> } | undefined;
+  if (err.response?.status === 401 || data?.code === 'INVALID_CREDENTIALS') {
+    return 'Thông tin đăng nhập không chính xác';
+  }
+  if (err.response?.status === 429 || data?.code === 'RATE_LIMITED') {
+    return data?.message || 'Bạn đã thử quá nhiều lần. Vui lòng đợi rồi thử lại.';
+  }
+  if (!err.response || err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED') {
+    return 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng và thử lại.';
+  }
+  if (err.response.status >= 500) {
+    return 'Dịch vụ đăng nhập đang tạm gián đoạn. Vui lòng thử lại sau.';
+  }
+  return getApiErrorMessage(err, 'Không thể xác thực tài khoản. Vui lòng thử lại.');
 }
 
 const unwrap = <T>(promise: Promise<{ data: T }>): Promise<T> => promise.then(({ data }) => data);
@@ -725,9 +745,17 @@ export const beautyApi = {
 
   async createPayOSPayment(
     bookingId: number,
-    data: { paymentOption: 'DEPOSIT_50' | 'FULL_100'; voucherCode?: string }
+    data: { paymentOption: PaymentOption; voucherCode?: string }
   ): Promise<PayOSPayment> {
     return unwrap(apiClient.post(`/v1/payments/payos/bookings/${bookingId}`, data));
+  },
+
+  async servicePaymentQuote(serviceId: number, paymentOption: Exclude<PaymentOption, 'DEPOSIT_50'>, voucherCode?: string): Promise<PaymentQuote> {
+    return unwrap(apiClient.get(`/v1/services/${serviceId}/payment-quote`, { params: { paymentOption, voucherCode } }));
+  },
+
+  async bookingPaymentQuote(bookingId: number, paymentOption: Exclude<PaymentOption, 'DEPOSIT_50'>, voucherCode?: string): Promise<PaymentQuote> {
+    return unwrap(apiClient.get(`/v1/payments/payos/bookings/${bookingId}/quote`, { params: { paymentOption, voucherCode } }));
   },
 
   async payOSPaymentStatus(orderCode: string): Promise<PayOSPayment> {

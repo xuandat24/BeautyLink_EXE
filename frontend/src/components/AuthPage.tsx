@@ -25,7 +25,7 @@ import {
   CalendarDays,
 } from 'lucide-react';
 import { CurrentUser } from '../types';
-import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { beautyApi, getAuthErrorMessage } from '../services/beautyApi';
 import { customerAuthSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
 import { PasswordResetPanel } from './PasswordResetPanel';
@@ -114,6 +114,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [emailCode, setEmailCode] = useState('');
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const otpInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const submissionBusy = useRef(false);
 
   const resetVerification = () => {
     setVerificationChallengeId('');
@@ -159,6 +161,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submissionBusy.current) return;
     setError('');
 
     const validation = customerAuthSchema.safeParse({
@@ -182,6 +185,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
     const cleanPhone = identifier.replace(/[\s.-]/g, '');
 
+    submissionBusy.current = true;
     setLoading(true);
     try {
       if (mode === 'login') {
@@ -236,10 +240,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         onSuccess(mappedUser);
       }
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể xác thực tài khoản. Vui lòng kiểm tra lại thông tin.'));
+      setError(getAuthErrorMessage(err));
     } finally {
+      submissionBusy.current = false;
       setLoading(false);
     }
+  };
+
+  const togglePasswordVisibility = () => {
+    const input = passwordInputRef.current;
+    const selectionStart = input?.selectionStart ?? password.length;
+    const selectionEnd = input?.selectionEnd ?? selectionStart;
+    setShowPassword(value => !value);
+    window.requestAnimationFrame(() => {
+      passwordInputRef.current?.focus({ preventScroll: true });
+      try { passwordInputRef.current?.setSelectionRange(selectionStart, selectionEnd); } catch { /* unsupported input selection */ }
+    });
   };
 
   const activeBooking = LIVE_BOOKINGS[activeBookingIndex];
@@ -434,12 +450,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div className="relative">
                     <Phone className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                     <input
+                      id="customer-identifier"
+                      name="username"
                       type="text"
                       required
                       value={identifier}
                       onChange={(e) => { setIdentifier(mode === 'register' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value); resetVerification(); setFieldErrors((prev) => ({ ...prev, identifier: '' })); }}
                       maxLength={mode === 'register' ? 10 : 254}
                       inputMode={mode === 'register' ? 'numeric' : 'email'}
+                      autoComplete={mode === 'login' ? 'username' : 'tel'}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       aria-invalid={Boolean(fieldErrors.identifier)}
                       aria-describedby="identifier-error"
                       placeholder={mode === 'login' ? '0901234567 hoặc user@example.com' : '0901234567'}
@@ -526,20 +548,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                     <input
+                      ref={passwordInputRef}
+                      id="customer-password"
+                      name="password"
                       type={showPassword ? 'text' : 'password'}
                       required
                       value={password}
                       onChange={(e) => { setPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, password: '' })); }}
                       minLength={mode === 'register' ? 8 : 1}
                       maxLength={72}
+                      autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       aria-invalid={Boolean(fieldErrors.password)}
                       aria-describedby="password-error"
-                      placeholder="••••••••"
+                      placeholder="Nhập mật khẩu"
                       className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium bg-pink-50/20"
                     />
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
+                      onClick={togglePasswordVisibility}
+                      aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                       className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -568,15 +598,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     <div className="relative">
                       <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                       <input
+                        id="customer-confirm-password"
+                        name="confirmPassword"
                         type={showPassword ? 'text' : 'password'}
                         required
                         value={confirmPassword}
                         onChange={(e) => { setConfirmPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, confirmPassword: '' })); }}
                         minLength={8}
                         maxLength={72}
+                        autoComplete="new-password"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
                         aria-invalid={Boolean(fieldErrors.confirmPassword)}
                         aria-describedby="confirmPassword-error"
-                        placeholder="••••••••"
+                        placeholder="Nhập lại mật khẩu"
                         className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-pink-200 focus:border-[#be185d] focus:ring-2 focus:ring-pink-200/50 outline-hidden text-xs text-slate-800 font-medium bg-pink-50/20"
                       />
                     </div>

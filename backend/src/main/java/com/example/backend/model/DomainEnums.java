@@ -11,7 +11,8 @@ public final class DomainEnums {
     public enum VerificationStatus { PENDING, VERIFIED, REJECTED, SUSPENDED }
     public enum BookingStatus { PENDING, CONFIRMED, COMPLETED, CANCELLED }
     public enum PaymentStatus { UNPAID, PARTIALLY_PAID, PAID, REFUNDED }
-    public enum PaymentOption { DEPOSIT_50, FULL_100 }
+    /** DEPOSIT_50 is retained only for persisted legacy attempts and safe continuation. */
+    public enum PaymentOption { DEPOSIT_50, DEPOSIT_05, FULL_100 }
     public enum PaymentTransactionStatus { PENDING, PAID, CANCELLED, EXPIRED, FAILED, REVIEW_REQUIRED }
     public enum ReviewTargetType { SERVICE, SUPPLIER }
     public enum ReportStatus { OPEN, IN_REVIEW, RESOLVED, REJECTED }

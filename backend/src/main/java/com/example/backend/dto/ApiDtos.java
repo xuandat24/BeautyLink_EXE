@@ -131,7 +131,8 @@ public final class ApiDtos {
                                   BookingReviewResponse serviceReview, BookingReviewResponse supplierReview,
                                   boolean completionEligible, boolean cancelEligible,
                                   boolean paymentEligible, String paymentBlockerReason,
-                                  PaymentOption paymentOption, String paymentVoucherCode, boolean paymentAttemptActive) {}
+                                  PaymentOption paymentOption, String paymentVoucherCode, boolean paymentAttemptActive,
+                                  BigDecimal paymentAmount, BigDecimal paymentRemainingAmount) {}
     public record BookingHistoryStatusResponse(boolean hasPreviousBooking) {}
     public record PaymentReviewAttempt(Long id, Long orderCode, String paymentLinkId,
             PaymentTransactionStatus appStatus, boolean manual, BigDecimal expectedAmount, Instant paidAt, Instant updatedAt,
@@ -191,6 +192,10 @@ public final class ApiDtos {
     public record CreatePayOSPaymentRequest(
             @NotNull(message = "Vui lòng chọn hình thức thanh toán") PaymentOption paymentOption,
             @Pattern(regexp = "^[A-Z0-9_-]{3,40}$", message = "Mã voucher không hợp lệ") String voucherCode) {}
+    public record PaymentQuoteResponse(BigDecimal originalAmount, BigDecimal discountAmount,
+                                       BigDecimal payableAmount, BigDecimal amount, BigDecimal remainingAmount,
+                                       PaymentOption paymentOption, boolean paymentAvailable,
+                                       String unavailableReason) {}
     public record PayOSPaymentResponse(Long bookingId, String bookingCode, Long orderCode, String paymentLinkId,
                                        String checkoutUrl, BigDecimal amount, BigDecimal remainingAmount,
                                        PaymentOption paymentOption, PaymentTransactionStatus status,

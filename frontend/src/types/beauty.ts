@@ -120,9 +120,11 @@ export interface BackendBooking {
   cancelEligible?: boolean;
   paymentEligible?: boolean;
   paymentBlockerReason?: string | null;
-  paymentOption?: 'DEPOSIT_50' | 'FULL_100' | null;
+  paymentOption?: PaymentOption | null;
   paymentVoucherCode?: string | null;
   paymentAttemptActive?: boolean;
+  paymentAmount?: number | null;
+  paymentRemainingAmount?: number | null;
   serviceReview?: BookingReview | null;
   supplierReview?: BookingReview | null;
 }
@@ -145,10 +147,23 @@ export interface PayOSPayment {
   checkoutUrl: string | null;
   amount: number;
   remainingAmount: number;
-  paymentOption: 'DEPOSIT_50' | 'FULL_100';
+  paymentOption: PaymentOption;
   status: 'PENDING' | 'PAID' | 'CANCELLED' | 'EXPIRED' | 'FAILED' | 'REVIEW_REQUIRED';
   requiresManualReview: boolean;
   expiresAt: string;
+}
+
+export type PaymentOption = 'DEPOSIT_50' | 'DEPOSIT_05' | 'FULL_100';
+
+export interface PaymentQuote {
+  originalAmount: number;
+  discountAmount: number;
+  payableAmount: number;
+  amount: number;
+  remainingAmount: number;
+  paymentOption: PaymentOption;
+  paymentAvailable: boolean;
+  unavailableReason: 'PAYMENT_UNAVAILABLE_ZERO' | 'DEPOSIT_TOO_LOW_USE_FULL_PAYMENT' | 'PAYMENT_UNAVAILABLE_AMOUNT_TOO_LOW' | null;
 }
 
 export interface BackendSupplierProfile {
@@ -308,7 +323,7 @@ export interface BookingDetails {
   paymentTime?: string; // Thời gian thanh toán tiền ngay dưới số tiền
   paidAmount?: number;
   remainingAmount?: number;
-  depositType?: 'deposit50' | 'full100';
+  depositType?: 'deposit05' | 'deposit50' | 'full100';
   paymentMethod?: string;
 }
 

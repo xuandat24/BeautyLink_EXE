@@ -429,9 +429,15 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                     <input
+                      id="supplier-password"
+                      name="password"
                       required
                       minLength={8}
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       value={formData.password}
                       onChange={(e) => updateField('password', e.target.value)}
                       placeholder="Mật khẩu bảo mật"
@@ -455,9 +461,15 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                   <input
+                    id="supplier-confirm-password"
+                    name="confirmPassword"
                     required
                     minLength={8}
                     type="password"
+                    autoComplete="new-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     value={formData.confirmPassword}
                     onChange={(e) => updateField('confirmPassword', e.target.value)}
                     placeholder="Nhập lại mật khẩu giống bên trên"

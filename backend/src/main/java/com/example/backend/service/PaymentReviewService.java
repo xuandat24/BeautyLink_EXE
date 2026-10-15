@@ -101,7 +101,7 @@ public class PaymentReviewService {
         var primary = records.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PAID).toList();
         if (primary.size() != 1) return false;
         PaymentTransaction paid = primary.get(0);
-        PaymentStatus expected = paid.getPaymentOption() == PaymentOption.DEPOSIT_50 ? PaymentStatus.PARTIALLY_PAID : PaymentStatus.PAID;
+        PaymentStatus expected = paid.getPaymentOption() == PaymentOption.FULL_100 ? PaymentStatus.PAID : PaymentStatus.PARTIALLY_PAID;
         if (b.getPaymentStatus() != expected || paid.isRequiresManualReview() || paid.getPaidAt() == null
                 || paid.getPaymentLinkId() == null || paid.getPaymentLinkId().isBlank()) return false;
         return evidence.stream().allMatch(e -> {

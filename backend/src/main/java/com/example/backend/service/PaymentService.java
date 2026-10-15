@@ -2,6 +2,7 @@ package com.example.backend.service;
 
 import com.example.backend.dto.ApiDtos.CreatePayOSPaymentRequest;
 import com.example.backend.dto.ApiDtos.PayOSPaymentResponse;
+import com.example.backend.dto.ApiDtos.PaymentQuoteResponse;
 import com.example.backend.exception.ApiException;
 import com.example.backend.model.Booking;
 import com.example.backend.model.PaymentTransaction;
@@ -27,7 +28,6 @@ import vn.payos.model.webhooks.Webhook;
 import vn.payos.model.webhooks.WebhookData;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -39,7 +39,6 @@ import static com.example.backend.model.DomainEnums.*;
 @Service
 public class PaymentService {
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
-    private static final BigDecimal MIN_PAYOS_AMOUNT = new BigDecimal("2000");
     private static final long CHECKOUT_TTL_SECONDS = 15 * 60;
 
     private final PaymentTransactionRepository payments;
@@ -52,11 +51,13 @@ public class PaymentService {
     private final long reconciliationMinIntervalSeconds;
     private final AvailabilityService availability;
     private final BookingCompletionPolicy time;
+    private final PaymentQuoteService paymentQuotes;
     private final TransactionTemplate checkoutTransactions;
 
     public PaymentService(PaymentTransactionRepository payments, BookingRepository bookings,
                           PractitionerRepository practitioners, PayOSGateway gateway, AvailabilityService availability,
                           PlatformTransactionManager transactionManager, BookingCompletionPolicy time,
+                          PaymentQuoteService paymentQuotes,
                           @Value("${app.payos.return-url}") String returnUrl,
                           @Value("${app.payos.cancel-url}") String cancelUrl,
                           @Value("${app.payos.reconciliation-min-age-seconds:60}") long reconciliationMinAgeSeconds,
@@ -67,6 +68,7 @@ public class PaymentService {
         this.gateway = gateway;
         this.availability = availability;
         this.time = time;
+        this.paymentQuotes = paymentQuotes;
         this.checkoutTransactions = new TransactionTemplate(transactionManager);
         this.checkoutTransactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.checkoutTransactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
@@ -94,6 +96,16 @@ public class PaymentService {
         CreationResult result = checkoutTransactions.execute(s -> finishCheckout(customer, creation, provider));
         if (result.error() != null) throw result.error(); // outside committed transaction
         return result.response();
+    }
+
+    @Transactional(readOnly = true)
+    public PaymentQuoteResponse quote(UserAccount customer, Long bookingId, PaymentOption option, String voucherCode) {
+        Booking booking = bookings.findById(bookingId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "Không tìm thấy lịch hẹn"));
+        if (!booking.getCustomer().getId().equals(customer.getId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "BOOKING_FORBIDDEN", "Bạn không thể xem giá thanh toán của lịch hẹn này");
+        }
+        return paymentQuotes.calculate(booking.getTotalAmount(), option, voucherCode);
     }
 
     private Creation reserveCheckout(UserAccount customer, Long bookingId, CreatePayOSPaymentRequest request) {
@@ -127,22 +139,15 @@ public class PaymentService {
         if (BookingPaymentPolicy.unresolved(attempts) || isPaid(booking))
             return new Creation(bookingId, null, null, BookingPaymentPolicy.manual(attempts) ? manualError() : isPaid(booking) ? paidCancellationError() : reconcilingError());
         if (booking.getStatus() == BookingStatus.CANCELLED) reopenReleasedSlot(booking);
-        BigDecimal total = booking.getTotalAmount().setScale(0, RoundingMode.HALF_UP);
-        BigDecimal payable = total.subtract(calculateDiscount(total, voucherCode)).max(BigDecimal.ZERO);
-        BigDecimal amount = request.paymentOption() == PaymentOption.DEPOSIT_50
-                ? payable.multiply(new BigDecimal("0.50")).setScale(0, RoundingMode.HALF_UP) : payable;
-        BigDecimal remaining = request.paymentOption() == PaymentOption.DEPOSIT_50
-                ? payable.subtract(amount) : BigDecimal.ZERO;
-        if (amount.compareTo(MIN_PAYOS_AMOUNT) < 0) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMENT_AMOUNT_TOO_LOW", "Số tiền thanh toán PayOS tối thiểu là 2.000đ");
-        }
+        PaymentQuoteResponse quote = paymentQuotes.calculate(booking.getTotalAmount(), request.paymentOption(), voucherCode);
+        paymentQuotes.requireAvailable(quote);
 
         PaymentTransaction transaction = new PaymentTransaction();
         transaction.setBooking(booking);
         transaction.setOrderCode(nextOrderCode(bookingId));
         transaction.setMerchantReference(Long.toString(transaction.getOrderCode()));
-        transaction.setAmount(amount);
-        transaction.setRemainingAmount(remaining);
+        transaction.setAmount(quote.amount());
+        transaction.setRemainingAmount(quote.remainingAmount());
         transaction.setPaymentOption(request.paymentOption());
         transaction.setVoucherCode(voucherCode);
         transaction.setStatus(PaymentTransactionStatus.PENDING);
@@ -151,7 +156,7 @@ public class PaymentService {
         payments.saveAndFlush(transaction);
 
         CreatePaymentLinkRequest paymentRequest = CreatePaymentLinkRequest.builder()
-                .orderCode(transaction.getOrderCode()).amount(amount.longValueExact())
+                .orderCode(transaction.getOrderCode()).amount(quote.amount().longValueExact())
                 .description(payOSDescription(transaction.getOrderCode()))
                 .buyerName(customer.getFullName()).buyerEmail(customer.getEmail()).buyerPhone(customer.getPhone())
                 .returnUrl(returnUrl).cancelUrl(cancelUrl).expiredAt(transaction.getExpiresAt().getEpochSecond()).build();
@@ -342,7 +347,7 @@ public class PaymentService {
         if (reference != null) payment.setPaymentReference(reference);
         payment.setPaidAt(paidAt == null ? time.now() : paidAt);
         Booking booking = payment.getBooking();
-        booking.setPaymentStatus(payment.getPaymentOption() == PaymentOption.DEPOSIT_50 ? PaymentStatus.PARTIALLY_PAID : PaymentStatus.PAID);
+        booking.setPaymentStatus(payment.getPaymentOption() == PaymentOption.FULL_100 ? PaymentStatus.PAID : PaymentStatus.PARTIALLY_PAID);
         booking.setStatus(BookingStatus.CONFIRMED);
         booking.setPaymentRetryAllowed(false);
         closeSupersededAttempts(payment);
@@ -440,20 +445,6 @@ public class PaymentService {
 
     private String normalizeVoucher(String voucherCode) {
         return voucherCode == null || voucherCode.isBlank() ? null : voucherCode.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private BigDecimal calculateDiscount(BigDecimal total, String code) {
-        if (code == null) return BigDecimal.ZERO;
-        return switch (code) {
-            case "BEAUTY50" -> total.compareTo(new BigDecimal("200000")) >= 0 ? new BigDecimal("50000") : invalidVoucher();
-            case "BEAUTY100" -> total.compareTo(new BigDecimal("500000")) >= 0 ? new BigDecimal("100000") : invalidVoucher();
-            case "PINK15" -> total.multiply(new BigDecimal("0.15")).min(new BigDecimal("150000")).setScale(0, RoundingMode.HALF_UP);
-            default -> throw new ApiException(HttpStatus.BAD_REQUEST, "VOUCHER_INVALID", "Mã voucher không hợp lệ hoặc đã hết hạn");
-        };
-    }
-
-    private BigDecimal invalidVoucher() {
-        throw new ApiException(HttpStatus.BAD_REQUEST, "VOUCHER_MINIMUM_NOT_MET", "Đơn hàng chưa đạt giá trị tối thiểu của voucher");
     }
 
     private boolean isExpired(PaymentTransaction payment) {

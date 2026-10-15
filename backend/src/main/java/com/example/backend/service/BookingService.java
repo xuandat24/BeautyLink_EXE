@@ -123,7 +123,8 @@ public class BookingService {
                 b.getPaymentStatus(), !blocked && ReviewService.isEligible(b), serviceReview, supplierReview, !blocked && completion.canComplete(b),
                 BookingPaymentPolicy.canCancel(b, attempts), reason == null && (b.getStatus() != BookingStatus.CANCELLED || b.isPaymentRetryAllowed()), reason,
                 last == null ? null : last.getPaymentOption(), last == null ? null : last.getVoucherCode(),
-                attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PENDING));
+                attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PENDING),
+                last == null ? null : last.getAmount(), last == null ? null : last.getRemainingAmount());
     }
     private BookingReviewResponse reviewResponse(BookingReview review) {
         return new BookingReviewResponse(review.getId(), review.getBooking().getId(), review.getTargetType(), review.getRating(), review.getComment(), review.getCreatedAt(), review.getUpdatedAt());
