@@ -1,0 +1,61 @@
+index|fullName|phone|email|gender|dateOfBirth|city
+1|Nguyễn Minh Anh|0390000001|bl-customer-001@example.com|FEMALE|1986-02-02|Hà Nội
+2|Trần Thảo Vy|0390000002|bl-customer-002@example.com|FEMALE|1987-03-03|Hà Nội
+3|Lê Quốc Bảo|0390000003|bl-customer-003@example.com|MALE|1988-04-04|Hà Nội
+4|Phạm Ngọc Hà|0390000004|bl-customer-004@example.com|FEMALE|1989-05-05|Hà Nội
+5|Hoàng Gia Huy|0390000005|bl-customer-005@example.com|MALE|1990-06-06|Hà Nội
+6|Vũ Thanh Trúc|0390000006|bl-customer-006@example.com|FEMALE|1991-07-07|Hà Nội
+7|Đặng Khánh Linh|0390000007|bl-customer-007@example.com|FEMALE|1992-08-08|Hà Nội
+8|Bùi Đức Minh|0390000008|bl-customer-008@example.com|MALE|1993-09-09|Hà Nội
+9|Đỗ Mai Phương|0390000009|bl-customer-009@example.com|FEMALE|1994-10-10|Hà Nội
+10|Hồ Nhật Nam|0390000010|bl-customer-010@example.com|MALE|1995-11-11|Hà Nội
+11|Ngô Thu Trang|0390000011|bl-customer-011@example.com|FEMALE|1996-12-12|Hà Nội
+12|Dương Hải Long|0390000012|bl-customer-012@example.com|MALE|1997-01-13|Hà Nội
+13|Lý Bảo Ngọc|0390000013|bl-customer-013@example.com|OTHER|1998-02-14|Hà Nội
+14|Mai Quang Hưng|0390000014|bl-customer-014@example.com|MALE|1999-03-15|Hà Nội
+15|Tạ Phương Thảo|0390000015|bl-customer-015@example.com|FEMALE|2000-04-16|Hà Nội
+16|Cao Tuấn Kiệt|0390000016|bl-customer-016@example.com|MALE|2001-05-17|Hà Nội
+17|Châu Mỹ Duyên|0390000017|bl-customer-017@example.com|FEMALE|1985-06-18|Hà Nội
+18|Phan Anh Tuấn|0390000018|bl-customer-018@example.com|MALE|1986-07-19|Hà Nội
+19|Võ Diệu Linh|0390000019|bl-customer-019@example.com|FEMALE|1987-08-20|Hà Nội
+20|Huỳnh Thành Đạt|0390000020|bl-customer-020@example.com|MALE|1988-09-21|Hà Nội
+21|Nguyễn Hà My|0390000021|bl-customer-021@example.com|FEMALE|1989-10-22|Hà Nội
+22|Trần Hoàng Phúc|0390000022|bl-customer-022@example.com|MALE|1990-11-23|Hà Nội
+23|Lê Kim Ngân|0390000023|bl-customer-023@example.com|FEMALE|1991-12-24|Hà Nội
+24|Phạm Minh Khang|0390000024|bl-customer-024@example.com|MALE|1992-01-25|Hà Nội
+25|Hoàng Thanh Tâm|0390000025|bl-customer-025@example.com|FEMALE|1993-02-26|Hà Nội
+26|Vũ Bảo Châu|0390000026|bl-customer-026@example.com|FEMALE|1994-03-27|Hà Nội
+27|Đặng Nhật Minh|0390000027|bl-customer-027@example.com|MALE|1995-04-01|Hà Nội
+28|Bùi Ngọc Ánh|0390000028|bl-customer-028@example.com|FEMALE|1996-05-02|Hà Nội
+29|Đỗ Khánh Duy|0390000029|bl-customer-029@example.com|MALE|1997-06-03|Hà Nội
+30|Hồ Thu Hương|0390000030|bl-customer-030@example.com|FEMALE|1998-07-04|Hà Nội
+31|Ngô Thị Lan|0390000031|bl-customer-031@example.com|FEMALE|1999-08-05|Thành phố Hồ Chí Minh
+32|Dương Minh Quân|0390000032|bl-customer-032@example.com|MALE|2000-09-06|Thành phố Hồ Chí Minh
+33|Lý Thanh Hằng|0390000033|bl-customer-033@example.com|FEMALE|2001-10-07|Thành phố Hồ Chí Minh
+34|Mai Đức Hiếu|0390000034|bl-customer-034@example.com|MALE|1985-11-08|Thành phố Hồ Chí Minh
+35|Tạ Ngọc Mai|0390000035|bl-customer-035@example.com|FEMALE|1986-12-09|Thành phố Hồ Chí Minh
+36|Cao Anh Dũng|0390000036|bl-customer-036@example.com|MALE|1987-01-10|Thành phố Hồ Chí Minh
+37|Châu Khánh Hòa|0390000037|bl-customer-037@example.com|FEMALE|1988-02-11|Thành phố Hồ Chí Minh
+38|Phan Bảo Trâm|0390000038|bl-customer-038@example.com|FEMALE|1989-03-12|Thành phố Hồ Chí Minh
+39|Võ Quốc Khánh|0390000039|bl-customer-039@example.com|MALE|1990-04-13|Thành phố Hồ Chí Minh
+40|Huỳnh Ngọc Diệp|0390000040|bl-customer-040@example.com|FEMALE|1991-05-14|Thành phố Hồ Chí Minh
+41|Nguyễn Gia Bảo|0390000041|bl-customer-041@example.com|MALE|1992-06-15|Thành phố Hồ Chí Minh
+42|Trần Mỹ Linh|0390000042|bl-customer-042@example.com|FEMALE|1993-07-16|Thành phố Hồ Chí Minh
+43|Lê Hữu Tài|0390000043|bl-customer-043@example.com|MALE|1994-08-17|Thành phố Hồ Chí Minh
+44|Phạm Quỳnh Chi|0390000044|bl-customer-044@example.com|FEMALE|1995-09-18|Thành phố Hồ Chí Minh
+45|Hoàng Đức Anh|0390000045|bl-customer-045@example.com|MALE|1996-10-19|Thành phố Hồ Chí Minh
+46|Vũ Kim Oanh|0390000046|bl-customer-046@example.com|FEMALE|1997-11-20|Thành phố Hồ Chí Minh
+47|Đặng Minh Châu|0390000047|bl-customer-047@example.com|FEMALE|1998-12-21|Thành phố Hồ Chí Minh
+48|Bùi Thanh Sơn|0390000048|bl-customer-048@example.com|MALE|1999-01-22|Thành phố Hồ Chí Minh
+49|Đỗ Thảo Nhi|0390000049|bl-customer-049@example.com|FEMALE|2000-02-23|Thành phố Hồ Chí Minh
+50|Hồ Quang Vinh|0390000050|bl-customer-050@example.com|MALE|2001-03-24|Thành phố Hồ Chí Minh
+51|Ngô Gia Hân|0390000051|bl-customer-051@example.com|FEMALE|1985-04-25|Thành phố Hồ Chí Minh
+52|Dương Đức Thịnh|0390000052|bl-customer-052@example.com|MALE|1986-05-26|Thành phố Hồ Chí Minh
+53|Lý Mai Anh|0390000053|bl-customer-053@example.com|FEMALE|1987-06-27|Thành phố Hồ Chí Minh
+54|Mai Thanh Bình|0390000054|bl-customer-054@example.com|OTHER|1988-07-01|Thành phố Hồ Chí Minh
+55|Tạ Bảo Vy|0390000055|bl-customer-055@example.com|FEMALE|1989-08-02|Thành phố Hồ Chí Minh
+56|Cao Hoàng Lâm|0390000056|bl-customer-056@example.com|MALE|1990-09-03|Thành phố Hồ Chí Minh
+57|Châu Ngọc Phương|0390000057|bl-customer-057@example.com|FEMALE|1991-10-04|Thành phố Hồ Chí Minh
+58|Phan Nhật Huy|0390000058|bl-customer-058@example.com|MALE|1992-11-05|Thành phố Hồ Chí Minh
+59|Võ Thu Hiền|0390000059|bl-customer-059@example.com|FEMALE|1993-12-06|Thành phố Hồ Chí Minh
+60|Huỳnh Khánh Ngọc|0390000060|bl-customer-060@example.com|FEMALE|1994-01-07|Thành phố Hồ Chí Minh
