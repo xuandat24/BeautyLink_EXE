@@ -29,6 +29,7 @@ import { FieldError } from './FieldError';
 import { bookingDay, bookingMaxDate } from '../lib/bookingTime';
 import { paymentBookingId, setPaymentBookingId } from '../lib/paymentNavigation';
 import { PaymentContinuationDialog } from './PaymentContinuationDialog';
+import { BookingContactDialog } from './BookingContactDialog';
 
 interface CheckoutPageProps {
   currentUser: CurrentUser | null;
@@ -80,7 +81,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   preselectedDate,
   preselectedTime,
 }) => {
-  const { cartItems, updateCartQuantity } = useBeautyStore();
+  const { cartItems, updateCartQuantity, setCurrentUser } = useBeautyStore();
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
 
   // If there's a direct service passed, create synthetic cart list, else use store cart
   const items: CartItem[] = useMemo(() => {
@@ -241,15 +243,20 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   };
 
   // Submit & Complete Booking
-  const handleFinalSubmit = async () => {
+  const handleFinalSubmit = async (confirmedUser?: CurrentUser) => {
     if (submissionBusy.current) return;
     setErrorMsg('');
-    if (!currentUser) {
+    const bookingUser = confirmedUser || currentUser;
+    if (!bookingUser) {
       onNeedLogin();
       return;
     }
-    if (currentUser.role !== 'CUSTOMER') {
+    if (bookingUser.role !== 'CUSTOMER') {
       setErrorMsg('Chỉ tài khoản khách hàng có thể thực hiện thanh toán.');
+      return;
+    }
+    if (!bookingUser.phone || !bookingUser.bookingContactConfirmed) {
+      setContactDialogOpen(true);
       return;
     }
     if (items.length === 0) {
@@ -317,6 +324,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       window.location.assign(checkout);
     } catch (err: unknown) {
       if (current()) {
+        if (axios.isAxiosError(err) && err.response?.data?.code === 'BOOKING_CONTACT_REQUIRED') {
+          setContactDialogOpen(true);
+          return;
+        }
         setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng kiểm tra lịch hẹn trước khi thử lại.'));
         if (axios.isAxiosError(err) && err.response?.status === 401) onNeedLogin();
       }
@@ -359,6 +370,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // =========================================================================
   return (
     <div className="min-h-screen bg-[#FFF8F9] text-slate-900 pb-16">
+      {contactDialogOpen && currentUser && (
+        <BookingContactDialog
+          currentUser={currentUser}
+          onCancel={() => setContactDialogOpen(false)}
+          onComplete={(updatedUser) => {
+            setCurrentUser(updatedUser);
+            setContactDialogOpen(false);
+            void handleFinalSubmit(updatedUser);
+          }}
+        />
+      )}
       {/* Top Bar with Navigation */}
       <section className="bg-white border-b border-pink-100 shadow-2xs">
         <div className="max-w-4xl mx-auto px-4 py-3 sm:px-6 flex items-center justify-between">
@@ -1069,7 +1091,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <button
                   type="button"
                   disabled={submitting || quoteLoading}
-                  onClick={handleFinalSubmit}
+                  onClick={() => void handleFinalSubmit()}
                   className="w-full sm:flex-1 py-3.5 px-6 rounded-full bg-gradient-to-r from-[#e1146c] via-[#db2777] to-[#be185d] text-white text-xs sm:text-sm font-black shadow-lg shadow-pink-600/30 hover:opacity-95 active:scale-98 transition flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer disabled:cursor-wait disabled:opacity-50"
                 >
                   <Lock className="w-4 h-4" />

@@ -29,6 +29,8 @@ import { beautyApi, getAuthErrorMessage } from '../services/beautyApi';
 import { customerAuthSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
 import { PasswordResetPanel } from './PasswordResetPanel';
+import { GoogleSignInButton } from './GoogleSignInButton';
+import { mapBackendUser } from '../lib/authUser';
 
 interface AuthPageProps {
   initialMode: 'login' | 'register';
@@ -116,6 +118,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const otpInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const submissionBusy = useRef(false);
+  const googleSubmissionBusy = useRef(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogleCredential = async (credential: string) => {
+    if (googleSubmissionBusy.current) return;
+    googleSubmissionBusy.current = true;
+    setGoogleLoading(true);
+    setError('');
+    try {
+      const response = await beautyApi.googleLogin(credential, rememberMe);
+      onSuccess(mapBackendUser(response.user));
+    } catch (googleError) {
+      setError(getAuthErrorMessage(googleError));
+    } finally {
+      googleSubmissionBusy.current = false;
+      setGoogleLoading(false);
+    }
+  };
 
   const resetVerification = () => {
     setVerificationChallengeId('');
@@ -199,6 +219,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           memberTier: 'Gold',
           loyaltyPoints: 350,
           points: 350,
+          bookingContactConfirmed: Boolean(res.user.bookingContactConfirmed),
         };
         onSuccess(mappedUser);
       } else {
@@ -236,6 +257,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           memberTier: 'Standard',
           loyaltyPoints: 100,
           points: 100,
+          bookingContactConfirmed: Boolean(res.user.bookingContactConfirmed),
         };
         onSuccess(mappedUser);
       }
@@ -401,6 +423,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       <span>Đăng ký đối tác</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {!showPasswordReset && (
+                <div className="mb-5 space-y-3">
+                  <GoogleSignInButton
+                    busy={googleLoading}
+                    onCredential={handleGoogleCredential}
+                    onUnavailable={(message) => setError(message)}
+                  />
+                  <div className="flex items-center gap-3" aria-hidden="true">
+                    <span className="h-px flex-1 bg-slate-200" />
+                    <span className="text-[11px] font-bold text-slate-400">Hoặc tiếp tục với</span>
+                    <span className="h-px flex-1 bg-slate-200" />
                   </div>
                 </div>
               )}

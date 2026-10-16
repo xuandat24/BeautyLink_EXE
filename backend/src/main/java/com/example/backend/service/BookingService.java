@@ -35,6 +35,7 @@ public class BookingService {
             throw new ApiException(HttpStatus.CONFLICT, "SERVICE_PRICE_ON_REQUEST",
                     "Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá trước khi đặt lịch.");
         }
+        BookingContactPolicy.requireReady(customer);
         Practitioner practitioner;
         if (request.practitionerId() != null) {
             practitioner = practitioners.findByIdForUpdate(request.practitionerId()).filter(Practitioner::isActive)

@@ -50,6 +50,10 @@ public class AuthAbuseGuard {
         backend.clear(loginIdentifierKey(identifier));
     }
 
+    public void checkGoogleSignIn(String remoteAddress) {
+        consume("google-login-ip:" + digest(safe(remoteAddress)), loginMaxPerIp, loginWindowSeconds);
+    }
+
     public void checkRegistration(String remoteAddress) {
         consume("registration-ip:" + digest(safe(remoteAddress)), registrationMaxPerIp, registrationWindowSeconds);
     }

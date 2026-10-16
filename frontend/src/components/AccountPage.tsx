@@ -37,6 +37,8 @@ import { AvatarPickerModal } from './AvatarPickerModal';
 import { BookingsPage } from './BookingsPage';
 import { customerProfileSchema, FieldErrors, passwordChangeSchema, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
+import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { mapBackendUser } from '../lib/authUser';
 
 interface AccountPageProps {
   currentUser: CurrentUser | null;
@@ -60,6 +62,12 @@ interface UserProfileData {
 
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('vi-VN').format(val) + 'đ';
+};
+
+const displayBirthDate = (value?: string) => {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return value || '';
+  const [year, month, day] = value.split('-');
+  return `${day}/${month}/${year}`;
 };
 
 export const AccountPage: React.FC<AccountPageProps> = ({
@@ -90,6 +98,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   // Personal Info State with persistence
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
   const [profileErrors, setProfileErrors] = useState<FieldErrors>({});
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordErrors, setPasswordErrors] = useState<FieldErrors>({});
@@ -102,7 +111,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       address: currentUser?.address || '',
       citizenId: currentUser?.citizenId || '',
       gender: currentUser?.gender || '',
-      dateOfBirth: currentUser?.dateOfBirth || '',
+      dateOfBirth: displayBirthDate(currentUser?.dateOfBirth),
       avatar:
         currentUser?.avatar ||
         'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
@@ -125,7 +134,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     setTimeout(() => setProfileSuccessMsg(''), 4000);
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     const validation = customerProfileSchema.safeParse(profileForm);
     if (!validation.success) {
@@ -135,19 +144,32 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     }
     setProfileErrors({});
     const normalizedProfile = validation.data as UserProfileData;
-    setProfile(normalizedProfile);
-    if (currentUser) {
-      setCurrentUser({
-        ...currentUser,
-        name: normalizedProfile.name,
+    const [day, month, year] = normalizedProfile.dateOfBirth ? normalizedProfile.dateOfBirth.split('/') : [];
+    const gender = normalizedProfile.gender === 'Nam' ? 'MALE' : normalizedProfile.gender === 'Nữ' ? 'FEMALE' : normalizedProfile.gender === 'Others' ? 'OTHER' : undefined;
+    setProfileSaving(true);
+    try {
+      const response = await beautyApi.updateCustomerProfile({
+        fullName: normalizedProfile.name,
         phone: normalizedProfile.phone,
-        email: normalizedProfile.email,
-        avatar: normalizedProfile.avatar,
+        gender,
+        dateOfBirth: year ? `${year}-${month}-${day}` : undefined,
+        confirmBookingContact: false,
       });
+      const savedUser = currentUser
+        ? { ...currentUser, ...mapBackendUser(response.user), avatar: normalizedProfile.avatar }
+        : mapBackendUser(response.user);
+      setCurrentUser(savedUser);
+      const savedProfile = { ...normalizedProfile, email: savedUser.email || normalizedProfile.email };
+      setProfile(savedProfile);
+      setProfileForm(savedProfile);
+      setIsEditingProfile(false);
+      setProfileSuccessMsg('Thông tin hồ sơ đã được lưu vào tài khoản BeautyLink.');
+      setTimeout(() => setProfileSuccessMsg(''), 3000);
+    } catch (saveError) {
+      setProfileSuccessMsg(getApiErrorMessage(saveError, 'Không thể lưu hồ sơ. Vui lòng thử lại.'));
+    } finally {
+      setProfileSaving(false);
     }
-    setIsEditingProfile(false);
-    setProfileSuccessMsg('Cập nhật thông tin cá nhân thành công!');
-    setTimeout(() => setProfileSuccessMsg(''), 3000);
   };
 
   const handleUpdateAvatar = (newAvatarUrl: string) => {
@@ -480,6 +502,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   {isEditingProfile ? (
                     <input
                       type="email"
+                      disabled
+                      title="Email đăng nhập không thể thay đổi tại đây"
                       required
                       value={profileForm.email}
                       onChange={(e) => { setProfileForm({ ...profileForm, email: e.target.value }); setProfileErrors((prev) => ({ ...prev, email: '' })); }}
@@ -608,10 +632,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   </button>
                   <button
                     type="submit"
+                    disabled={profileSaving}
                     className="py-2.5 px-6 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs font-bold shadow-md hover:opacity-95 transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>Lưu thay đổi hồ sơ</span>
+                    <span>{profileSaving ? 'Đang lưu…' : 'Lưu thay đổi hồ sơ'}</span>
                   </button>
                 </div>
               )}

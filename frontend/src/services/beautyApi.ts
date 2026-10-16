@@ -162,6 +162,11 @@ export function getApiErrorMessage(err: unknown, defaultMessage = 'Đã xảy ra
 export function getAuthErrorMessage(err: unknown): string {
   if (!axios.isAxiosError(err)) return getApiErrorMessage(err, 'Không thể xác thực tài khoản. Vui lòng thử lại.');
   const data = err.response?.data as { code?: string; message?: string; fields?: Record<string, string> } | undefined;
+  if (data?.code === 'GOOGLE_ACCOUNT_LINK_REQUIRED' || data?.code === 'GOOGLE_CUSTOMER_ONLY'
+      || data?.code === 'GOOGLE_AUTH_NOT_CONFIGURED' || data?.code === 'GOOGLE_TOKEN_INVALID'
+      || data?.code === 'ACCOUNT_INACTIVE') {
+    return data.message || 'Không thể đăng nhập bằng Google. Vui lòng dùng phương thức đăng nhập hiện có.';
+  }
   if (err.response?.status === 401 || data?.code === 'INVALID_CREDENTIALS') {
     return 'Thông tin đăng nhập không chính xác';
   }
@@ -553,6 +558,12 @@ export const beautyApi = {
     return res;
   },
 
+  async googleLogin(credential: string, rememberMe = false): Promise<{ user: any; accessToken: string }> {
+    const res = await unwrap<{ user: any; accessToken: string }>(apiClient.post('/v1/auth/google', { credential }));
+    if (res?.accessToken) setAccessToken(res.accessToken, rememberMe);
+    return res;
+  },
+
   async startPasswordReset(identifier: string): Promise<{ challengeId: string; expiresInSeconds: number; message: string }> {
     return unwrap(apiClient.post('/v1/auth/password-reset/start', { identifier }));
   },
@@ -591,6 +602,19 @@ export const beautyApi = {
 
   async me(): Promise<any> {
     return unwrap(apiClient.get('/v1/auth/me'));
+  },
+
+  async updateCustomerProfile(data: {
+    fullName?: string;
+    phone?: string;
+    gender?: 'MALE' | 'FEMALE' | 'OTHER';
+    dateOfBirth?: string;
+    confirmBookingContact?: boolean;
+  }): Promise<{ user: any; accessToken: string }> {
+    const persistent = hasPersistentSession();
+    const res = await unwrap<{ user: any; accessToken: string }>(apiClient.patch('/v1/auth/me/profile', data));
+    if (res?.accessToken) setAccessToken(res.accessToken, persistent);
+    return res;
   },
 
   // ==========================================

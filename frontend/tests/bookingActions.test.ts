@@ -60,7 +60,7 @@ test('checkout retains booking after provider failure, rereads backend and block
   beautyApi.createPayOSPayment = async () => { payCalls++; throw new Error('Provider timeout'); };
   beautyApi.myBookings = async () => { readCalls++; return [{ ...unpaid, paymentEligible: false, paymentBlockerReason: 'PAYMENT_REVIEW_REQUIRED' }]; };
   const service: BackendService = { id: 1, name: 'Test service', supplierId: 1, supplierName: 'Test supplier', supplierAddress: '', supplierBusinessType: 'SPA', supplierReviewCount: 0, imageUrl: '', price: 500000, durationMinutes: 60, categorySlug: 'spa', rating: 0, practitioners: [] };
-  const user = { id: 1, name: 'Customer', role: 'CUSTOMER', phone: '0900000001', email: 'test@example.test' } as CurrentUser;
+  const user = { id: 1, name: 'Customer', role: 'CUSTOMER', phone: '0900000001', email: 'test@example.test', bookingContactConfirmed: true } as CurrentUser;
   try {
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 7);
     await act(async () => root.render(React.createElement(CheckoutPage, { currentUser: user, directService: service, preselectedDate: tomorrow.toISOString().slice(0, 10), preselectedTime: '10:00', onBack() {}, onViewBookings() {}, onNeedLogin() {} })));

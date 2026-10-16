@@ -140,6 +140,7 @@ public class PaymentService {
         }
         if (BookingPaymentPolicy.unresolved(attempts) || isPaid(booking))
             return new Creation(bookingId, null, null, BookingPaymentPolicy.manual(attempts) ? manualError() : isPaid(booking) ? paidCancellationError() : reconcilingError());
+        BookingContactPolicy.requireReady(customer);
         if (booking.getStatus() == BookingStatus.CANCELLED) reopenReleasedSlot(booking);
         PaymentQuoteResponse quote = paymentQuotes.calculate(booking.getTotalAmount(), request.paymentOption(), voucherCode);
         paymentQuotes.requireAvailable(quote);

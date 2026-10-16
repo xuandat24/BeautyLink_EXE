@@ -14,11 +14,14 @@ import static com.example.backend.model.DomainEnums.*;
 public class UserAccount {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(nullable = false, length = 120) private String fullName;
-    @Column(nullable = false, length = 20, unique = true) private String phone;
+    @Column(length = 20, unique = true) private String phone;
     @Column(length = 160, unique = true) private String email;
     @Enumerated(EnumType.STRING) @Column(length = 20) private Gender gender;
     @Column(name = "date_of_birth") private LocalDate dateOfBirth;
-    @Column(name = "password_hash", nullable = false) private String passwordHash;
+    @Column(name = "password_hash") private String passwordHash;
+    @Column(name = "booking_contact_confirmed_phone", length = 20) private String bookingContactConfirmedPhone;
+    @Column(name = "booking_contact_confirmed_at") private Instant bookingContactConfirmedAt;
+    @Column(name = "booking_contact_confirmation_required", nullable = false) private boolean bookingContactConfirmationRequired = false;
     @Column(name = "auth_version", nullable = false) private int authVersion = 0;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private Role role = Role.CUSTOMER;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private AccountStatus status = AccountStatus.ACTIVE;
@@ -36,6 +39,9 @@ public class UserAccount {
     public Gender getGender() { return gender; } public void setGender(Gender gender) { this.gender = gender; }
     public LocalDate getDateOfBirth() { return dateOfBirth; } public void setDateOfBirth(LocalDate dateOfBirth) { this.dateOfBirth = dateOfBirth; }
     public String getPasswordHash() { return passwordHash; } public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public String getBookingContactConfirmedPhone() { return bookingContactConfirmedPhone; } public void setBookingContactConfirmedPhone(String value) { this.bookingContactConfirmedPhone = value; }
+    public Instant getBookingContactConfirmedAt() { return bookingContactConfirmedAt; } public void setBookingContactConfirmedAt(Instant value) { this.bookingContactConfirmedAt = value; }
+    public boolean isBookingContactConfirmationRequired() { return bookingContactConfirmationRequired; } public void setBookingContactConfirmationRequired(boolean value) { this.bookingContactConfirmationRequired = value; }
     public int getAuthVersion() { return authVersion; } public void setAuthVersion(int authVersion) { this.authVersion = authVersion; }
     public Role getRole() { return role; } public void setRole(Role role) { this.role = role; }
     public AccountStatus getStatus() { return status; } public void setStatus(AccountStatus status) { this.status = status; }

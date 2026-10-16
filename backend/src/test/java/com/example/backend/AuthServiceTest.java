@@ -4,6 +4,7 @@ import com.example.backend.auth.JwtService;
 import com.example.backend.dto.ApiDtos.LoginRequest;
 import com.example.backend.dto.ApiDtos.RegisterRequest;
 import com.example.backend.dto.ApiDtos.UpdatePhoneRequest;
+import com.example.backend.dto.ApiDtos.UpdateCustomerProfileRequest;
 import com.example.backend.exception.ApiException;
 import com.example.backend.model.DomainEnums.AccountStatus;
 import com.example.backend.model.DomainEnums.Gender;
@@ -137,10 +138,42 @@ class AuthServiceTest {
     @Test
     void samePhoneIsIdempotentAndInvalidPhoneDoesNotWrite() {
         UserAccount user = activeUser(encoder.encode(PASSWORD));
-        when(users.findLockedById(user.getId())).thenReturn(Optional.of(user));
         assertEquals(user.getPhone(), service.updatePhone(user, new UpdatePhoneRequest(user.getPhone())).user().phone());
         ApiException error = assertThrows(ApiException.class, () -> service.updatePhone(user, new UpdatePhoneRequest("123")));
         assertEquals(400, error.getStatus().value());
+        verify(users, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void googleCustomerCanPersistAndConfirmPhoneWithoutPasswordOrBirthDate() {
+        UserAccount user = activeUser(null);
+        user.setPhone(null);
+        user.setBookingContactConfirmationRequired(true);
+        when(users.findLockedById(user.getId())).thenReturn(Optional.of(user));
+        when(users.saveAndFlush(user)).thenReturn(user);
+
+        var result = service.updateProfile(user,
+                new UpdateCustomerProfileRequest(null, "0901234567", null, null, true));
+
+        assertEquals("0901234567", result.user().phone());
+        assertTrue(result.user().bookingContactConfirmed());
+        assertEquals("0901234567", user.getBookingContactConfirmedPhone());
+        assertTrue(user.getBookingContactConfirmedAt() != null);
+        assertEquals(null, user.getPasswordHash());
+        assertEquals(null, user.getDateOfBirth());
+    }
+
+    @Test
+    void profileUpdateRejectsDuplicatePhoneWithoutSaving() {
+        UserAccount user = activeUser(null);
+        user.setPhone(null);
+        when(users.findLockedById(user.getId())).thenReturn(Optional.of(user));
+        when(users.existsByPhoneAndIdNot("0901234567", user.getId())).thenReturn(true);
+
+        ApiException error = assertThrows(ApiException.class, () -> service.updateProfile(user,
+                new UpdateCustomerProfileRequest(null, "0901234567", null, null, true)));
+
+        assertEquals("PHONE_ALREADY_IN_USE", error.getCode());
         verify(users, never()).saveAndFlush(any());
     }
 

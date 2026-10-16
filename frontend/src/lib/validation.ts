@@ -74,10 +74,11 @@ export const customerProfileSchema = z.object({
   name: z.string().trim().min(2, 'Họ tên phải có ít nhất 2 ký tự').max(120, 'Họ tên tối đa 120 ký tự'),
   phone: vietnamPhoneSchema,
   email: z.string().trim().email('Email không đúng định dạng').max(254, 'Email tối đa 254 ký tự'),
-  address: z.string().trim().min(5, 'Địa chỉ phải có ít nhất 5 ký tự').max(255, 'Địa chỉ tối đa 255 ký tự'),
-  citizenId: z.string().trim().regex(/^[0-9]{12}$/, 'CCCD phải gồm đúng 12 chữ số'),
-  gender: z.enum(['Nam', 'Nữ', 'Others'], { message: 'Giới tính không hợp lệ' }),
-  dateOfBirth: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/, 'Ngày sinh phải theo định dạng DD/MM/YYYY').refine((value) => {
+  address: z.string().trim().max(255, 'Địa chỉ tối đa 255 ký tự'),
+  citizenId: z.string().trim().regex(/^$|^[0-9]{12}$/, 'CCCD phải gồm đúng 12 chữ số'),
+  gender: z.enum(['', 'Nam', 'Nữ', 'Others'], { message: 'Giới tính không hợp lệ' }),
+  dateOfBirth: z.string().regex(/^$|^\d{2}\/\d{2}\/\d{4}$/, 'Ngày sinh phải theo định dạng DD/MM/YYYY').refine((value) => {
+    if (!value) return true;
     const [day, month, year] = value.split('/').map(Number);
     const date = new Date(year, month - 1, day);
     return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day && date < new Date();

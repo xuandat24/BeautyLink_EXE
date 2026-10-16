@@ -14,6 +14,7 @@ export interface CurrentUser {
   avatar?: string;
   role: UserRole;
   memberTier?: 'Standard' | 'Silver' | 'Gold' | 'VIP' | string;
+  bookingContactConfirmed?: boolean;
   loyaltyPoints?: number;
   points?: number;
   address?: string;

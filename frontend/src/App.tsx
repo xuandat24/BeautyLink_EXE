@@ -51,6 +51,8 @@ import { beautyApi, DEFAULT_CATEGORIES, getAccessToken } from './services/beauty
 import { serviceReviewSummary, supplierReviewSummary } from './lib/reviewScope';
 import { updateMetaTags } from './lib/seo';
 import { CheckCircle2 } from 'lucide-react';
+import { mapBackendUser } from './lib/authUser';
+import { disableGoogleAutoSelect } from './lib/googleIdentity';
 
 // ==========================================
 // Data Transformation Helpers
@@ -215,6 +217,15 @@ export default function App() {
     favorites,
     toggleFavorite,
   } = useBeautyStore();
+
+  useEffect(() => {
+    if (!currentUser || !getAccessToken()) return;
+    let active = true;
+    beautyApi.me().then((user) => {
+      if (active) setCurrentUser({ ...currentUser, ...mapBackendUser(user) });
+    }).catch(() => { /* Keep the existing session until an authenticated action proves it invalid. */ });
+    return () => { active = false; };
+  }, [currentUser?.id, setCurrentUser]);
 
   // Favorite Toast System
   const [favoriteToast, setFavoriteToast] = useState<FavoriteToastInfo | null>(null);
@@ -548,6 +559,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    disableGoogleAutoSelect();
     logout();
     handleBackToHome();
     showToast('Đã đăng xuất tài khoản.');
