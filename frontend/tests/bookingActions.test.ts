@@ -51,9 +51,10 @@ test('bookings hide paid/manual/legacy cancellation, guard double submit and rej
 });
 test('checkout retains booking after provider failure, rereads backend and blocks manual checkout', async () => {
   const { dom, root } = environment();
-  const originals = { create: beautyApi.createBooking, pay: beautyApi.createPayOSPayment, load: beautyApi.myBookings, quote: beautyApi.servicePaymentQuote };
+  const originals = { create: beautyApi.createBooking, pay: beautyApi.createPayOSPayment, load: beautyApi.myBookings, quote: beautyApi.servicePaymentQuote, capacity: beautyApi.serviceCapacity };
   let created = 0, payCalls = 0, readCalls = 0;
   beautyApi.createBooking = async () => { created++; return unpaid; };
+  beautyApi.serviceCapacity = async (_id, date) => ({ date, qualifiedPractitioners: 1, slots: [{ time: '10:00', availablePractitioners: 1, state: 'AVAILABLE' }], reason: null });
   beautyApi.servicePaymentQuote = async (_id, paymentOption) => ({ originalAmount: 500000, discountAmount: 0, payableAmount: 500000,
     amount: paymentOption === 'DEPOSIT_05' ? 25000 : 500000, remainingAmount: paymentOption === 'DEPOSIT_05' ? 475000 : 0,
     paymentOption, paymentAvailable: true, unavailableReason: null });
@@ -70,5 +71,5 @@ test('checkout retains booking after provider failure, rereads backend and block
     await click('Xác nhận thanh toán');
     assert.equal(created, 1); assert.equal(payCalls, 1); assert.equal(readCalls, 1);
     assert.match(document.body.textContent ?? '', /chưa được máy chủ cho phép/);
-  } finally { await act(async () => root.unmount()); beautyApi.createBooking = originals.create; beautyApi.createPayOSPayment = originals.pay; beautyApi.myBookings = originals.load; beautyApi.servicePaymentQuote = originals.quote; dom.window.close(); }
+  } finally { await act(async () => root.unmount()); beautyApi.createBooking = originals.create; beautyApi.createPayOSPayment = originals.pay; beautyApi.myBookings = originals.load; beautyApi.servicePaymentQuote = originals.quote; beautyApi.serviceCapacity = originals.capacity; dom.window.close(); }
 });

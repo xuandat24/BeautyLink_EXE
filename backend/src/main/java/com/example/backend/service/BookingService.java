@@ -41,13 +41,19 @@ public class BookingService {
             practitioner = practitioners.findByIdForUpdate(request.practitionerId()).filter(Practitioner::isActive)
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PRACTITIONER_NOT_FOUND", "Không tìm thấy chuyên viên"));
         } else {
-            Practitioner candidate = practitioners.findBySupplierIdAndActiveTrue(service.getSupplier().getId()).stream()
-                    .filter(availablePractitioner -> availability.availability(service.getId(), availablePractitioner.getId(), request.appointmentDate())
-                            .availableSlots().contains(request.startTime()))
-                    .findFirst()
-                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Không còn chuyên viên phù hợp cho khung giờ này"));
-            practitioner = practitioners.findByIdForUpdate(candidate.getId()).filter(Practitioner::isActive)
-                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Khung giờ này không còn khả dụng"));
+            // Lowest practitioner ID wins. Lock and recheck each candidate before trying the next.
+            practitioner = null;
+            for (Practitioner candidate : practitioners.findBySupplierIdAndActiveTrue(service.getSupplier().getId()).stream()
+                    .sorted(Comparator.comparing(Practitioner::getId)).toList()) {
+                if (!candidate.supports(service)) continue;
+                Practitioner locked = practitioners.findByIdForUpdate(candidate.getId()).filter(Practitioner::isActive).orElse(null);
+                if (locked != null && availability.availability(service.getId(), locked.getId(), request.appointmentDate())
+                        .availableSlots().contains(request.startTime())) {
+                    practitioner = locked;
+                    break;
+                }
+            }
+            if (practitioner == null) throw new ApiException(HttpStatus.CONFLICT, "SLOT_UNAVAILABLE", "Khung giờ này vừa được đặt. Vui lòng chọn khung giờ khác.");
         }
         if (!practitioner.getSupplier().getId().equals(service.getSupplier().getId())) throw new ApiException(HttpStatus.BAD_REQUEST, "PRACTITIONER_MISMATCH", "Chuyên viên không cung cấp dịch vụ này");
         List<LocalTime> slots = availability.availability(service.getId(), practitioner.getId(), request.appointmentDate()).availableSlots();

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useBeautyStore } from '../store/beautyStore';
 import { CurrentUser, BackendService, CartItem, PaymentQuote } from '../types';
+import type { ServiceCapacity } from '../types/beauty';
 import { beautyApi, getApiErrorMessage, getAccessToken } from '../services/beautyApi';
 import { canPayBooking, safeCheckout } from '../lib/bookingPolicy';
 import { OptimizedImage } from './OptimizedImage';
@@ -39,6 +40,7 @@ interface CheckoutPageProps {
   directService?: BackendService | null;
   preselectedDate?: string;
   preselectedTime?: string;
+  preselectedPractitionerId?: number;
 }
 
 const formatCurrency = (val: number) => {
@@ -80,6 +82,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   directService,
   preselectedDate,
   preselectedTime,
+  preselectedPractitionerId,
 }) => {
   const { cartItems, updateCartQuantity, setCurrentUser } = useBeautyStore();
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
@@ -120,7 +123,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
   // Check if date & slot were preselected from beauty service page (Trường hợp 2)
-  const isPreselected = Boolean(preselectedDate || preselectedTime);
+  const isPreselected = Boolean(preselectedDate && preselectedTime);
   const [isChangingSchedule, setIsChangingSchedule] = useState(!isPreselected);
 
   // Default Tomorrow's date
@@ -132,7 +135,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     preselectedDate || tomorrow
   );
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>(
-    preselectedTime || '10:00'
+    preselectedTime || ''
   );
   const [scheduleErrors, setScheduleErrors] = useState<FieldErrors>({});
 
@@ -169,7 +172,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const alive = useRef(false);
   const reservedBooking = useRef<{ context: string; id: number } | null>(null);
   // Payment choices may change after a provider failure; booking identity must not.
-  const context = JSON.stringify([currentUser?.id, items[0]?.deal.serviceId, selectedDate, selectedTimeSlot]);
+  const context = JSON.stringify([currentUser?.id, items[0]?.deal.serviceId, selectedDate, selectedTimeSlot, preselectedPractitionerId]);
   const latestContext = useRef(context); latestContext.current = context;
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
@@ -183,6 +186,43 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   }, [items]);
 
   const serviceId = items.length === 1 ? items[0]?.deal.serviceId : undefined;
+  const fetchCapacity = async (id: number, day: string): Promise<ServiceCapacity> => {
+    if (!preselectedPractitionerId) return beautyApi.serviceCapacity(id, day);
+    const [overall, own] = await Promise.all([
+      beautyApi.serviceCapacity(id, day),
+      beautyApi.availability(id, preselectedPractitionerId, day),
+    ]);
+    const available = new Set(own.availableSlots.map(slot => slot.slice(0, 5)));
+    return { ...overall, qualifiedPractitioners: 1, slots: overall.slots.map(slot => ({
+      ...slot, availablePractitioners: available.has(slot.time.slice(0, 5)) ? 1 : 0,
+      state: available.has(slot.time.slice(0, 5)) ? 'AVAILABLE' as const : 'FULLY_BOOKED' as const,
+    })) };
+  };
+  const [capacity, setCapacity] = useState<ServiceCapacity | null>(null);
+  const [capacityLoading, setCapacityLoading] = useState(false);
+  const [capacityError, setCapacityError] = useState('');
+  useEffect(() => {
+    let active = true;
+    setCapacity(null);
+    setCapacityError('');
+    if (!serviceId || !selectedDate) return () => { active = false; };
+    setCapacityLoading(true);
+    fetchCapacity(serviceId, selectedDate)
+      .then(result => {
+        if (!active) return;
+        setCapacity(result);
+        if (selectedTimeSlot && !result.slots.some(slot => slot.time.slice(0, 5) === selectedTimeSlot && slot.availablePractitioners > 0)) {
+          setSelectedTimeSlot('');
+          setIsChangingSchedule(true);
+          setCapacityError('Khung giờ vừa chọn không còn chỗ. Vui lòng chọn giờ khác.');
+        }
+      })
+      .catch(error => { if (active) setCapacityError(getApiErrorMessage(error, 'Không thể tải lịch trống.')); })
+      .finally(() => { if (active) setCapacityLoading(false); });
+    return () => { active = false; };
+  // selectedTimeSlot is intentionally checked against a fresh response, not a polling dependency.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceId, selectedDate, currentStep, preselectedPractitionerId]);
   useEffect(() => {
     let active = true;
     setPaymentQuote(null);
@@ -232,12 +272,26 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setVoucherError('');
   };
 
-  const handleContinueFromSchedule = () => {
+  const handleContinueFromSchedule = async () => {
     const validation = bookingSchema.safeParse({ appointmentDate: selectedDate, startTime: selectedTimeSlot, note: '' });
     if (!validation.success) {
       setScheduleErrors(zodFieldErrors(validation.error));
       return;
     }
+    if (!serviceId) return;
+    try {
+      const latest = await fetchCapacity(serviceId, selectedDate);
+      setCapacity(latest);
+      if (!latest.slots.some(slot => slot.time.slice(0, 5) === selectedTimeSlot && slot.availablePractitioners > 0)) {
+        setSelectedTimeSlot('');
+        setCapacityError('Khung giờ này vừa được đặt. Vui lòng chọn khung giờ khác.');
+        return;
+      }
+    } catch (error) {
+      setCapacityError(getApiErrorMessage(error, 'Không thể kiểm tra lịch trống.'));
+      return;
+    }
+    setCapacityError('');
     setScheduleErrors({});
     setCurrentStep(2);
   };
@@ -294,9 +348,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       // Retain the booking after a provider error. Retrying must never create another
       // booking simply to bypass an unresolved payment on the first one.
       const existingId = reservedBooking.current?.context === context ? reservedBooking.current.id : null;
+      if (!existingId) {
+        const latest = await fetchCapacity(firstItem.deal.serviceId, selectedDate);
+        if (!latest.slots.some(slot => slot.time.slice(0, 5) === selectedTimeSlot && slot.availablePractitioners > 0)) {
+          setCapacity(latest);
+          setSelectedTimeSlot('');
+          setIsChangingSchedule(true);
+          setCurrentStep(1);
+          throw new Error('Khung giờ này vừa được đặt. Vui lòng chọn khung giờ khác.');
+        }
+      }
       const booking = existingId ? (await beautyApi.myBookings()).find(b => b.id === existingId) : await beautyApi.createBooking({
         serviceId: firstItem.deal.serviceId,
-        practitionerId: directService?.practitioners?.[0]?.id,
+        practitionerId: preselectedPractitionerId,
         appointmentDate: selectedDate,
         startTime: selectedTimeSlot,
         note: `Thanh toán ${depositOption === 'deposit05' ? 'cọc 5%' : '100%'} qua PayOS`,
@@ -642,26 +706,31 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       Chọn khung giờ hẹn phù hợp:
                     </label>
                     <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                      {['09:00', '10:00', '11:30', '13:30', '14:30', '15:30', '16:30', '17:30', '18:30', '19:30', '20:00'].map(
+                      {capacity?.slots.map(
                         (slot) => {
-                          const isSelected = selectedTimeSlot === slot;
+                          const label = slot.time.slice(0, 5);
+                          const isSelected = selectedTimeSlot === label;
                           return (
                             <button
-                              key={slot}
+                              key={label}
                               type="button"
-                              onClick={() => { setSelectedTimeSlot(slot); setScheduleErrors((value) => ({ ...value, startTime: '' })); }}
+                              disabled={slot.availablePractitioners === 0}
+                              onClick={() => { setSelectedTimeSlot(label); setScheduleErrors((value) => ({ ...value, startTime: '' })); }}
                               className={`py-2 px-1 rounded-xl text-xs font-bold border transition text-center cursor-pointer ${
                                 isSelected
                                   ? 'bg-[#e1146c] text-white border-[#e1146c] shadow-xs'
-                                  : 'bg-pink-50/30 text-slate-700 border-pink-200 hover:bg-pink-50'
+                                  : slot.availablePractitioners === 0 ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-pink-50/30 text-slate-700 border-pink-200 hover:bg-pink-50'
                               }`}
                             >
-                              {slot}
+                              {label}{slot.availablePractitioners > 0 ? ` (${slot.availablePractitioners})` : ' · Hết chỗ'}
                             </button>
                           );
                         }
                       )}
                     </div>
+                    {capacityLoading && <p className="mt-2 text-xs text-slate-500">Đang kiểm tra lịch trống...</p>}
+                    {capacityError && <p role="alert" className="mt-2 text-xs text-rose-700">{capacityError}</p>}
+                    {!capacityLoading && !capacityError && capacity?.slots.length === 0 && <p className="mt-2 text-xs text-slate-500">{capacity.reason === 'NO_QUALIFIED_PRACTITIONER' ? 'Chưa có chuyên viên phù hợp với dịch vụ này.' : 'Chưa có lịch làm việc phù hợp trong ngày này.'}</p>}
                     <FieldError message={scheduleErrors.startTime} />
                   </div>
                 </div>

@@ -87,6 +87,8 @@ test('partner booking passes the exact clicked backend service', async () => {
 test('unavailable payment quote gives visible feedback instead of a dead button', async () => {
   const { dom, root } = environment();
   const originalQuote = beautyApi.servicePaymentQuote;
+  const originalCapacity = beautyApi.serviceCapacity;
+  beautyApi.serviceCapacity = async (_id, date) => ({ date, qualifiedPractitioners: 1, slots: [{ time: '10:00', availablePractitioners: 1, state: 'AVAILABLE' }], reason: null });
   beautyApi.servicePaymentQuote = async (_id, paymentOption) => ({
     originalAmount: 1_000,
     discountAmount: 0,
@@ -126,6 +128,35 @@ test('unavailable payment quote gives visible feedback instead of a dead button'
     assert.match(alerts, /PayOS/);
   } finally {
     await act(async () => root.unmount());
+    beautyApi.servicePaymentQuote = originalQuote;
+    beautyApi.serviceCapacity = originalCapacity;
+    dom.window.close();
+  }
+});
+
+test('checkout disables fully booked slots and keeps remaining capacity selectable', async () => {
+  const { dom, root } = environment();
+  const originalCapacity = beautyApi.serviceCapacity;
+  const originalQuote = beautyApi.servicePaymentQuote;
+  beautyApi.serviceCapacity = async (_id, date) => ({ date, qualifiedPractitioners: 2,
+    slots: [
+      { time: '10:00', availablePractitioners: 0, state: 'FULLY_BOOKED' },
+      { time: '10:30', availablePractitioners: 1, state: 'AVAILABLE' },
+    ], reason: null });
+  beautyApi.servicePaymentQuote = async (_id, paymentOption) => ({ originalAmount: 100000, discountAmount: 0,
+    payableAmount: 100000, amount: paymentOption === 'DEPOSIT_05' ? 5000 : 100000,
+    remainingAmount: paymentOption === 'DEPOSIT_05' ? 95000 : 0, paymentOption, paymentAvailable: true, unavailableReason: null });
+  try {
+    await act(async () => root.render(React.createElement(CheckoutPage, {
+      currentUser: null, directService: service(703, 'Sơn gel'), onBack() {}, onViewBookings() {}, onNeedLogin() {},
+    })));
+    const full = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('10:00') && button.textContent?.includes('Hết chỗ')) as HTMLButtonElement;
+    const open = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('10:30 (1)')) as HTMLButtonElement;
+    assert.ok(full); assert.equal(full.disabled, true);
+    assert.ok(open); assert.equal(open.disabled, false);
+  } finally {
+    await act(async () => root.unmount());
+    beautyApi.serviceCapacity = originalCapacity;
     beautyApi.servicePaymentQuote = originalQuote;
     dom.window.close();
   }

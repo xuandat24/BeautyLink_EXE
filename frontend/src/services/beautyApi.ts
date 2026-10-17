@@ -727,6 +727,10 @@ export const beautyApi = {
     }
   },
 
+  async serviceCapacity(serviceId: number, date: string): Promise<import('../types/beauty').ServiceCapacity> {
+    return unwrap(apiClient.get(`/v1/services/${serviceId}/capacity`, { params: { date } }));
+  },
+
   // ==========================================
   // Bookings (Customer)
   // ==========================================
@@ -813,6 +817,14 @@ export const beautyApi = {
 
   async supplierPractitioners(): Promise<BackendPractitioner[]> {
     return unwrap(apiClient.get('/v1/supplier/practitioners'));
+  },
+
+  async updatePractitionerAssignments(id: number, serviceIds: number[]): Promise<BackendPractitioner> {
+    return unwrap(apiClient.put(`/v1/supplier/practitioners/${id}/assignments`, { serviceIds }));
+  },
+
+  async updatePractitionerStatus(id: number, active: boolean): Promise<BackendPractitioner> {
+    return unwrap(apiClient.put(`/v1/supplier/practitioners/${id}/status`, { active }));
   },
 
   async createPractitioner(data: { name: string; specialty?: string; bio?: string; avatarUrl?: string }): Promise<BackendPractitioner> {

@@ -25,6 +25,11 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     boolean existsByPractitionerIdAndAppointmentDateAndStartTimeAndStatusNotAndIdNot(Long practitionerId, LocalDate date, LocalTime startTime, BookingStatus status, Long id);
     List<Booking> findByPractitionerIdAndAppointmentDateAndStatusNot(Long practitionerId, LocalDate date, BookingStatus status);
     List<Booking> findByPractitionerIdAndAppointmentDateBetweenAndStatusNot(Long practitionerId, LocalDate first, LocalDate last, BookingStatus status);
+    List<Booking> findByPractitionerIdAndAppointmentDateGreaterThanEqualAndStatusNot(Long practitionerId, LocalDate date, BookingStatus status);
+    @Query("select b.id from Booking b where b.status = :pending and b.paymentStatus = :unpaid " +
+            "and b.createdAt < :before and not exists (select p.id from PaymentTransaction p where p.booking = b) order by b.createdAt, b.id")
+    List<Long> findUnpaidUnstartedHoldIds(@Param("pending") BookingStatus pending,
+            @Param("unpaid") PaymentStatus unpaid, @Param("before") Instant before, Pageable pageable);
 
     @Query("select count(b) from Booking b where b.createdAt >= :from and b.createdAt < :to " +
             "and b.customer.role = :customerRole and (:includeDemo = true or b.supplier.demoData = false)")

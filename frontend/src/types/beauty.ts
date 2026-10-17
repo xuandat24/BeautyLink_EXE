@@ -42,10 +42,21 @@ export interface BackendPractitioner {
   specialty?: string;
   bio?: string;
   avatarUrl?: string;
+  active?: boolean;
+  serviceAssignmentsRestricted?: boolean;
+  supportedServiceIds?: number[];
+}
+
+export interface ServiceCapacity {
+  date: string;
+  qualifiedPractitioners: number;
+  slots: { time: string; availablePractitioners: number; state: 'AVAILABLE' | 'FULLY_BOOKED' }[];
+  reason: 'NO_QUALIFIED_PRACTITIONER' | 'OUTSIDE_WORKING_HOURS' | null;
 }
 
 export interface BackendService {
   id: number;
+  active?: boolean;
   categoryId?: number;
   name: string;
   description?: string | null;

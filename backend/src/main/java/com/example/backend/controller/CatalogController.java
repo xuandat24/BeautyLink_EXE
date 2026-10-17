@@ -26,4 +26,5 @@ public class CatalogController {
     @GetMapping("/suppliers/{id}/reviews") public PublicReviewPageResponse supplierReviews(@PathVariable Long id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return catalog.supplierReviews(id, page, size); }
     @GetMapping("/homepage/services") public List<ServiceResponse> homepage(@RequestParam(required = false) Long locationId) { return catalog.homepage(locationId); }
     @GetMapping("/services/{serviceId}/availability") public AvailabilityResponse availability(@PathVariable Long serviceId, @RequestParam Long practitionerId, @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) { return availability.availability(serviceId, practitionerId, date); }
+    @GetMapping("/services/{serviceId}/capacity") public ServiceCapacityResponse capacity(@PathVariable Long serviceId, @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) { return availability.capacity(serviceId, date); }
 }

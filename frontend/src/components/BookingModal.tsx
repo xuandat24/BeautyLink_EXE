@@ -16,7 +16,7 @@ interface BookingModalProps {
   onViewMyBookings?: () => void;
   initialDate?: string;
   initialSlot?: string;
-  onProceedToCheckout: (service: BackendService, date: string, slot: string) => void;
+  onProceedToCheckout: (service: BackendService, date: string, slot: string, practitionerId?: number) => void;
 }
 
 const formatCurrency = (val: number) => {
@@ -44,7 +44,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 }) => {
   const maxDate = useMemo(() => getMaxDateString(), []);
   const [selectedPractitioner, setSelectedPractitioner] = useState<BackendPractitioner | null>(
-    service.practitioners?.[0] || null
+    null
   );
   const [date, setDate] = useState<string>(initialDate || getTodayString(1));
   const [slots, setSlots] = useState<string[]>([]);
@@ -75,28 +75,32 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   }, [onClose]);
 
   useEffect(() => {
-    if (!selectedPractitioner || !date) return;
+    if (!date) return;
+    let active = true;
     setLoadingSlots(true);
-    if (!initialSlot || date !== initialDate) {
-      setSelectedSlot('');
-    }
+    setSelectedSlot('');
     setError('');
 
-    beautyApi
-      .availability(service.id, selectedPractitioner.id, date)
+    (selectedPractitioner ? beautyApi.availability(service.id, selectedPractitioner.id, date)
+      : beautyApi.serviceCapacity(service.id, date).then(result => ({ availableSlots: result.slots.filter(slot => slot.availablePractitioners > 0).map(slot => slot.time) })))
       .then((res) => {
+        if (!active) return;
         const mappedSlots = res.availableSlots.map((s) => s.slice(0, 5));
         setSlots(mappedSlots);
-        if (initialSlot && (mappedSlots.includes(initialSlot) || date === initialDate)) {
+        if (initialSlot && mappedSlots.includes(initialSlot)) {
           setSelectedSlot(initialSlot);
+        } else {
+          setSelectedSlot(current => mappedSlots.includes(current) ? current : '');
         }
       })
       .catch((err) => {
+        if (!active) return;
         setError(getApiErrorMessage(err, 'Không thể tải lịch trống.'));
       })
       .finally(() => {
-        setLoadingSlots(false);
+        if (active) setLoadingSlots(false);
       });
+    return () => { active = false; };
   }, [service.id, selectedPractitioner, date, initialDate, initialSlot]);
 
   const canSubmit = Boolean(
@@ -258,11 +262,11 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 </label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {service.practitioners && service.practitioners.length > 0 ? (
-                    service.practitioners.map((practitioner) => {
-                      const isSelected = selectedPractitioner?.id === practitioner.id;
+                    [null, ...service.practitioners].map((practitioner) => {
+                      const isSelected = selectedPractitioner?.id === practitioner?.id;
                       return (
                         <button
-                          key={practitioner.id}
+                          key={practitioner?.id ?? 'any'}
                           type="button"
                           onClick={() => setSelectedPractitioner(practitioner)}
                           className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition ${
@@ -276,10 +280,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                           </span>
                           <span className="min-w-0">
                             <span className="block text-sm font-extrabold truncate">
-                              {practitioner.displayName || practitioner.name || 'Chuyên viên'}
+                              {practitioner?.displayName || practitioner?.name || 'Bất kỳ chuyên viên phù hợp'}
                             </span>
                             <span className="block text-[11px] text-slate-500 truncate">
-                              {practitioner.specialty || 'Chuyên viên chăm sóc'}
+                              {practitioner?.specialty || 'Hệ thống chọn người còn trống'}
                             </span>
                           </span>
                         </button>
@@ -397,9 +401,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                       setError('Vui lòng chọn khung giờ hẹn trước khi tiếp tục.');
                       return;
                     }
-                    onProceedToCheckout(service, date, selectedSlot);
+                    onProceedToCheckout(service, date, selectedSlot, selectedPractitioner?.id);
                   }}
-                  disabled={Boolean(currentUser && !selectedSlot) || submitting}
+                  disabled={Boolean(currentUser && !selectedSlot) || submitting || loadingSlots}
                   className="inline-flex min-h-12 items-center gap-1.5 rounded-2xl bg-gradient-to-r from-[#e1146c] to-[#be185d] px-6 text-xs sm:text-sm font-black text-white transition hover:opacity-95 disabled:opacity-40 cursor-pointer shadow-md shadow-pink-600/20"
                 >
                   <span>{currentUser ? 'Tiến hành đặt lịch & Thanh toán' : 'Đăng nhập để đặt lịch'}</span>

@@ -102,6 +102,11 @@ public final class ApiDtos {
     public record LocationResponse(Long id, String name, String slug, LocationType type, Long parentId) {}
     public record CategoryResponse(Long id, String slug, String name, String description, String imageUrl) {}
     public record PractitionerResponse(Long id, String displayName, String specialty, String avatarUrl, String bio) {}
+    public record SupplierPractitionerResponse(Long id, String displayName, String specialty, String avatarUrl,
+                                               String bio, boolean active, boolean serviceAssignmentsRestricted,
+                                               Set<Long> supportedServiceIds) {}
+    public record UpdatePractitionerAssignmentsRequest(@NotNull Set<@Positive Long> serviceIds) {}
+    public record UpdatePractitionerStatusRequest(boolean active) {}
     public record CreatePractitionerRequest(@NotBlank @Size(max = 120) String displayName,
                                             @Size(max = 160) String specialty,
                                             @Size(max = 500) String bio,
@@ -127,6 +132,9 @@ public final class ApiDtos {
                                   boolean supplierDemo, boolean supplierNearbyFeatured, boolean supplierNewPartner,
                                   Double supplierLatitude, Double supplierLongitude) {}
     public record AvailabilityResponse(Long practitionerId, LocalDate date, List<LocalTime> availableSlots) {}
+    public record CapacitySlotResponse(LocalTime time, int availablePractitioners, String state) {}
+    public record ServiceCapacityResponse(LocalDate date, int qualifiedPractitioners,
+                                          List<CapacitySlotResponse> slots, String reason) {}
 
     public record CreateBookingRequest(
             @NotNull(message = "Vui lòng chọn dịch vụ") @Positive(message = "Dịch vụ không hợp lệ") Long serviceId,

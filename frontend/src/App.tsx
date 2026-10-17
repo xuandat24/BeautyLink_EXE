@@ -289,6 +289,7 @@ export default function App() {
     service: BackendService;
     preselectedDate?: string;
     preselectedTime?: string;
+    practitionerId?: number;
   } | null>(null);
   const [adminBookedCustomerRange, setAdminBookedCustomerRange] = useState<{ from: string; to: string } | null>(null);
 
@@ -653,7 +654,7 @@ export default function App() {
   );
 
   const handleProceedToCheckout = useCallback(
-    (service: BackendService, date: string, slot: string) => {
+    (service: BackendService, date: string, slot: string, practitionerId?: number) => {
       if (service.price <= 0) {
         showToast('Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá.');
         return;
@@ -663,6 +664,7 @@ export default function App() {
         service,
         preselectedDate: date,
         preselectedTime: slot,
+        practitionerId,
       });
       navigateTo('checkout');
     },
@@ -912,6 +914,7 @@ export default function App() {
           directService={directCheckoutConfig?.service || null}
           preselectedDate={directCheckoutConfig?.preselectedDate}
           preselectedTime={directCheckoutConfig?.preselectedTime}
+          preselectedPractitionerId={directCheckoutConfig?.practitionerId}
           onBack={() => {
             setDirectCheckoutConfig(null);
             handleBackToHome();
