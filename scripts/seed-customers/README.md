@@ -72,6 +72,37 @@ roll back a racing insert.
 
 ## Production read-only checkpoint
 
+For a new backup and an actual isolated restoration check, use the installed
+MySQL Shell and local Docker (no cloud resource or production deploy):
+
+```powershell
+pwsh -NoProfile -File ./scripts/seed-customers/BackupAndVerify.ps1
+```
+
+It reuses the ignored DPAPI connection, creates a new timestamp/GUID directory
+under `D:\BeautyLinkBackups` with owner-only ACL, and leaves old backups intact.
+`dumpSchemas` includes the whole application schema/data, views, triggers,
+routines and events, with consistent InnoDB snapshots and data checksums.
+This is an application-schema backup, not an export of Railway-managed MySQL
+users/grants, service configuration or server binaries. Consistency uses brief
+read/backup locks, not data/schema writes. No database connection settings change.
+Never copy these private dumps into Git/CI/chat or public storage.
+
+Restore uses a new, version-matched local MySQL container, loopback-only port,
+disabled event scheduler and a fresh local password (not the source password).
+It checks data checksums, schema/index/FK metadata, every table's restored count,
+FK orphans and application read-only validation/dry-runs. No create-drop test or
+normal application/seed startup runs against the restored real data. The local
+container/tmpfs and dedicated network are removed afterwards; the backup stays.
+Only full success writes `RESTORE_VERIFIED.json` beside `dump/` and prints
+`BACKUP_PATH=...\dump`. A completion file alone is not restoration evidence.
+Use that exact printed path for `ProductionDryRun.ps1`, then obtain explicit
+approval before apply. The script has no production apply/restore mode.
+
+The MySQL Shell [dump](https://dev.mysql.com/doc/mysql-shell/26.7/en/mysql-shell-utilities-dump-instance-schema.html)
+and [load](https://dev.mysql.com/doc/mysql-shell/26.7/en/mysql-shell-utilities-load-dump.html)
+utilities perform the consistent snapshot and checksum verification.
+
 `ProductionDryRun.ps1` has **no apply mode**. Run it as the Windows owner.
 It prompts for the DB password locally and stores only a DPAPI-encrypted,
 owner-only connection file under `private/` (same Windows user/machine).

@@ -20,13 +20,36 @@ PowerShell parser and node --check PASS. See CUSTOMER_SEED_VERIFICATION.md.
 Prior 60-account MySQL/full-suite evidence remains historical, not 80-account
 MySQL/production evidence. No frontend files changed; no full-suite rerun needed.
 
-REMAINING: real Railway counts/collisions/schema dry-run; current usable backup;
+REMAINING: current usable backup and isolated restore; fresh production dry-run;
 owner approval for exact dry-run before any production writes; final insertion,
 hash/sample-login/dashboard verification. No production writes performed.
 
 ACCESS: Railway OAuth exposed variable names, not values; no local DB config.
-Owner was asked to run ProductionDryRun.ps1 once with hidden password entry.
+Owner ran ProductionDryRun.ps1 successfully after the ACL fix.
 Only known backup predates current schema; not a passed current-backup gate.
+
+LATEST owner-reported Railway dry-run: managed practitioners existing=0,
+missing=24, missing-schedules=168, conflicts=0; customers existing=0, missing=80,
+conflicts=0; dashboard before=88, expected-after=168. Backup age=160.3 hours
+blocked writes. These counts are from the owner's completed command, not an
+independent production query by the agent. Recheck after the new backup.
+
+NEW backup tooling: BackupAndVerify.ps1 + BackupVerify.js reuse installed MySQL
+Shell 26.7.1 and mysql:9.7.2 Docker image. Source credentials stay in process
+environment only and never enter Docker. Whole application-schema dump with
+consistent/checksum=true; new owner-only timestamp/GUID folder; old backup
+untouched. Fresh local restore checks checksum/schema/index/FK metadata, counts,
+FK orphans and app CLI read-only schema/dataset inspection. Success marker is
+RESTORE_VERIFIED.json; no production writes or restore paths exist.
+
+Test evidence: backup tool syntax PASS; synthetic local MySQL 9.7.2 dump/restore
+PASS (8 tables, 8 rows, 6 FKs, checksum/schema match, 0 orphans); remote and
+nonempty restore target guards PASS. This is NOT a new production backup pass.
+Agent source backup was blocked by TCP timeout (MySQL 2003/10060); independent
+TCP probe false, Railway MCP still reports exact public endpoint ACTIVE. Stop
+retrying it in this environment. Failed new folders contain only failure logs,
+no completed backup; none was used to pass the gate. No old seed tests rerun.
+Docker Desktop is now running; local test resources were removed.
 
 ACL follow-up: owner run stopped at Set-Acl before exporting the DB credential
 or connecting. Reproduced PrivilegeNotHeldException on a synthetic protected
@@ -41,17 +64,26 @@ repeat, child inheritance, owner/content unchanged, missing-path fail closed.
 No production connection, credential read/export, DB write, or old seed tests
 were executed for this ACL correction. The 80/24 datasets remain unchanged.
 
-NEXT_ACTION (owner PowerShell, Java 21):
+NEXT_ACTION (owner PowerShell; source reachable in their terminal):
 
 ```powershell
 cd C:\Temp\beautylink-customer-seed
-.\scripts\seed-customers\ProductionDryRun.ps1 -DatabaseHost acela.proxy.rlwy.net -DatabasePort 10050 -DatabaseName railway -BackupPath D:\BeautyLinkBackups\beautylink_before_resend
+$env:JAVA_HOME='C:\Program Files\Java\jdk-21.0.11'
+$env:Path="$env:JAVA_HOME\bin;$env:Path"
+$seedBackupOutput=@(& pwsh -NoProfile -File .\scripts\seed-customers\BackupAndVerify.ps1)
+$seedBackupExit=$LASTEXITCODE
+$seedBackupOutput
+if ($seedBackupExit -ne 0) { throw 'Backup/restore failed; stop before dry-run/apply' }
+$seedPathLine=$seedBackupOutput | Where-Object { $_ -like 'BACKUP_PATH=*' } | Select-Object -Last 1
+if (-not $seedPathLine) { throw 'Verified backup path missing' }
+$seedBackupPath=$seedPathLine.Substring('BACKUP_PATH='.Length)
+.\scripts\seed-customers\ProductionDryRun.ps1 -DatabaseHost acela.proxy.rlwy.net -DatabasePort 10050 -DatabaseName railway -BackupPath $seedBackupPath
 ```
 
-Then inspect only the dry-run reports (no secrets), establish current backup,
-and request explicit approval for the exact production writes. If the owner
-has already run the command, reuse the ignored DPAPI connection as the same
-Windows user; never ask for passwords in chat.
+Then inspect RESTORE_VERIFIED.json, SHA256SUMS.json and the fresh dry-run reports
+(no rows/secrets) and request explicit approval for the exact production writes.
+Do not assume final count=168 if the actual source count has changed. Never
+ask for passwords in chat. Keep the same 24/80 manifests and private passwords.
 
 DO_NOT_REPEAT: do not regenerate credentials, reseed a second dataset, rerun
 old suites by default, change PayOS/auth, merge main or deploy to run the CLI.
