@@ -4,8 +4,8 @@ import com.example.backend.dto.AdminDashboardDtos.AdminPageResponse;
 import com.example.backend.dto.AdminDashboardDtos.AdminRevenueRow;
 import com.example.backend.service.AdminDashboardService;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletResponse;
 
-import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -35,10 +35,12 @@ class AdminRevenueCsvTest {
                 new AdminPageResponse<>(List.of(first), 2, 2, 0, 500));
         when(dashboard.revenue(day, day, false, 1, 500)).thenReturn(
                 new AdminPageResponse<>(List.of(second), 2, 2, 1, 500));
-        var response = new AdminDashboardController(dashboard).revenueCsv(day, day, false);
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        response.getBody().writeTo(output);
-        String csv = output.toString(StandardCharsets.UTF_8);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        new AdminDashboardController(dashboard).revenueCsv(day, day, false, response);
+        String csv = response.getContentAsString(StandardCharsets.UTF_8);
+        assertEquals("text/csv; charset=UTF-8", response.getContentType());
+        assertEquals("attachment; filename=\"beautylink-revenue-2026-10-19-to-2026-10-19.csv\"",
+                response.getHeader("Content-Disposition"));
         assertTrue(csv.startsWith("\uFEFFpaid_at_vietnam,"));
         assertTrue(csv.contains("\"BL-1\""));
         assertTrue(csv.contains("\"BL-2\""));

@@ -57,6 +57,25 @@ class PlatformApiIntegrationTest {
     @MockitoBean OtpDeliveryService otpDeliveryService;
 
     @Test
+    void adminRevenueCsvStaysOnAuthorizedRequestWithoutAsyncDispatch() throws Exception {
+        String adminToken = login("0900000004", "BeautyLinkTest123!");
+        String customerToken = login("0900000001", "BeautyLinkTest123!");
+        var result = mvc.perform(get("/api/v1/admin/dashboard/revenue.csv")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .param("from", "2026-10-01").param("to", "2026-10-19"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "text/csv; charset=UTF-8"))
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=\"beautylink-revenue-2026-10-01-to-2026-10-19.csv\""))
+                .andReturn();
+        assertFalse(result.getRequest().isAsyncStarted());
+        assertTrue(result.getResponse().getContentAsString().contains("paid_at_vietnam,booking_code"));
+        mvc.perform(get("/api/v1/admin/dashboard/revenue.csv")
+                        .header("Authorization", "Bearer " + customerToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void validationReturnsFieldMessagesForCustomerAndAdminInput() throws Exception {
         mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"fullName\":\"A\",\"phone\":\"123\",\"email\":\"sai\",\"password\":\"123\"}"))

@@ -917,7 +917,9 @@ export const beautyApi = {
   },
 
   async exportAdminRevenueCsv(params: { from: string; to: string; includeDemo: boolean }): Promise<Blob> {
-    const response = await apiClient.get('/v1/admin/dashboard/revenue.csv', { params, responseType: 'blob' });
+    const response = await apiClient.get('/v1/admin/dashboard/revenue.csv', {
+      params, responseType: 'blob', timeout: 120000,
+    });
     return response.data;
   },
 
