@@ -104,3 +104,35 @@ test('admin revenue table pages verified payments and exports the selected range
     dom.window.close();
   }
 });
+
+test('admin revenue CSV uses all authorized JSON pages and preserves Vietnamese text safely', async () => {
+  const originalRevenue = beautyApi.adminRevenue;
+  const requests: Array<{ from: string; to: string; includeDemo: boolean; page: number; size: number }> = [];
+  beautyApi.adminRevenue = async (params) => {
+    requests.push(params);
+    return {
+      content: [{ paymentId: params.page + 1, paidAt: '2026-10-19T01:02:03Z',
+        bookingCode: `BL-${params.page + 1}`, supplierName: 'Tiệm, Móng "Đẹp"',
+        serviceName: params.page === 0 ? '=SUM(1+1)' : 'Sơn gel',
+        paymentOption: 'DEPOSIT_05' as const, amount: 15000,
+        remainingAtSalon: 285000 }],
+      totalElements: 2, totalPages: 2, page: params.page, size: params.size,
+    };
+  };
+  try {
+    const blob = await beautyApi.exportAdminRevenueCsv({
+      from: '2026-10-01', to: '2026-10-19', includeDemo: false,
+    });
+    const csv = await blob.text();
+    assert.deepEqual(requests.map(({ page, size }) => ({ page, size })), [
+      { page: 0, size: 500 }, { page: 1, size: 500 },
+    ]);
+    assert.deepEqual([...new Uint8Array(await blob.arrayBuffer()).slice(0, 3)], [0xEF, 0xBB, 0xBF]);
+    assert.match(csv, /^paid_at_vietnam,booking_code,partner,service,/);
+    assert.match(csv, /"2026-10-19 08:02:03","BL-1","Tiệm, Móng ""Đẹp""","'=SUM\(1\+1\)"/);
+    assert.match(csv, /"BL-2"/);
+    assert.equal(csv.trim().split('\r\n').length, 3);
+  } finally {
+    beautyApi.adminRevenue = originalRevenue;
+  }
+});

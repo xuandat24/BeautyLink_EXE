@@ -917,10 +917,33 @@ export const beautyApi = {
   },
 
   async exportAdminRevenueCsv(params: { from: string; to: string; includeDemo: boolean }): Promise<Blob> {
-    const response = await apiClient.get('/v1/admin/dashboard/revenue.csv', {
-      params, responseType: 'blob', timeout: 120000,
-    });
-    return response.data;
+    // The revenue JSON endpoint already powers the table. Build the CSV from
+    // its paginated, admin-authorized rows so exports also work with backend
+    // versions whose streaming CSV response fails during async dispatch.
+    const csvCell = (value: string | number) => {
+      let safe = String(value ?? '');
+      if (/^\s*[=+\-@]/.test(safe) || /^[\t\r\n]/.test(safe)) safe = `'${safe}`;
+      return `"${safe.replaceAll('"', '""')}"`;
+    };
+    const vietnamTime = (value: string) => {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+      }).formatToParts(new Date(value)).map(({ type, value: part }) => [type, part]));
+      return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+    };
+    const lines = ['paid_at_vietnam,booking_code,partner,service,payment_option,online_amount_vnd,remaining_at_salon_vnd,payment_id'];
+    for (let page = 0; ; page += 1) {
+      const batch = await beautyApi.adminRevenue({ ...params, page, size: 500 });
+      for (const row of batch.content) {
+        lines.push([
+          vietnamTime(row.paidAt), row.bookingCode, row.supplierName, row.serviceName,
+          row.paymentOption, row.amount, row.remainingAtSalon, row.paymentId,
+        ].map(csvCell).join(','));
+      }
+      if (page + 1 >= batch.totalPages) break;
+    }
+    return new Blob(['\uFEFF', lines.join('\r\n'), '\r\n'], { type: 'text/csv;charset=utf-8' });
   },
 
   async adminBookings(params: {
