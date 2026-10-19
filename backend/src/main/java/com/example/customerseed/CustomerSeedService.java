@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Operates only on the reserved example.com dataset; all writes are one transaction. */
+/** Operates only on the reserved current/legacy dataset; all writes are one transaction. */
 public final class CustomerSeedService {
     private final UserAccountRepository users;
     private final PasswordEncoder encoder;
@@ -59,18 +59,22 @@ public final class CustomerSeedService {
 
     private Result inspect(List<CustomerSeedManifest.Profile> profiles,
                            List<CustomerSeedManifest.Credential> credentials, boolean insert) {
-        if (profiles.size() != CustomerSeedManifest.SIZE) throw new IllegalArgumentException("Expected 60 profiles");
-        Map<String, CustomerSeedManifest.Credential> secrets = new HashMap<>();
+        if (profiles.size() != CustomerSeedManifest.SIZE) throw new IllegalArgumentException("Expected 80 profiles");
+        Map<Integer, CustomerSeedManifest.Credential> secrets = new HashMap<>();
         if (credentials != null) {
             for (CustomerSeedManifest.Credential credential : credentials) {
-                secrets.put(credential.email(), credential);
+                secrets.put(credential.index(), credential);
             }
-            if (secrets.size() != CustomerSeedManifest.SIZE) throw new IllegalArgumentException("Expected 60 distinct credentials");
+            if (secrets.size() != CustomerSeedManifest.SIZE) throw new IllegalArgumentException("Expected 80 distinct credentials");
         }
         Set<String> expectedEmails = new HashSet<>();
         for (CustomerSeedManifest.Profile profile : profiles) expectedEmails.add(profile.email());
+        for (int i = 1; i <= 60; i++) expectedEmails.add(CustomerSeedManifest.legacyEmail(i));
         int conflicts = 0;
-        for (UserAccount reserved : users.findByEmailStartingWithIgnoreCase(CustomerSeedManifest.EMAIL_PREFIX)) {
+        List<UserAccount> reservedAccounts = new java.util.ArrayList<>(
+                users.findByEmailStartingWithIgnoreCase(CustomerSeedManifest.EMAIL_PREFIX));
+        reservedAccounts.addAll(users.findByEmailEndingWithIgnoreCase(CustomerSeedManifest.EMAIL_DOMAIN));
+        for (UserAccount reserved : reservedAccounts) {
             if (!expectedEmails.contains(reserved.getEmail().toLowerCase())) conflicts++;
         }
         int existing = 0;
@@ -79,7 +83,13 @@ public final class CustomerSeedService {
         int validHashes = 0;
         for (CustomerSeedManifest.Profile profile : profiles) {
             UserAccount byEmail = users.findByEmailIgnoreCase(profile.email()).orElse(null);
-            UserAccount byPhone = users.findByPhone(profile.phone()).orElse(null);
+            UserAccount legacy = profile.index() <= 60 ? users.findByEmailIgnoreCase(
+                    CustomerSeedManifest.legacyEmail(profile.index())).orElse(null) : null;
+            if (byEmail != null && legacy != null && !byEmail.getId().equals(legacy.getId())) { conflicts++; continue; }
+            if (byEmail == null) byEmail = legacy;
+            boolean oldIdentity = byEmail != null && byEmail.getEmail().equals(CustomerSeedManifest.legacyEmail(profile.index()));
+            UserAccount byPhone = users.findByPhone(oldIdentity
+                    ? CustomerSeedManifest.legacyPhone(profile.index()) : profile.phone()).orElse(null);
             if (byEmail != null) {
                 if (byPhone == null || !byPhone.getId().equals(byEmail.getId())
                         || !matchesProfile(byEmail, profile)) {
@@ -89,7 +99,7 @@ public final class CustomerSeedService {
                 existing++;
                 active++;
                 if (isBcrypt(byEmail.getPasswordHash())) {
-                    if (credentials == null || encoder.matches(secrets.get(profile.email()).password(),
+                    if (credentials == null || encoder.matches(secrets.get(profile.index()).password(),
                             byEmail.getPasswordHash())) validHashes++;
                     else conflicts++;
                 } else conflicts++;
@@ -100,7 +110,7 @@ public final class CustomerSeedService {
                 continue;
             }
             if (insert) {
-                CustomerSeedManifest.Credential credential = secrets.get(profile.email());
+                CustomerSeedManifest.Credential credential = secrets.get(profile.index());
                 if (credential == null) throw new IllegalArgumentException("Missing credential for manifest row " + profile.index());
                 UserAccount account = new UserAccount();
                 account.setFullName(profile.fullName());
@@ -121,8 +131,10 @@ public final class CustomerSeedService {
     }
 
     private boolean matchesProfile(UserAccount account, CustomerSeedManifest.Profile profile) {
-        return account.getEmail().equals(profile.email())
-                && account.getPhone().equals(profile.phone())
+        boolean current = account.getEmail().equals(profile.email()) && account.getPhone().equals(profile.phone());
+        boolean legacy = profile.index() <= 60 && account.getEmail().equals(CustomerSeedManifest.legacyEmail(profile.index()))
+                && account.getPhone().equals(CustomerSeedManifest.legacyPhone(profile.index()));
+        return (current || legacy)
                 && account.getFullName().equals(profile.fullName())
                 && account.getGender() == profile.gender()
                 && profile.dateOfBirth().equals(account.getDateOfBirth())

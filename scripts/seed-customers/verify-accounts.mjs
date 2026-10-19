@@ -15,7 +15,7 @@ if (!loopback && !isolatedDocker) {
 const lines = (path) => readFileSync(path, 'utf8').trimEnd().split(/\r?\n/);
 const manifest = lines(manifestPath).slice(1).map((line) => line.split('|'));
 const credentials = lines(credentialPath).slice(1).map((line) => line.split('|'));
-if (manifest.length !== 60 || credentials.length !== 60) throw new Error('Expected exactly 60 accounts');
+if (manifest.length !== 80 || credentials.length !== 80) throw new Error('Expected exactly 80 accounts');
 
 const call = async (path, options = {}) => {
   const response = await fetch(new URL(path, endpoint), {
@@ -36,7 +36,7 @@ const ids = new Set();
 let logins = 0;
 let profiles = 0;
 let bookingReads = 0;
-for (let i = 0; i < 60; i++) {
+for (let i = 0; i < 80; i++) {
   const [index, name, phone, email, gender, dateOfBirth] = manifest[i];
   const [credentialIndex, credentialEmail, password] = credentials[i];
   if (index !== String(i + 1) || credentialIndex !== index || credentialEmail !== email) {

@@ -15,6 +15,8 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
+import java.util.HashMap;
 
 /** Run with Java 21 source-file mode. Writes secrets only to the named local file. */
 class GenerateCredentials {
@@ -26,7 +28,7 @@ class GenerateCredentials {
     private static final String ALL = UPPER + LOWER + DIGIT + SYMBOL;
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 2) throw new IllegalArgumentException("Usage: java GenerateCredentials.java <manifest.psv> <new-private-credentials.psv>");
+        if (args.length < 2 || args.length > 3) throw new IllegalArgumentException("Usage: java GenerateCredentials.java <manifest.psv> <new-private-credentials.psv> [existing-credentials.psv]");
         Path manifest = Path.of(args[0]);
         Path output = Path.of(args[1]);
         Path privateDir = output.getParent();
@@ -35,20 +37,37 @@ class GenerateCredentials {
             throw new IllegalArgumentException("Credential output must be inside a non-symlink private/ directory");
         }
         List<String> source = Files.readAllLines(manifest, StandardCharsets.UTF_8);
-        if (source.size() != 61 || !source.getFirst().equals("index|fullName|phone|email|gender|dateOfBirth|city")) {
-            throw new IllegalArgumentException("Expected the 60-account customer manifest");
+        if (source.size() != 81 || !source.getFirst().equals("index|fullName|phone|email|gender|dateOfBirth|city")) {
+            throw new IllegalArgumentException("Expected the 80-account customer manifest");
+        }
+        Map<Integer, String> preserved = new HashMap<>();
+        if (args.length == 3) {
+            var previous = Files.readAllLines(Path.of(args[2]), StandardCharsets.UTF_8);
+            if ((previous.size() != 61 && previous.size() != 81)
+                    || !previous.getFirst().equals("index|email|password"))
+                throw new IllegalArgumentException("Expected the existing 60 or 80 credential entries");
+            for (int i = 1; i < previous.size(); i++) {
+                var f = previous.get(i).split("\\|", -1);
+                if (f.length != 3 || !f[0].equals(Integer.toString(i))
+                        || !(f[1].equals(String.format("bl-customer-%03d@example.com", i))
+                             || f[1].matches("[a-z.]+\\." + String.format("%03d", i) + "\\.[0-9]{6}@seed\\.beautylink\\.test"))
+                        || f[2].length() < 20 || f[2].length() > 72)
+                    throw new IllegalArgumentException("Invalid previous credential row " + i);
+                preserved.put(i, f[2]);
+            }
         }
         StringBuilder content = new StringBuilder("index|email|password\n");
-        Set<String> passwords = new HashSet<>();
-        for (int i = 1; i <= 60; i++) {
+        Set<String> passwords = new HashSet<>(preserved.values());
+        if (passwords.size() != preserved.size()) throw new IllegalArgumentException("Duplicate previous passwords");
+        for (int i = 1; i <= 80; i++) {
             String[] fields = source.get(i).split("\\|", -1);
-            String email = String.format("bl-customer-%03d@example.com", i);
-            if (fields.length != 7 || !fields[0].equals(Integer.toString(i)) || !fields[3].equals(email)) {
+            if (fields.length != 7 || !fields[0].equals(Integer.toString(i))
+                    || !fields[3].matches("[a-z.]+\\." + String.format("%03d", i) + "\\.[0-9]{6}@seed\\.beautylink\\.test")) {
                 throw new IllegalArgumentException("Invalid synthetic identity at row " + i);
             }
-            String secret;
-            do { secret = password(); } while (!passwords.add(secret));
-            content.append(i).append('|').append(email).append('|').append(secret).append('\n');
+            String secret = preserved.get(i);
+            if (secret == null) do { secret = password(); } while (!passwords.add(secret));
+            content.append(i).append('|').append(fields[3]).append('|').append(secret).append('\n');
         }
         Files.createDirectories(privateDir);
         restrict(privateDir, true);
@@ -60,7 +79,8 @@ class GenerateCredentials {
             Files.deleteIfExists(output);
             throw ex;
         }
-        System.out.println("Generated 60 unique credentials in the requested local file; passwords were not printed.");
+        System.out.printf("Credentials: total=80 preserved=%d generated=%d; passwords were not printed.%n",
+                preserved.size(), 80 - preserved.size());
     }
 
     private static void restrict(Path path, boolean directory) throws IOException {

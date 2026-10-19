@@ -1,112 +1,113 @@
-# Synthetic CUSTOMER accounts
+# Managed seed datasets
 
-This tool prepares exactly 60 password-based CUSTOMER identities in the reserved
-`bl-customer-001@example.com` … `bl-customer-060@example.com` namespace.
-The addresses are not mailboxes. It never sends OTP or calls PayOS. The
-passwords are generated independently and stored only in a local file under
-`private/`, which Git ignores.
+This is the existing customer seed CLI extended to **80 CUSTOMER accounts**
+and **24 managed DEMO practitioners**. Normal backend startup never runs
+either dataset. There is no schema migration or public seed endpoint.
 
-## Actual account model
+## Customers and credentials
 
-`user_accounts` stores name, phone, email, gender, birth date, BCrypt hash,
-role, status, loyalty points, auth version and timestamps. It has **no**
-customer city/address/avatar or persisted email-verification flag. The
-30 Hà Nội / 30 Thành phố Hồ Chí Minh split is manifest metadata only; the UI
-will not show it as saved profile data. These synthetic identities are
-administratively initialized as ACTIVE; they did not receive a real OTP.
+`customers.psv` retains indexes 001–060 and their names, gender and birth dates;
+061–080 are additions. All phone numbers are synthetic, unique and ten digits,
+using 032/056/070/081/090 (16 per prefix). These are valid formats, not proof
+that the numbers are unassigned. Never send SMS or call these test numbers.
+Name-based emails use the reserved non-deliverable `seed.beautylink.test`
+domain. Numeric suffixes are generated once and committed in the manifest.
 
-## Isolated environment prerequisite
+The first 60 retain their 30 Hanoi / 30 HCM metadata; the final manifest has
+40/40. UserAccount has no city/address/avatar/email-verified column. No city
+is persisted and no OTP delivery is fabricated. Google external identities
+are not created; these accounts use BCrypt passwords.
 
-Use a new, disposable MySQL 8.4 database on loopback. Do not point this at a
-restore containing customer data. Create its schema with the current backend
-application in that isolated environment first; the seed tool forces Hibernate
-`ddl-auto=validate` and never creates/alters tables. Keep database credentials
-in ignored `backend/.env.properties` or the local process environment, not
-on a command line or in Git. Run the commands below from `backend/`.
-Java 21 is required.
-
-## Generate private credentials once
+Keep the original `private/credentials.psv` unchanged. Create a NEW file,
+preserving every password by index and generating only missing entries:
 
 ```powershell
-java ../scripts/seed-customers/GenerateCredentials.java ../scripts/seed-customers/customers.psv ../scripts/seed-customers/private/credentials.psv
+# From backend/, Java 21
+java ../scripts/seed-customers/GenerateCredentials.java ../scripts/seed-customers/customers.psv ../scripts/seed-customers/private/credentials-080.psv ../scripts/seed-customers/private/credentials.psv
 ```
 
-The generator refuses to overwrite an existing file. Keep the file private,
-back it up in an approved secret store if needed, and never commit or paste it
-into an issue, CI log, PR, or chat. Reuse **the same file** when recovering a
-partial seed; generating new passwords would not match existing accounts.
-The tool requires a non-symlink `private/` parent, restricts that directory
-and the new file to its owner (POSIX 0700/0600 or Windows owner-only ACL),
-and does not print passwords.
+The generator refuses overwrites and protects the directory/file with
+owner-only permissions. Both credential files and any encrypted DB connection
+file stay Git-ignored. Do not print or commit them. Existing legacy
+`bl-customer-001@example.com` through 060 and their original phones are
+recognized by stable index and kept unchanged. If both legacy and new
+identities exist for an index, the run fails closed rather than creating a
+second batch or renaming accounts.
 
-## Build, preview, apply, verify
+## Practitioners
+
+`practitioners.psv` maps 24 distinct Vietnamese names to existing supplier
+slugs. Each managed person has the exact bio marker
+`DEMO BeautyLink [bl-practitioner-001]` … `024`. Unmarked catalog/real
+workforce is not adopted, counted as managed, renamed, or rescheduled.
+The target is 24 **managed** people; total workforce can be greater.
+
+Suppliers must already be VERIFIED and have active services. New managed
+practitioners have explicit restricted service assignments to those services.
+Default schedule: Monday–Saturday 09:00–19:00, break 12:00–13:00, 30-minute
+steps; Sunday inactive. Existing valid managed schedules are retained and
+only absent days are inserted. Invalid/conflicting data blocks apply.
+Supplier rows serialize repeated CLI execution. All writes roll back together.
+
+## Local dry-run, apply and verify
+
+Use a disposable isolated database with the current approved schema.
+The CLI forces Hibernate `validate` and has no normal application seeders,
+schedulers, email or payment services. Supply DB credentials in local process
+environment or ignored local configuration, never command-line arguments.
 
 ```powershell
-mvn --batch-mode --no-transfer-progress verify
+mvn --batch-mode --no-transfer-progress "-Dtest=PractitionerSeedTest,CustomerSeedIntegrationTest,CustomerSeedSafetyTest" verify
+java -jar target/backend-0.0.1-SNAPSHOT.jar seed-customers --customer.seed.dataset=practitioners --customer.seed.manifest=../scripts/seed-customers/practitioners.psv --customer.seed.mode=dry-run
+java -jar target/backend-0.0.1-SNAPSHOT.jar seed-customers --customer.seed.dataset=practitioners --customer.seed.manifest=../scripts/seed-customers/practitioners.psv --customer.seed.mode=apply --customer.seed.confirm-write=CREATE_24_PRACTITIONERS
 java -jar target/backend-0.0.1-SNAPSHOT.jar seed-customers --customer.seed.manifest=../scripts/seed-customers/customers.psv --customer.seed.mode=dry-run
-java -jar target/backend-0.0.1-SNAPSHOT.jar seed-customers --customer.seed.manifest=../scripts/seed-customers/customers.psv --customer.seed.credentials=../scripts/seed-customers/private/credentials.psv --customer.seed.mode=apply --customer.seed.confirm-write=CREATE_60_CUSTOMERS
-java -jar target/backend-0.0.1-SNAPSHOT.jar seed-customers --customer.seed.manifest=../scripts/seed-customers/customers.psv --customer.seed.credentials=../scripts/seed-customers/private/credentials.psv --customer.seed.mode=verify
+java -jar target/backend-0.0.1-SNAPSHOT.jar seed-customers --customer.seed.manifest=../scripts/seed-customers/customers.psv --customer.seed.credentials=../scripts/seed-customers/private/credentials-080.psv --customer.seed.mode=apply --customer.seed.confirm-write=CREATE_80_CUSTOMERS
+java -jar target/backend-0.0.1-SNAPSHOT.jar seed-customers --customer.seed.manifest=../scripts/seed-customers/customers.psv --customer.seed.credentials=../scripts/seed-customers/private/credentials-080.psv --customer.seed.mode=verify
 ```
 
-The seed entry point is reached only with the explicit `seed-customers`
-argument. Normal Railway startup never executes it. The CLI has no web server,
-payment/email services, scheduled jobs, demo seeder or catalog seeder. Every
-write is in one transaction. A conflict aborts the run without overwriting a
-user. A repeat run inserts zero records.
+The customer CLI reports the real CUSTOMER count and expected new count,
+not a hardcoded dashboard number. Every existing managed identity is checked;
+existing passwords/status/profile are never reset. Unique DB constraints
+roll back a racing insert.
 
-By default, the CLI rejects non-loopback MySQL. A separately approved remote
-run requires matching `--customer.seed.allow-remote=true` and
-`--customer.seed.expected-host=<verified-host>`. A production profile or
-Railway environment also requires
-`--customer.seed.allow-production=true`; the apply confirmation is still
-required. These flags are technical safeguards, not permission to insert into
-production. Obtain explicit owner approval, check a usable backup and review
-the dry-run conflicts/counts first. Never place a password or secret in flags.
+## Production read-only checkpoint
 
-## Read-only checks
-
-Use the current schema names:
-
-```sql
-SELECT COUNT(*) AS seeded_count,
-       COUNT(DISTINCT email) AS unique_emails,
-       COUNT(DISTINCT phone) AS unique_phones,
-       SUM(role = 'CUSTOMER') AS customer_count,
-       SUM(status = 'ACTIVE') AS active_count,
-       SUM(gender IS NOT NULL AND date_of_birth IS NOT NULL) AS complete_profile_count,
-       SUM(HEX(LEFT(password_hash,2)) = '2432' AND CHAR_LENGTH(password_hash) = 60) AS bcrypt_count
-FROM user_accounts
-WHERE email REGEXP '^bl-customer-(00[1-9]|0[1-5][0-9]|060)@example[.]com$';
-```
-
-Expected numbers are 60 in each count **after** apply. The narrower
-`001`–`060` identity list is checked by the CLI. Email verification is not
-a column and cannot be counted in SQL. Use the isolated HTTP test to verify
-normal `/api/v1/auth/login`, `/api/v1/auth/me` and
-`/api/v1/bookings/mine` for all 60; an ACTIVE row alone is insufficient.
-For the isolated HTTP check, start the backend against the same disposable
-MySQL database with an isolated JWT secret and a test-only login rate limit
-above 120. Then run:
+`ProductionDryRun.ps1` has **no apply mode**. Run it as the Windows owner.
+It prompts for the DB password locally and stores only a DPAPI-encrypted,
+owner-only connection file under `private/` (same Windows user/machine).
+A saved connection is refused if host/port/schema differ. It runs both
+dry-runs using TLS and read-only connections, validates the current schema,
+and reports backup metadata. It does not prove restoration from a marker alone.
 
 ```powershell
-node ../scripts/seed-customers/verify-accounts.mjs http://127.0.0.1:18080 ../scripts/seed-customers/customers.psv ../scripts/seed-customers/private/credentials.psv
+./scripts/seed-customers/ProductionDryRun.ps1 -DatabaseHost <verified-host> -DatabasePort <verified-port> -DatabaseName <verified-schema> -BackupPath <current-completed-backup-folder>
 ```
 
-If the test API is on a Docker `--internal` network without a host port,
-run this same script in a disposable Node container joined to that network;
-set `CUSTOMER_SEED_TEST_HOST` to the exact test API container name (which
-must start with `beautylink-customer-api-`). Mount this directory read-only
-as `/work` and use `http://<test-api-container>:8080`. The verifier rejects
-other remote hosts, performs only login and GET requests, and prints
-aggregate counts, never tokens or passwords. This is a local integration
-check, not a live production login claim.
+Remote CLI runs require exact `customer.seed.expected-host` **and**
+`customer.seed.expected-database` plus `allow-remote=true`.
+Production apply additionally requires `allow-production=true` and the
+dataset-specific write confirmation. Obtain owner approval for the exact
+dry-run and a current usable backup before any production apply. No merge
+or deployment is required to run this CLI locally.
 
-## Safe cleanup
+## Verification and cleanup
 
-No cleanup runs automatically. In a disposable local test database, stop the
-test application, verify that none of the 60 exact reserved IDs has booking,
-review, payment or other references, then discard the **entire dedicated
-test container/database**. Never use a broad `DELETE ... LIKE` against a
-shared or production database. For a shared environment, prepare a separate,
-reviewed cleanup that targets explicit IDs only after checking dependencies
-and backup; this task does not supply a production deletion command.
+`verify-accounts.mjs` tests 80 logins by email and phone, own profiles and
+empty booking histories on a loopback or explicitly named internal Docker
+test API. Do not run all-account HTTP login checks on production or weaken
+its rate limits. Production verification uses all 80 stored hashes and a
+separately approved small HTTP sample.
+
+```powershell
+node ../scripts/seed-customers/verify-accounts.mjs http://127.0.0.1:18080 ../scripts/seed-customers/customers.psv ../scripts/seed-customers/private/credentials-080.psv
+```
+
+Never delete a shared/production dataset with broad LIKE SQL. Cleanup needs
+explicit managed IDs, reference checks, backup and approval. A disposable
+local test database can be discarded after verification; the manifest and
+same credential file can recreate it.
+
+Phone prefix references: [Viettel 032](https://www.vietteltelecom.vn/tin-tuc/tin-dich-vu/bi-quyet-chon-sim-so-dep-viettel-ban-co-biet/19762220),
+[Vietnamobile 056](https://www.vietnamobile.com.vn/index.php/tracuutttb),
+[MobiFone 070/090](https://noidungsohanoi.mobifone.vn/cach-chon-so-mobifone),
+[VinaPhone 081](https://vinaphone.com.vn/english/news/sim-012-doi-thanh-dau-so-nao-mang-vinaphone.html).

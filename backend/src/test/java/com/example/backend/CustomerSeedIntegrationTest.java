@@ -55,10 +55,10 @@ class CustomerSeedIntegrationTest {
         return CustomerSeedManifest.profiles(Path.of("../scripts/seed-customers/customers.psv"));
     }
 
-    private List<CustomerSeedManifest.Credential> credentials() {
+    private List<CustomerSeedManifest.Credential> credentials() throws Exception {
         List<CustomerSeedManifest.Credential> values = new ArrayList<>();
-        for (int i = 1; i <= 60; i++) {
-            values.add(new CustomerSeedManifest.Credential(i, CustomerSeedManifest.email(i),
+        for (int i = 1; i <= 80; i++) {
+            values.add(new CustomerSeedManifest.Credential(i, profiles().get(i - 1).email(),
                     String.format("SeedTestPassword%03d!A", i)));
         }
         return values;
@@ -69,27 +69,27 @@ class CustomerSeedIntegrationTest {
     }
 
     @Test @Order(1)
-    void dryRunLeavesDatabaseUntouchedAndManifestIsThirtyPerCity() throws Exception {
+    void dryRunLeavesDatabaseUntouchedAndManifestIsFortyPerCity() throws Exception {
         var profiles = profiles();
-        assertThat(profiles).hasSize(60);
-        assertThat(profiles.stream().filter(p -> p.city().equals("Hà Nội")).count()).isEqualTo(30);
-        assertThat(profiles.stream().filter(p -> p.city().equals("Thành phố Hồ Chí Minh")).count()).isEqualTo(30);
-        assertThat(profiles.stream().map(CustomerSeedManifest.Profile::email).distinct().count()).isEqualTo(60);
-        assertThat(profiles.stream().map(CustomerSeedManifest.Profile::phone).distinct().count()).isEqualTo(60);
+        assertThat(profiles).hasSize(80);
+        assertThat(profiles.stream().filter(p -> p.city().equals("Hà Nội")).count()).isEqualTo(40);
+        assertThat(profiles.stream().filter(p -> p.city().equals("Thành phố Hồ Chí Minh")).count()).isEqualTo(40);
+        assertThat(profiles.stream().map(CustomerSeedManifest.Profile::email).distinct().count()).isEqualTo(80);
+        assertThat(profiles.stream().map(CustomerSeedManifest.Profile::phone).distinct().count()).isEqualTo(80);
         assertThat(seeder().dryRun(profiles)).isEqualTo(new CustomerSeedService.Result(0, 0, 0, 0, 0));
-        assertThat(users.findByEmailStartingWithIgnoreCase(CustomerSeedManifest.EMAIL_PREFIX)).isEmpty();
+        assertThat(users.findByEmailEndingWithIgnoreCase(CustomerSeedManifest.EMAIL_DOMAIN)).isEmpty();
     }
 
     @Test @Order(2)
     void applyIsAtomicAndIdempotentWithCompleteCustomerProfiles() throws Exception {
         var seed = seeder();
         var inserted = seed.apply(profiles(), credentials());
-        assertThat(inserted.inserted()).isEqualTo(60);
+        assertThat(inserted.inserted()).isEqualTo(80);
         assertThat(inserted.existing()).isZero();
         assertThat(seed.apply(profiles(), credentials()).inserted()).isZero();
         assertThat(seed.verify(profiles(), credentials()))
-                .isEqualTo(new CustomerSeedService.Result(60, 0, 60, 60, 0));
-        assertThat(users.findByEmailStartingWithIgnoreCase(CustomerSeedManifest.EMAIL_PREFIX))
+                .isEqualTo(new CustomerSeedService.Result(80, 0, 80, 80, 0));
+        assertThat(users.findByEmailEndingWithIgnoreCase(CustomerSeedManifest.EMAIL_DOMAIN))
                 .allSatisfy(user -> {
                     assertThat(user.getRole()).isEqualTo(Role.CUSTOMER);
                     assertThat(user.getStatus()).isEqualTo(AccountStatus.ACTIVE);
@@ -103,9 +103,9 @@ class CustomerSeedIntegrationTest {
     }
 
     @Test @Order(3)
-    void allSixtyCanLogInTwiceAndReadOnlyTheirOwnProfileAndEmptyBookingHistory() throws Exception {
+    void allEightyCanLogInTwiceAndReadOnlyTheirOwnProfileAndEmptyBookingHistory() throws Exception {
         Set<Long> accountIds = new HashSet<>();
-        for (int i = 1; i <= 60; i++) {
+        for (int i = 1; i <= 80; i++) {
             var profile = profiles().get(i - 1);
             String password = credentials().get(i - 1).password();
             JsonNode first = login(profile.email(), password);
@@ -133,30 +133,30 @@ class CustomerSeedIntegrationTest {
             assertThat(readJson("/api/v1/auth/me", freshSession.get("accessToken").asText())
                     .get("id").asLong()).isEqualTo(id);
         }
-        assertThat(accountIds).hasSize(60);
+        assertThat(accountIds).hasSize(80);
         mvc.perform(get("/api/v1/auth/me")).andExpect(status().isUnauthorized());
     }
 
     @Test @Order(4)
     void missingRecordIsRecreatedWithoutResettingOtherPasswords() throws Exception {
-        var before = users.findByEmailIgnoreCase(CustomerSeedManifest.email(1)).orElseThrow();
+        var before = users.findByEmailIgnoreCase(profiles().get(0).email()).orElseThrow();
         String originalHash = before.getPasswordHash();
-        users.delete(users.findByEmailIgnoreCase(CustomerSeedManifest.email(60)).orElseThrow());
+        users.delete(users.findByEmailIgnoreCase(profiles().get(79).email()).orElseThrow());
         var result = seeder().apply(profiles(), credentials());
-        assertThat(result.existing()).isEqualTo(59);
+        assertThat(result.existing()).isEqualTo(79);
         assertThat(result.inserted()).isEqualTo(1);
-        assertThat(users.findByEmailIgnoreCase(CustomerSeedManifest.email(1)).orElseThrow().getPasswordHash())
+        assertThat(users.findByEmailIgnoreCase(profiles().get(0).email()).orElseThrow().getPasswordHash())
                 .isEqualTo(originalHash);
-        assertThat(seeder().verify(profiles(), credentials()).existing()).isEqualTo(60);
+        assertThat(seeder().verify(profiles(), credentials()).existing()).isEqualTo(80);
     }
 
     @Test @Order(5)
     void conflictingReservedIdentityIsRejectedWithoutChangingOtherUsers() throws Exception {
-        UserAccount original = users.findByEmailIgnoreCase(CustomerSeedManifest.email(60)).orElseThrow();
+        UserAccount original = users.findByEmailIgnoreCase(profiles().get(79).email()).orElseThrow();
         users.delete(original);
         UserAccount unrelated = new UserAccount();
         unrelated.setFullName("Khách Hàng Khác");
-        unrelated.setPhone("0390000060");
+        unrelated.setPhone(profiles().get(79).phone());
         unrelated.setEmail("unrelated-test@example.com");
         unrelated.setPasswordHash(encoder.encode("UnrelatedTestPassword1!"));
         unrelated.setRole(Role.CUSTOMER);
@@ -170,8 +170,34 @@ class CustomerSeedIntegrationTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThat(users.findById(id).orElseThrow().getEmail()).isEqualTo("unrelated-test@example.com");
         assertThat(users.findById(id).orElseThrow().getPasswordHash()).isEqualTo(originalHash);
-        assertThat(users.findByEmailIgnoreCase(CustomerSeedManifest.email(60))).isEmpty();
-        assertThat(users.findByEmailStartingWithIgnoreCase(CustomerSeedManifest.EMAIL_PREFIX)).hasSize(59);
+        assertThat(users.findByEmailIgnoreCase(profiles().get(79).email())).isEmpty();
+        assertThat(users.findByEmailEndingWithIgnoreCase(CustomerSeedManifest.EMAIL_DOMAIN)).hasSize(79);
+    }
+
+    @Test @Order(6)
+    void sixtyLegacyIdentitiesKeepTheirCredentialsAndOnlyTwentyAreAdded() throws Exception {
+        users.delete(users.findByEmailIgnoreCase("unrelated-test@example.com").orElseThrow());
+        var firstSixty = new java.util.HashMap<Long, String>();
+        for (int i = 1; i <= 60; i++) {
+            var user = users.findByEmailIgnoreCase(profiles().get(i - 1).email()).orElseThrow();
+            firstSixty.put(user.getId(), user.getPasswordHash());
+            user.setEmail(CustomerSeedManifest.legacyEmail(i));
+            user.setPhone(CustomerSeedManifest.legacyPhone(i));
+            users.saveAndFlush(user);
+        }
+        for (int i = 61; i < 80; i++) users.delete(users.findByEmailIgnoreCase(profiles().get(i - 1).email()).orElseThrow());
+        assertThat(seeder().dryRun(profiles()).existing()).isEqualTo(60);
+        var result = seeder().apply(profiles(), credentials());
+        assertThat(result.existing()).isEqualTo(60);
+        assertThat(result.inserted()).isEqualTo(20);
+        for (int i = 1; i <= 60; i++) {
+            var user = users.findByEmailIgnoreCase(CustomerSeedManifest.legacyEmail(i)).orElseThrow();
+            assertThat(user.getPasswordHash()).isEqualTo(firstSixty.get(user.getId()));
+            assertThat(user.getPhone()).isEqualTo(CustomerSeedManifest.legacyPhone(i));
+        }
+        assertThat(seeder().verify(profiles(), credentials())).isEqualTo(new CustomerSeedService.Result(80, 0, 80, 80, 0));
+        assertThat(login(CustomerSeedManifest.legacyEmail(1), credentials().getFirst().password())
+                .at("/user/role").asText()).isEqualTo("CUSTOMER");
     }
 
     private JsonNode login(String identifier, String password) throws Exception {

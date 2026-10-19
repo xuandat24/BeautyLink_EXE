@@ -1,5 +1,42 @@
 # CUSTOMER seed verification
 
+## Continuation: 80 customers and 24 managed DEMO practitioners — 19 October 2026
+
+Original seed commit: `a0ae4701828fd3d0b1b6b04f25775c0dd9b381d4`.
+Current main `52735beb36139a21a561a1b4ecdc2ab6f062c7ed` was merged into the
+same seed branch as `818bab53dceb12e872f3c6c10d17dc9b85a1c56d` to use the
+existing Google identity and practitioner service-assignment model.
+Authentication, booking, PayOS and frontend code were not edited by this seed work.
+
+- Target: 80 total managed CUSTOMER identities, not 80 in addition to 60.
+- Names, gender, birth dates and indexes 001–060 retained; desired email/phone
+  formats improved. Legacy persisted identities are recognized and never renamed.
+- 20 profiles added; final city metadata is 40/40, with the original 30/30 intact.
+- New private file `credentials-080.psv`: **60 old passwords preserved,
+  20 generated**. Original file SHA was compared before/after and unchanged.
+- 24 practitioners use explicit DEMO bio markers and supplier/service assignments.
+  Unmarked workforce remains outside the managed set.
+- Focused Java 21 Maven verify: **9 tests PASS**, 0 failures/errors/skips,
+  completed 19 October 2026 at 12:44 +07:00. Log:
+  `backend/target/seed-80-practitioner-24.log` (local, not committed).
+  H2 isolated integration evidence: 80 ACTIVE CUSTOMER profiles and hashes,
+  160 email/phone logins and 160 authenticated profile reads, all 80 empty
+  booking histories; repeated apply inserts zero; 60 legacy identities retain
+  their hashes and only 20 are added. The legacy test also checks one login.
+  Practitioner tests inspect all 24 assignments, seven-day schedules and actual
+  availability including break exclusion, idempotency and missing-supplier refusal.
+  These are Spring/MockMvc/H2 tests, **not new MySQL or production HTTP evidence**.
+  Java packaging, PowerShell syntax and JS syntax checks PASS. Historical
+  results below describe the original 60-account implementation only.
+- Railway production project/environment/MySQL identified through read-only MCP;
+  deployed backend SHA matches main above. OAuth returns variable names only.
+  No local DB connection configuration exists, so production counts/collisions/
+  schema validation and dashboard count remain **NOT VERIFIED**.
+- Only the backup dated 12 October is currently visible locally; it predates
+  recent schema changes. A current usable backup gate is **BLOCKED**.
+- Production write approval has **not** been requested or granted for a verified
+  dry-run. No production insert, merge or deployment was performed.
+
 Analyzed source: `main` at `a2601072d11a6464c5cd7da0d4d553683ccec9fd`.
 Working branch: `codex/seed-60-customers`.
 

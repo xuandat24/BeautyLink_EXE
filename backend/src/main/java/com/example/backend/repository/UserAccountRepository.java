@@ -14,6 +14,7 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
     Optional<UserAccount> findLockedById(@org.springframework.data.repository.query.Param("id") Long id);
     boolean existsByEmailIgnoreCase(String email);
     List<UserAccount> findByEmailStartingWithIgnoreCase(String prefix);
+    List<UserAccount> findByEmailEndingWithIgnoreCase(String suffix);
     List<UserAccount> findByRole(Role role);
     List<UserAccount> findByRoleOrderByIdAsc(Role role);
     long countByRole(Role role);
