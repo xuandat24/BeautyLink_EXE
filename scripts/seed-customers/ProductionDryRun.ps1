@@ -6,13 +6,52 @@ param(
     [string]$DatabaseUser = 'root'
 )
 $ErrorActionPreference = 'Stop'
+
+function Set-SeedPrivateAccess {
+    param([Parameter(Mandatory)] [string]$LiteralPath)
+    $seedItem = Get-Item -LiteralPath $LiteralPath -Force -ErrorAction Stop
+    $seedOwner = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $seedExisting = Get-Acl -LiteralPath $LiteralPath -ErrorAction Stop
+    if ($seedExisting.GetOwner([Security.Principal.SecurityIdentifier]) -ne $seedOwner) {
+        throw 'Private credential paths must be owned by the current Windows user'
+    }
+    # Fresh descriptor: only the DACL is modified. Never copy/persist SACL,
+    # owner or group via Set-Acl (which can require SeSecurityPrivilege).
+    if ($seedItem.PSIsContainer) {
+        $seedAcl = New-Object Security.AccessControl.DirectorySecurity
+        $seedRule = New-Object Security.AccessControl.FileSystemAccessRule(
+            $seedOwner, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+    } else {
+        $seedAcl = New-Object Security.AccessControl.FileSecurity
+        $seedRule = New-Object Security.AccessControl.FileSystemAccessRule($seedOwner, 'FullControl', 'Allow')
+    }
+    $seedAcl.SetAccessRuleProtection($true, $false)
+    $seedAcl.AddAccessRule($seedRule)
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        [IO.FileSystemAclExtensions]::SetAccessControl($seedItem, $seedAcl)
+    } else {
+        $seedItem.SetAccessControl($seedAcl)
+    }
+    $seedApplied = Get-Acl -LiteralPath $LiteralPath -ErrorAction Stop
+    $seedRules = $seedApplied.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
+    if (-not $seedApplied.AreAccessRulesProtected -or $seedRules.Count -ne 1 -or
+        $seedRules[0].IdentityReference -ne $seedOwner -or $seedRules[0].IsInherited -or
+        $seedRules[0].AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
+        $seedRules[0].FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl) {
+        throw 'Owner-only private credential DACL verification failed'
+    }
+}
+
 $seedRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $seedJar = Join-Path $seedRoot 'backend/target/backend-0.0.1-SNAPSHOT.jar'
 if (-not (Test-Path -LiteralPath $seedJar)) { throw 'Build the reviewed seed JAR before running this command' }
 # NO apply mode. Password is DPAPI-encrypted locally for this Windows user/machine.
 $seedPrivate = Join-Path $PSScriptRoot 'private'
 $seedConnectionFile = Join-Path $seedPrivate 'railway-production.clixml'
+New-Item -ItemType Directory -Path $seedPrivate -Force | Out-Null
+Set-SeedPrivateAccess -LiteralPath $seedPrivate
 if (Test-Path -LiteralPath $seedConnectionFile) {
+    Set-SeedPrivateAccess -LiteralPath $seedConnectionFile
     $seedSaved = Import-Clixml -LiteralPath $seedConnectionFile
     if ($seedSaved.Host -ne $DatabaseHost -or $seedSaved.Port -ne $DatabasePort -or $seedSaved.Database -ne $DatabaseName) {
         throw 'Saved connection targets a different database; no connection attempted'
@@ -21,18 +60,9 @@ if (Test-Path -LiteralPath $seedConnectionFile) {
 } else {
     $seedPasswordInput = Read-Host 'Railway MySQL password (hidden; never paste into chat)' -AsSecureString
     $seedCredential = New-Object System.Management.Automation.PSCredential($DatabaseUser, $seedPasswordInput)
-    New-Item -ItemType Directory -Path $seedPrivate -Force | Out-Null
-    $seedAcl = Get-Acl -LiteralPath $seedPrivate
-    $seedOwner = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-    $seedAcl.SetAccessRuleProtection($true, $false)
-    $seedAcl.SetAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($seedOwner,'FullControl','Allow')))
-    Set-Acl -LiteralPath $seedPrivate -AclObject $seedAcl
     [pscustomobject]@{Host=$DatabaseHost; Port=$DatabasePort; Database=$DatabaseName; Credential=$seedCredential} |
         Export-Clixml -LiteralPath $seedConnectionFile -NoClobber
-    $seedFileAcl = Get-Acl -LiteralPath $seedConnectionFile
-    $seedFileAcl.SetAccessRuleProtection($true, $false)
-    $seedFileAcl.SetAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($seedOwner,'FullControl','Allow')))
-    Set-Acl -LiteralPath $seedConnectionFile -AclObject $seedFileAcl
+    Set-SeedPrivateAccess -LiteralPath $seedConnectionFile
     Write-Output 'Connection credential saved encrypted in ignored private/ directory'
 }
 $seedPassword = $seedCredential.Password

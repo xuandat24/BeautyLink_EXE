@@ -28,6 +28,19 @@ ACCESS: Railway OAuth exposed variable names, not values; no local DB config.
 Owner was asked to run ProductionDryRun.ps1 once with hidden password entry.
 Only known backup predates current schema; not a passed current-backup gate.
 
+ACL follow-up: owner run stopped at Set-Acl before exporting the DB credential
+or connecting. Reproduced PrivilegeNotHeldException on a synthetic protected
+directory (DACL protected, audit unprotected, no loaded audit rules).
+Replaced Set-Acl descriptor copying with fresh DACL-only .NET persistence;
+owner/SACL are not written. Single current-owner SID rule, protected DACL,
+owner/content verification, inherited owner-only access for new children.
+Existing connection files are protected before import, not skipped.
+Standalone TestPrivateAcl.ps1 PASS in non-admin Windows PowerShell
+5.1.26100.9711 and PowerShell 7.6.5: syntax, directory/file permissions,
+repeat, child inheritance, owner/content unchanged, missing-path fail closed.
+No production connection, credential read/export, DB write, or old seed tests
+were executed for this ACL correction. The 80/24 datasets remain unchanged.
+
 NEXT_ACTION (owner PowerShell, Java 21):
 
 ```powershell
