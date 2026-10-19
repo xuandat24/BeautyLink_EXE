@@ -35,6 +35,7 @@ test('admin overview renders authoritative booking people separately from bookin
     assert.ok(customerCard);
     assert.match(customerCard.textContent || '', /2/);
     assert.match(document.body.textContent || '', /Tổng lịch đã đặt5/);
+    assert.doesNotMatch(document.body.textContent || '', /Lịch hoàn thành|Cần đối soát/);
     await act(async () => customerCard.click());
     assert.deepEqual(bookedRange, { from: requests[0].from, to: requests[0].to });
     const paymentNav = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Thanh toán'));

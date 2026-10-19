@@ -1,6 +1,6 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, CalendarCheck, CalendarDays, CheckCircle2, CreditCard, Download, Loader2,
+  AlertTriangle, CalendarCheck, CalendarDays, CreditCard, Download, Loader2,
   RefreshCw, Search, TrendingUp, UserCheck, Users, X,
 } from 'lucide-react';
 import type { AdminBooking, AdminDashboardSummary, AdminPaymentSummary, AdminRevenueRow } from '../../types';
@@ -167,9 +167,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
             { label: 'Tổng lịch đã đặt', value: summary.totalBookings, Icon: CalendarDays, note: 'Gồm cả lịch hủy sau khi đặt' },
             { label: 'Khách có thanh toán', value: summary.paidBookingCustomers, Icon: CreditCard, note: 'Có giao dịch PayOS xác minh' },
             { label: 'Lịch sắp tới', value: summary.upcomingBookings, Icon: CalendarCheck, note: 'Trong nhóm lịch tạo ở kỳ này' },
-            { label: 'Lịch hoàn thành', value: summary.completedBookings, Icon: CheckCircle2, note: 'Trạng thái COMPLETED' },
             { label: 'Khách quay lại', value: summary.repeatCustomers, Icon: TrendingUp, note: 'Ít nhất 2 lịch trong kỳ' },
-            { label: 'Cần đối soát', value: summary.reconciliationIssues, Icon: AlertTriangle, note: 'Giao dịch cần xem xét' },
           ] as Array<{ label: string; value: number; Icon: React.ElementType; note: string }>).map(({ label, value, Icon, note }, index) => <button type="button" key={label} onClick={index === 1 ? () => onOpenBookedCustomers(from, to) : undefined} className={`rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm ${index === 1 ? 'transition hover:border-pink-300 hover:shadow-md' : 'cursor-default'}`}><div className="flex items-start justify-between"><div><p className="text-xs font-black text-slate-500">{label}</p><p className="mt-2 text-3xl font-black">{value.toLocaleString('vi-VN')}</p></div><span className="grid h-11 w-11 place-items-center rounded-2xl bg-pink-50 text-pink-700"><Icon className="h-5 w-5" /></span></div><p className="mt-3 text-[11px] font-semibold text-slate-400">{note}</p></button>)}
         </section>
         <div className="mt-6 grid gap-5 xl:grid-cols-[1.4fr_1fr]">
