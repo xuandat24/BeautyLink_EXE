@@ -4,11 +4,13 @@ import { useBeautyStore } from '../store/beautyStore';
 import { canPayBooking, safeCheckout } from '../lib/bookingPolicy';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import type { BackendBooking, PaymentOption, PaymentQuote } from '../types';
+import { BookingContactDialog } from './BookingContactDialog';
 
 const formatMoney = (value: number | null | undefined) => value == null ? 'Đang xác minh' : `${value.toLocaleString('vi-VN')}đ`;
 
 export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: number; onClose: () => void }) {
-  const { currentUser } = useBeautyStore();
+  const { currentUser, setCurrentUser } = useBeautyStore();
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [sessionRevision, setSessionRevision] = useState(0);
   const session = `${getAccessToken() ?? ''}:${currentUser?.id ?? ''}:${sessionRevision}`;
   const [booking, setBooking] = useState<BackendBooking | null>(null);
@@ -83,7 +85,10 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
         if (!lock) throw new Error('Lịch hẹn đang được thanh toán ở tab khác.'); await execute();
       });
       else await execute(); // DB root locks/ledger still enforce idempotency across all browsers.
-    } catch (err) { if (current()) { setBooking(null); setError(getApiErrorMessage(err, 'Không thể tiếp tục thanh toán.')); } }
+    } catch (err) { if (current()) {
+      if ((err as any)?.response?.data?.code === 'BOOKING_CONTACT_REQUIRED' && currentUser) setContactDialogOpen(true);
+      else { setBooking(null); setError(getApiErrorMessage(err, 'Không thể tiếp tục thanh toán.')); }
+    } }
     finally { submitting.current = false; if (generation.current > 0) setBusy(false); }
   };
   return <div className="fixed inset-0 z-[140] grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="payment-continue-title"
@@ -97,6 +102,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
     }}>
+    {contactDialogOpen && currentUser && <BookingContactDialog currentUser={currentUser} onCancel={() => setContactDialogOpen(false)} onComplete={(updated) => { setCurrentUser(updated); setContactDialogOpen(false); void pay(); }} />}
     <div className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6">
       <h2 id="payment-continue-title" className="text-xl font-black">Tiếp tục thanh toán lịch hẹn</h2>
       <button ref={focus} type="button" disabled={busy} onClick={onClose}>Quay lại</button>

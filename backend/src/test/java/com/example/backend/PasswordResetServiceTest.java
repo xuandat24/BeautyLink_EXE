@@ -102,6 +102,21 @@ class PasswordResetServiceTest {
         verify(delivery, never()).sendPasswordResetCode(anyString(), anyString(), anyLong());
     }
 
+    @Test
+    void googleOnlyAccountGetsGenericResponseAndNoLocalPasswordResetCode() {
+        UserAccount googleOnly = activeUser();
+        googleOnly.setPhone(null);
+        googleOnly.setPasswordHash(null);
+        when(delivery.isEmailConfigured()).thenReturn(true);
+        when(users.findByEmailIgnoreCase("owner@example.com")).thenReturn(Optional.of(googleOnly));
+        when(challenges.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.start(new StartPasswordResetRequest("Owner@Example.com"), "198.51.100.23");
+
+        assertNotNull(response.challengeId());
+        verify(delivery, never()).sendPasswordResetCode(anyString(), anyString(), anyLong());
+    }
+
     private UserAccount activeUser() {
         UserAccount user = new UserAccount();
         user.setId(42L);

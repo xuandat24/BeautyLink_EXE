@@ -696,5 +696,19 @@ class PaymentCancellationSafetyTest {
             assertEquals(1, bookings.findAll().stream().filter(x -> x.getStatus() != BookingStatus.CANCELLED).count());
         }
     }
+    @Test void simultaneousNewBookingsCannotExceedOnePractitionerCapacity() throws Exception {
+        var cancelledFixture = booking(BookingStatus.CANCELLED, PaymentStatus.UNPAID);
+        var request = new CreateBookingRequest(cancelledFixture.getService().getId(),
+                cancelledFixture.getPractitioner().getId(), cancelledFixture.getAppointmentDate(), LocalTime.of(10, 0), null);
+        var gate = new java.util.concurrent.CyclicBarrier(2);
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var first = pool.submit(() -> { gate.await(5, java.util.concurrent.TimeUnit.SECONDS); return outcome(() -> bookingService.create(customer(), request)); });
+            var second = pool.submit(() -> { gate.await(5, java.util.concurrent.TimeUnit.SECONDS); return outcome(() -> bookingService.create(customer(), request)); });
+            var results = List.of(first.get(10, java.util.concurrent.TimeUnit.SECONDS), second.get(10, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(1, results.stream().filter("OK"::equals).count());
+            assertEquals(1, results.stream().filter("SLOT_UNAVAILABLE"::equals).count());
+            assertEquals(1, bookings.findAll().stream().filter(b -> b.getStatus() != BookingStatus.CANCELLED).count());
+        }
+    }
     private String outcome(Runnable action) { try { action.run(); return "OK"; } catch (ApiException e) { return e.getCode(); } }
 }

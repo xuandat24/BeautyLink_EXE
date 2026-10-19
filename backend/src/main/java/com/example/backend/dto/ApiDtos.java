@@ -24,6 +24,8 @@ public final class ApiDtos {
     public record LoginRequest(
             @NotBlank(message = "Số điện thoại hoặc email không được để trống") @Size(max = 254, message = "Thông tin đăng nhập quá dài") String identifier,
             @NotBlank(message = "Mật khẩu không được để trống") @Size(max = 72, message = "Mật khẩu tối đa 72 ký tự") String password) {}
+    public record GoogleLoginRequest(
+            @NotBlank(message = "Thiếu thông tin xác thực Google") @Size(max = 20_000) String credential) {}
     public record StartPasswordResetRequest(
             @NotBlank(message = "Số điện thoại hoặc email không được để trống")
             @Size(max = 254, message = "Thông tin tài khoản quá dài") String identifier) {}
@@ -37,7 +39,8 @@ public final class ApiDtos {
             @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])\\S+$", message = "Mật khẩu phải có chữ hoa, chữ thường và chữ số") String newPassword) {}
     public record ConfirmPasswordResetResponse(String message) {}
     public record UserResponse(Long id, String fullName, String phone, String email, Gender gender,
-                               LocalDate dateOfBirth, Role role, int loyaltyPoints) {}
+                               LocalDate dateOfBirth, Role role, int loyaltyPoints,
+                               boolean bookingContactConfirmed) {}
     public record AdminCustomerResponse(Long id, String fullName, Gender gender, LocalDate dateOfBirth,
                                         String phone, String email, long bookingsPlaced, long paidBookings,
                                         long completedBookings, Instant lastBookingAt,
@@ -46,6 +49,13 @@ public final class ApiDtos {
     public record UpdatePhoneRequest(
             @NotBlank(message = "Số điện thoại không được để trống")
             @Pattern(regexp = "^0(?:3|5|7|8|9)[0-9]{8}$", message = "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 05, 07, 08 hoặc 09") String phone) {}
+    public record UpdateCustomerProfileRequest(
+            @Size(min = 2, max = 120, message = "Họ tên phải có từ 2 đến 120 ký tự")
+            @Pattern(regexp = "^\\s*[\\p{L}]+(?:\\s+[\\p{L}]+)*\\s*$", message = "Họ tên chỉ được chứa chữ cái và khoảng trắng") String fullName,
+            @Pattern(regexp = "^0(?:3|5|7|8|9)[0-9]{8}$", message = "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 05, 07, 08 hoặc 09") String phone,
+            Gender gender,
+            @Past(message = "Ngày sinh phải là một ngày hợp lệ trong quá khứ") LocalDate dateOfBirth,
+            boolean confirmBookingContact) {}
     public record SupplierRegistrationRequest(
             @NotBlank @Size(min = 2, max = 120) String ownerName,
             @NotBlank @Pattern(regexp = "^(?:0|\\+84)(?:3|5|7|8|9)[0-9]{8}$", message = "Số điện thoại không đúng định dạng di động Việt Nam") String phone,
@@ -92,6 +102,11 @@ public final class ApiDtos {
     public record LocationResponse(Long id, String name, String slug, LocationType type, Long parentId) {}
     public record CategoryResponse(Long id, String slug, String name, String description, String imageUrl) {}
     public record PractitionerResponse(Long id, String displayName, String specialty, String avatarUrl, String bio) {}
+    public record SupplierPractitionerResponse(Long id, String displayName, String specialty, String avatarUrl,
+                                               String bio, boolean active, boolean serviceAssignmentsRestricted,
+                                               Set<Long> supportedServiceIds) {}
+    public record UpdatePractitionerAssignmentsRequest(@NotNull Set<@Positive Long> serviceIds) {}
+    public record UpdatePractitionerStatusRequest(boolean active) {}
     public record CreatePractitionerRequest(@NotBlank @Size(max = 120) String displayName,
                                             @Size(max = 160) String specialty,
                                             @Size(max = 500) String bio,
@@ -117,6 +132,9 @@ public final class ApiDtos {
                                   boolean supplierDemo, boolean supplierNearbyFeatured, boolean supplierNewPartner,
                                   Double supplierLatitude, Double supplierLongitude) {}
     public record AvailabilityResponse(Long practitionerId, LocalDate date, List<LocalTime> availableSlots) {}
+    public record CapacitySlotResponse(LocalTime time, int availablePractitioners, String state) {}
+    public record ServiceCapacityResponse(LocalDate date, int qualifiedPractitioners,
+                                          List<CapacitySlotResponse> slots, String reason) {}
 
     public record CreateBookingRequest(
             @NotNull(message = "Vui lòng chọn dịch vụ") @Positive(message = "Dịch vụ không hợp lệ") Long serviceId,

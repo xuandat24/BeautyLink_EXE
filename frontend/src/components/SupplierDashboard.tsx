@@ -33,6 +33,7 @@ import {
   ScheduleRule,
 } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { bookingDay } from '../lib/bookingTime';
 
 interface SupplierDashboardProps {
   onBack: () => void;
@@ -53,7 +54,7 @@ const getDefaultRules = (): ScheduleRule[] =>
   DAYS_OF_WEEK.map((d) => ({
     dayOfWeek: d.id,
     dayName: d.name,
-    isWorking: d.id !== 7,
+    isWorking: false,
     startTime: '09:00',
     endTime: '18:00',
     breakStartTime: '12:00',
@@ -69,6 +70,10 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
   const [currentTab, setCurrentTab] = useState<'overview' | 'store' | 'bookings' | 'team' | 'schedule'>('overview');
   const [profile, setProfile] = useState<BackendSupplierProfile | null>(null);
   const [practitioners, setPractitioners] = useState<BackendPractitioner[]>([]);
+  const [supplierServices, setSupplierServices] = useState<BackendService[]>([]);
+  const [coverageServiceId, setCoverageServiceId] = useState<number | null>(null);
+  const [coverage, setCoverage] = useState<import('../types/beauty').ServiceCapacity[]>([]);
+  const [coverageVersion, setCoverageVersion] = useState(0);
   const [bookings, setBookings] = useState<BackendBooking[]>([]);
   const [selectedPractitionerId, setSelectedPractitionerId] = useState<number | null>(null);
   const [rules, setRules] = useState<ScheduleRule[]>(getDefaultRules());
@@ -88,11 +93,14 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
       beautyApi.supplierProfile(),
       beautyApi.supplierPractitioners(),
       beautyApi.supplierBookings(),
+      beautyApi.supplierServices(),
     ])
-      .then(([prof, practs, bks]) => {
+      .then(([prof, practs, bks, services]) => {
         setProfile(prof);
         setPractitioners(practs);
         setBookings(bks);
+        setSupplierServices(services);
+        setCoverageServiceId(services[0]?.id ?? null);
         if (practs.length > 0) {
           setSelectedPractitionerId(practs[0].id);
         }
@@ -104,12 +112,14 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
   // Load practitioner schedule when selecting tab schedule
   useEffect(() => {
     if (!selectedPractitionerId || currentTab !== 'schedule') return;
+    let active = true;
     setLoadingSchedule(true);
     setError('');
     setMessage('');
     beautyApi
       .practitionerSchedule(selectedPractitionerId)
       .then((serverRules) => {
+        if (!active) return;
         if (serverRules && serverRules.length > 0) {
           const ruleMap = new Map(serverRules.map((r) => [r.dayOfWeek, r]));
           setRules(
@@ -122,9 +132,31 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
           setRules(getDefaultRules());
         }
       })
-      .catch((err) => setError(getApiErrorMessage(err, 'Không thể tải lịch làm việc.')))
-      .finally(() => setLoadingSchedule(false));
+      .catch((err) => { if (active) setError(getApiErrorMessage(err, 'Không thể tải lịch làm việc.')); })
+      .finally(() => { if (active) setLoadingSchedule(false); });
+    return () => { active = false; };
   }, [selectedPractitionerId, currentTab]);
+
+  useEffect(() => {
+    if (currentTab !== 'schedule' || !coverageServiceId) return;
+    let active = true;
+    Promise.all(Array.from({ length: 4 }, (_, i) => {
+      return beautyApi.serviceCapacity(coverageServiceId, bookingDay(i + 1));
+    })).then(result => { if (active) setCoverage(result); })
+      .catch(err => { if (active) setError(getApiErrorMessage(err, 'Không thể tải mức độ phủ lịch.')); });
+    return () => { active = false; };
+  }, [currentTab, coverageServiceId, practitioners, coverageVersion]);
+
+  const updateWorkforce = async (id: number, operation: () => Promise<BackendPractitioner>) => {
+    setError('');
+    try {
+      const saved = await operation();
+      setPractitioners(previous => previous.map(person => person.id === id ? saved : person));
+      setMessage('Đã cập nhật chuyên viên và phạm vi dịch vụ.');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Không thể cập nhật chuyên viên.'));
+    }
+  };
 
   const upcomingBookings = useMemo(
     () => bookings.filter((b) => b.status === 'CONFIRMED' || b.status === 'PENDING'),
@@ -164,6 +196,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
     try {
       const saved = await beautyApi.replaceSchedule(selectedPractitionerId, rules);
       setRules(saved);
+      setCoverageVersion(value => value + 1);
       setMessage('Đã lưu lịch. Khung giờ trống cho khách hàng đã được cập nhật.');
     } catch (err) {
       setError(getApiErrorMessage(err, 'Không thể lưu lịch làm việc.'));
@@ -547,6 +580,9 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
                     key={p.id}
                     className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
                   >
+                    <p className={`mb-3 text-xs font-bold ${p.active === false ? 'text-slate-500' : 'text-emerald-700'}`}>
+                      {p.active === false ? 'Tạm ngưng nhận lịch' : 'Đang nhận lịch'}
+                    </p>
                     <div className="flex items-center gap-4">
                       <span className="grid h-12 w-12 place-items-center overflow-hidden rounded-2xl bg-pink-50 text-[#EB0F51]">
                         {p.avatarUrl ? (
@@ -583,6 +619,27 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
                         <Clock className="h-4 w-4" /> Lịch làm
                       </button>
                     </div>
+                    <div className="mt-4 border-t border-slate-100 pt-4">
+                      <p className="text-xs font-black text-slate-700">Dịch vụ đảm nhận</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{p.serviceAssignmentsRestricted ? 'Chỉ nhận các dịch vụ đã chọn' : 'Chưa phân công: nhận mọi dịch vụ của cơ sở'}</p>
+                      <div className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                        {supplierServices.filter(service => service.active !== false).map(service => {
+                          const checked = !p.serviceAssignmentsRestricted || Boolean(p.supportedServiceIds?.includes(service.id));
+                          return <label key={service.id} className="flex items-center gap-2 text-xs text-slate-700">
+                            <input type="checkbox" checked={checked} onChange={() => {
+                              const current = p.serviceAssignmentsRestricted ? (p.supportedServiceIds || []) : supplierServices.filter(item => item.active !== false).map(item => item.id);
+                              const next = checked ? current.filter(id => id !== service.id) : [...current, service.id];
+                              void updateWorkforce(p.id, () => beautyApi.updatePractitionerAssignments(p.id, next));
+                            }} />
+                            <span>{service.name}</span>
+                          </label>;
+                        })}
+                      </div>
+                      <button type="button" onClick={() => void updateWorkforce(p.id, () => beautyApi.updatePractitionerStatus(p.id, p.active === false))}
+                        className="mt-3 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">
+                        {p.active === false ? 'Kích hoạt lại' : 'Tạm ngưng chuyên viên'}
+                      </button>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -614,6 +671,22 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
                   )}
                   Lưu lịch
                 </button>
+              </div>
+
+              <div className="mb-5 rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
+                <label className="text-xs font-black text-slate-700">Kiểm tra độ phủ lịch theo dịch vụ</label>
+                <select value={coverageServiceId ?? ''} onChange={event => setCoverageServiceId(Number(event.target.value) || null)}
+                  className="mt-2 w-full rounded-xl border border-slate-200 p-2 text-sm">
+                  {supplierServices.filter(service => service.active !== false).map(service => <option key={service.id} value={service.id}>{service.name}</option>)}
+                </select>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  {coverage.map(day => <div key={day.date} className="rounded-xl bg-slate-50 p-3 text-xs">
+                    <strong>{day.date}</strong>
+                    <p className="mt-1">{day.qualifiedPractitioners} chuyên viên phù hợp · {day.slots.filter(slot => slot.availablePractitioners > 0).length} khung giờ còn chỗ</p>
+                    {day.reason && <p className="mt-1 text-amber-700">{day.reason === 'NO_QUALIFIED_PRACTITIONER' ? 'Chưa có chuyên viên được phân công.' : 'Không có lịch làm việc phù hợp.'}</p>}
+                    {day.slots.some(slot => slot.availablePractitioners === 0) && <p className="mt-1 text-rose-700">{day.slots.filter(slot => slot.availablePractitioners === 0).length} khung giờ đã kín</p>}
+                  </div>)}
+                </div>
               </div>
 
               <div className="grid gap-5 xl:grid-cols-[230px_1fr]">

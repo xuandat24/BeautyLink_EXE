@@ -57,7 +57,7 @@ class JwtIdentityTest {
         // Role/status are taken from the database by the authentication filter,
         // never trusted from a browser or the token's role claim.
         var users = org.mockito.Mockito.mock(com.example.backend.repository.UserAccountRepository.class);
-        org.mockito.Mockito.when(users.findByPhone(user.getPhone())).thenReturn(java.util.Optional.of(user));
+        org.mockito.Mockito.when(users.findById(user.getId())).thenReturn(java.util.Optional.of(user));
         var details = new com.example.backend.auth.AccountDetailsService(users)
                 .loadUserForToken(jwt.extractClaims(jwt.createToken(user)), jwt);
         assertFalse(details.isEnabled());

@@ -66,7 +66,7 @@ export const Footer: React.FC = () => {
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-[#e1146c] transition-colors">
+                <a href="/privacy.html" className="hover:text-[#e1146c] transition-colors">
                   Chính sách bảo mật
                 </a>
               </li>

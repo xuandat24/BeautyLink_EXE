@@ -62,6 +62,7 @@ public class PasswordResetService {
                 : users.findByPhone(AuthService.normalizePhone(identifier));
         UserAccount user = matched.filter(account -> account.getStatus() == ACTIVE)
                 .filter(account -> account.getEmail() != null && !account.getEmail().isBlank())
+                .filter(account -> AuthService.hasValidBcryptHash(account.getPasswordHash()))
                 .orElse(null);
 
         String challengeId = UUID.randomUUID().toString();

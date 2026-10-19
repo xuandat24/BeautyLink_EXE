@@ -14,12 +14,13 @@ public class AccountDetailsService implements UserDetailsService {
         return principal(loadAccountByPhone(phone));
     }
     public UserDetails loadUserForToken(Claims claims, JwtService jwt) {
-        UserAccount user = loadAccountByPhone(claims.getSubject());
+        UserAccount user = loadAccountForClaims(claims);
         if (!jwt.matchesAccount(claims, user)) throw new UsernameNotFoundException("Token identity is no longer current");
         return principal(user);
     }
     private UserDetails principal(UserAccount user) {
-        UserDetails details = User.withUsername(user.getPhone()).password(user.getPasswordHash())
+        UserDetails details = User.withUsername(JwtService.ACCOUNT_SUBJECT_PREFIX + user.getId())
+                .password(user.getPasswordHash() == null ? "" : user.getPasswordHash())
                 .authorities("ROLE_" + user.getRole().name())
                 .disabled(user.getStatus() != com.example.backend.model.DomainEnums.AccountStatus.ACTIVE).build();
         return new AccountPrincipal(user.getId(), user.getUpdatedAt().toEpochMilli(), details);
@@ -39,5 +40,20 @@ public class AccountDetailsService implements UserDetailsService {
     }
     public UserAccount loadAccountByPhone(String phone) {
         return users.findByPhone(phone).orElseThrow(() -> new UsernameNotFoundException("Account not found"));
+    }
+    private UserAccount loadAccountForClaims(Claims claims) {
+        Number accountId = claims.get("accountId", Number.class);
+        if (accountId != null) return users.findById(accountId.longValue())
+                .orElseThrow(() -> new UsernameNotFoundException("Account not found"));
+        String subject = claims.getSubject();
+        if (subject != null && subject.startsWith(JwtService.ACCOUNT_SUBJECT_PREFIX)) {
+            try {
+                return users.findById(Long.parseLong(subject.substring(JwtService.ACCOUNT_SUBJECT_PREFIX.length())))
+                        .orElseThrow(() -> new UsernameNotFoundException("Account not found"));
+            } catch (NumberFormatException error) {
+                throw new UsernameNotFoundException("Account not found");
+            }
+        }
+        return loadAccountByPhone(subject);
     }
 }

@@ -92,7 +92,8 @@ public class CatalogService {
     private CategoryResponse category(ServiceCategory c) { return new CategoryResponse(c.getId(), c.getSlug(), c.getName(), c.getDescription(), c.getImageUrl()); }
     private ServiceResponse service(ServiceOffering s) {
         Supplier supplier = s.getSupplier();
-        List<PractitionerResponse> people = practitioners.findBySupplierIdAndActiveTrue(supplier.getId()).stream().map(p -> new PractitionerResponse(p.getId(), p.getDisplayName(), p.getSpecialty(), p.getAvatarUrl(), p.getBio())).toList();
+        List<PractitionerResponse> people = practitioners.findBySupplierIdAndActiveTrue(supplier.getId()).stream()
+                .filter(p -> p.supports(s)).map(p -> new PractitionerResponse(p.getId(), p.getDisplayName(), p.getSpecialty(), p.getAvatarUrl(), p.getBio())).toList();
         long serviceReviewCount = reviews.countByServiceIdAndTargetType(s.getId(), DomainEnums.ReviewTargetType.SERVICE);
         Double serviceAverage = reviews.averageByService(s.getId(), DomainEnums.ReviewTargetType.SERVICE);
         double serviceRating = serviceAverage == null ? 0 : roundRating(serviceAverage);

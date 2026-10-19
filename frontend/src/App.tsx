@@ -51,6 +51,8 @@ import { beautyApi, DEFAULT_CATEGORIES, getAccessToken } from './services/beauty
 import { serviceReviewSummary, supplierReviewSummary } from './lib/reviewScope';
 import { updateMetaTags } from './lib/seo';
 import { CheckCircle2 } from 'lucide-react';
+import { mapBackendUser } from './lib/authUser';
+import { disableGoogleAutoSelect } from './lib/googleIdentity';
 
 // ==========================================
 // Data Transformation Helpers
@@ -216,6 +218,15 @@ export default function App() {
     toggleFavorite,
   } = useBeautyStore();
 
+  useEffect(() => {
+    if (!currentUser || !getAccessToken()) return;
+    let active = true;
+    beautyApi.me().then((user) => {
+      if (active) setCurrentUser({ ...currentUser, ...mapBackendUser(user) });
+    }).catch(() => { /* Keep the existing session until an authenticated action proves it invalid. */ });
+    return () => { active = false; };
+  }, [currentUser?.id, setCurrentUser]);
+
   // Favorite Toast System
   const [favoriteToast, setFavoriteToast] = useState<FavoriteToastInfo | null>(null);
 
@@ -278,6 +289,7 @@ export default function App() {
     service: BackendService;
     preselectedDate?: string;
     preselectedTime?: string;
+    practitionerId?: number;
   } | null>(null);
   const [adminBookedCustomerRange, setAdminBookedCustomerRange] = useState<{ from: string; to: string } | null>(null);
 
@@ -548,6 +560,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    disableGoogleAutoSelect();
     logout();
     handleBackToHome();
     showToast('Đã đăng xuất tài khoản.');
@@ -641,7 +654,7 @@ export default function App() {
   );
 
   const handleProceedToCheckout = useCallback(
-    (service: BackendService, date: string, slot: string) => {
+    (service: BackendService, date: string, slot: string, practitionerId?: number) => {
       if (service.price <= 0) {
         showToast('Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá.');
         return;
@@ -651,6 +664,7 @@ export default function App() {
         service,
         preselectedDate: date,
         preselectedTime: slot,
+        practitionerId,
       });
       navigateTo('checkout');
     },
@@ -900,6 +914,7 @@ export default function App() {
           directService={directCheckoutConfig?.service || null}
           preselectedDate={directCheckoutConfig?.preselectedDate}
           preselectedTime={directCheckoutConfig?.preselectedTime}
+          preselectedPractitionerId={directCheckoutConfig?.practitionerId}
           onBack={() => {
             setDirectCheckoutConfig(null);
             handleBackToHome();
