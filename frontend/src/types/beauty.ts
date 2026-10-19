@@ -292,6 +292,17 @@ export interface AdminPaymentSummary {
   generatedAt: string;
 }
 
+export interface AdminRevenueRow {
+  paymentId: number;
+  paidAt: string;
+  bookingCode: string;
+  supplierName: string;
+  serviceName: string;
+  paymentOption: 'DEPOSIT_05' | 'DEPOSIT_50' | 'FULL_100';
+  amount: number;
+  remainingAtSalon: number;
+}
+
 // ==========================================
 // Frontend Domain Entity Interfaces
 // ==========================================

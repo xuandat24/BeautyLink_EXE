@@ -14,6 +14,7 @@ import com.example.backend.repository.ServiceCategoryRepository;
 import com.example.backend.repository.ServiceOfferingRepository;
 import com.example.backend.repository.SupplierRepository;
 import com.example.backend.repository.UserAccountRepository;
+import com.example.backend.service.AdminDashboardService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -60,11 +61,14 @@ class AdminDashboardAggregationTest {
         booking("ADMIN-3", customerA, real, realService, realPractitioner, from.plusSeconds(180), BookingStatus.COMPLETED);
         booking("ADMIN-4", customerB, real, realService, realPractitioner, from.plusSeconds(240), BookingStatus.CONFIRMED);
         booking("ADMIN-5", customerB, real, realService, realPractitioner, from.plusSeconds(300), BookingStatus.CONFIRMED);
-        booking("ADMIN-DEMO", customerB, demo, demoService, demoPractitioner, from.plusSeconds(360), BookingStatus.CONFIRMED);
+        Booking demoBooking = booking("ADMIN-DEMO", customerB, demo, demoService, demoPractitioner,
+                from.plusSeconds(360), BookingStatus.CONFIRMED);
         booking("ADMIN-BOUNDARY", customerB, real, realService, realPractitioner, to, BookingStatus.CONFIRMED);
 
         payment(paid, 810001L, new BigDecimal("25000"), PaymentOption.DEPOSIT_05, from.plusSeconds(500));
         payment(paid, 810002L, new BigDecimal("25000"), PaymentOption.DEPOSIT_05, from.plusSeconds(600));
+        payment(demoBooking, 810003L,
+                new BigDecimal("500000"), PaymentOption.FULL_100, from.plusSeconds(700));
 
         assertEquals(5, bookings.countAdminBookings(from, to, Role.CUSTOMER, false));
         assertEquals(2, bookings.countAdminBookingCustomers(from, to, Role.CUSTOMER, false));
@@ -83,6 +87,13 @@ class AdminDashboardAggregationTest {
                 Role.CUSTOMER, false).setScale(2));
         assertEquals(5, bookings.searchAdminBookings(from, to, null, null, null, Role.CUSTOMER,
                 false, PageRequest.of(0, 20)).getTotalElements());
+        AdminDashboardService dashboard = new AdminDashboardService(bookings, payments, users);
+        var revenue = dashboard.revenue(LocalDate.of(2026, 10, 2), LocalDate.of(2026, 10, 2), false, 0, 20);
+        assertEquals(1, revenue.totalElements());
+        assertEquals("ADMIN-1", revenue.content().getFirst().bookingCode());
+        assertEquals(new BigDecimal("25000.00"), revenue.content().getFirst().amount().setScale(2));
+        assertEquals(2, dashboard.revenue(LocalDate.of(2026, 10, 2), LocalDate.of(2026, 10, 2),
+                true, 0, 20).totalElements());
     }
 
     private UserAccount user(String name, String phone, Role role) {

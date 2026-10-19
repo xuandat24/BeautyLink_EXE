@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { AdminDashboardPage } from '../src/components/admin/AdminDashboardPage';
 import { beautyApi } from '../src/services/beautyApi';
-import type { AdminDashboardSummary } from '../src/types';
+import type { AdminDashboardSummary, AdminPaymentSummary } from '../src/types';
 
 test('admin overview renders authoritative booking people separately from bookings and drills down with the same range', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/#admin-dashboard' });
@@ -44,6 +44,62 @@ test('admin overview renders authoritative booking people separately from bookin
   } finally {
     await act(async () => root.unmount());
     beautyApi.adminDashboardSummary = original;
+    dom.window.close();
+  }
+});
+
+test('admin revenue table pages verified payments and exports the selected range', async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/#admin-payments' });
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document });
+  Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
+  const root = createRoot(document.getElementById('root')!);
+  const originalSummary = beautyApi.adminPaymentSummary;
+  const originalRevenue = beautyApi.adminRevenue;
+  const originalExport = beautyApi.exportAdminRevenueCsv;
+  const originalCreateUrl = URL.createObjectURL;
+  const originalRevokeUrl = URL.revokeObjectURL;
+  const originalClick = dom.window.HTMLAnchorElement.prototype.click;
+  const requests: Array<{ from: string; to: string; includeDemo: boolean; page: number; size: number }> = [];
+  const exports: Array<{ from: string; to: string; includeDemo: boolean }> = [];
+  const summary: AdminPaymentSummary = {
+    range: { fromDate: '2026-10-01', toDate: '2026-10-19', timezone: 'Asia/Ho_Chi_Minh', includeDemo: false },
+    verifiedOnlineCollected: 30000, verifiedDeposits: 30000, verifiedFullPayments: 0,
+    remainingAtSalon: 570000, verifiedPaymentBookings: 2, depositBookings: 2,
+    fullPaymentBookings: 0, reconciliationIssues: 0, generatedAt: '2026-10-19T00:00:00Z',
+  };
+  beautyApi.adminPaymentSummary = async () => summary;
+  beautyApi.adminRevenue = async (params) => {
+    requests.push(params);
+    return { content: [{ paymentId: params.page + 1, paidAt: '2026-10-19T01:00:00Z',
+      bookingCode: `BL-${params.page + 1}`, supplierName: 'Salon', serviceName: 'Nails',
+      paymentOption: 'DEPOSIT_05' as const, amount: 15000, remainingAtSalon: 285000 }],
+      totalElements: 2, totalPages: 2, page: params.page, size: params.size };
+  };
+  beautyApi.exportAdminRevenueCsv = async (params) => { exports.push(params); return new Blob(['csv']); };
+  URL.createObjectURL = () => 'blob:test';
+  URL.revokeObjectURL = () => {};
+  dom.window.HTMLAnchorElement.prototype.click = () => {};
+  try {
+    await act(async () => root.render(React.createElement(AdminDashboardPage, {
+      mode: 'payments', adminName: 'Admin', onNavigate() {}, onHome() {}, onLogout() {},
+      onOpenBookedCustomers() {},
+    })));
+    assert.match(document.body.textContent || '', /BL-1/);
+    assert.equal(requests[0].includeDemo, false);
+    const next = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Trang sau'))!;
+    await act(async () => next.click());
+    assert.match(document.body.textContent || '', /BL-2/);
+    const download = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Tải CSV'))!;
+    await act(async () => download.click());
+    assert.deepEqual(exports, [{ from: requests[0].from, to: requests[0].to, includeDemo: false }]);
+  } finally {
+    await act(async () => root.unmount());
+    beautyApi.adminPaymentSummary = originalSummary;
+    beautyApi.adminRevenue = originalRevenue;
+    beautyApi.exportAdminRevenueCsv = originalExport;
+    URL.createObjectURL = originalCreateUrl;
+    URL.revokeObjectURL = originalRevokeUrl;
+    dom.window.HTMLAnchorElement.prototype.click = originalClick;
     dom.window.close();
   }
 });

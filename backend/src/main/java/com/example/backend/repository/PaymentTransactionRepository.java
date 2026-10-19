@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Page;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.math.BigDecimal;
@@ -92,6 +93,18 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     long countAdminCanonicalPaid(@Param("from") Instant from, @Param("to") Instant to,
             @Param("paidStatus") PaymentTransactionStatus paidStatus, @Param("customerRole") Role customerRole,
             @Param("includeDemo") boolean includeDemo);
+
+    @Query(value = "select p from PaymentTransaction p join fetch p.booking b join fetch b.supplier " +
+            "join fetch b.service where p.status = :paidStatus and p.paidAt >= :from and p.paidAt < :to " +
+            "and b.customer.role = :customerRole and (:includeDemo = true or b.supplier.demoData = false) " +
+            "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = b and p2.status = :paidStatus)",
+            countQuery = "select count(p) from PaymentTransaction p where p.status = :paidStatus " +
+                    "and p.paidAt >= :from and p.paidAt < :to and p.booking.customer.role = :customerRole " +
+                    "and (:includeDemo = true or p.booking.supplier.demoData = false) " +
+                    "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = p.booking and p2.status = :paidStatus)")
+    Page<PaymentTransaction> findAdminRevenuePayments(@Param("from") Instant from, @Param("to") Instant to,
+            @Param("paidStatus") PaymentTransactionStatus paidStatus, @Param("customerRole") Role customerRole,
+            @Param("includeDemo") boolean includeDemo, Pageable pageable);
 
     @Query("select count(p) from PaymentTransaction p where p.status = :paidStatus and p.paidAt >= :from and p.paidAt < :to " +
             "and p.paymentOption in :options and p.booking.customer.role = :customerRole " +

@@ -5,6 +5,7 @@ import com.example.backend.dto.AdminDashboardDtos.AdminDashboardSummary;
 import com.example.backend.dto.AdminDashboardDtos.AdminDateRange;
 import com.example.backend.dto.AdminDashboardDtos.AdminPageResponse;
 import com.example.backend.dto.AdminDashboardDtos.AdminPaymentSummary;
+import com.example.backend.dto.AdminDashboardDtos.AdminRevenueRow;
 import com.example.backend.dto.AdminDashboardDtos.BookingTrendPoint;
 import com.example.backend.exception.ApiException;
 import com.example.backend.model.Booking;
@@ -114,6 +115,24 @@ public class AdminDashboardService {
                         PaymentTransactionStatus.PAID, Role.CUSTOMER, includeDemo),
                 payments.countAdminReconciliationIssues(range.from(), range.to(),
                         PaymentTransactionStatus.REVIEW_REQUIRED, Role.CUSTOMER, includeDemo), clock.instant());
+    }
+
+    @Transactional(readOnly = true)
+    public AdminPageResponse<AdminRevenueRow> revenue(LocalDate fromDate, LocalDate toDate,
+            boolean includeDemo, int page, int size) {
+        Range range = range(fromDate, toDate, includeDemo);
+        Page<PaymentTransaction> result = payments.findAdminRevenuePayments(range.from(), range.to(),
+                PaymentTransactionStatus.PAID, Role.CUSTOMER, includeDemo,
+                PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 500),
+                        Sort.by(Sort.Direction.DESC, "paidAt", "id")));
+        List<AdminRevenueRow> rows = result.getContent().stream().map(payment -> {
+            Booking booking = payment.getBooking();
+            return new AdminRevenueRow(payment.getId(), payment.getPaidAt(), booking.getBookingCode(),
+                    booking.getSupplier().getName(), booking.getService().getName(),
+                    payment.getPaymentOption(), payment.getAmount(), payment.getRemainingAmount());
+        }).toList();
+        return new AdminPageResponse<>(rows, result.getTotalElements(), result.getTotalPages(),
+                result.getNumber(), result.getSize());
     }
 
     @Transactional(readOnly = true)

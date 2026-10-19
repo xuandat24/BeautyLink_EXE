@@ -13,6 +13,7 @@ import {
   AdminBooking,
   AdminDashboardSummary,
   AdminPaymentSummary,
+  AdminRevenueRow,
   AdminPage,
   CurrentUser,
   HotDeal,
@@ -909,6 +910,15 @@ export const beautyApi = {
 
   async adminPaymentSummary(params: { from: string; to: string; includeDemo: boolean }): Promise<AdminPaymentSummary> {
     return unwrap(apiClient.get('/v1/admin/dashboard/payments', { params }));
+  },
+
+  async adminRevenue(params: { from: string; to: string; includeDemo: boolean; page: number; size: number }): Promise<AdminPage<AdminRevenueRow>> {
+    return unwrap(apiClient.get('/v1/admin/dashboard/revenue', { params }));
+  },
+
+  async exportAdminRevenueCsv(params: { from: string; to: string; includeDemo: boolean }): Promise<Blob> {
+    const response = await apiClient.get('/v1/admin/dashboard/revenue.csv', { params, responseType: 'blob' });
+    return response.data;
   },
 
   async adminBookings(params: {

@@ -33,4 +33,8 @@ public final class AdminDashboardDtos {
             BigDecimal verifiedFullPayments, BigDecimal remainingAtSalon,
             long verifiedPaymentBookings, long depositBookings, long fullPaymentBookings,
             long reconciliationIssues, Instant generatedAt) {}
+    public record AdminRevenueRow(
+            Long paymentId, Instant paidAt, String bookingCode, String supplierName,
+            String serviceName, PaymentOption paymentOption, BigDecimal amount,
+            BigDecimal remainingAtSalon) {}
 }

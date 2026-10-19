@@ -1,9 +1,9 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, CalendarCheck, CalendarDays, CheckCircle2, CreditCard, Loader2,
+  AlertTriangle, CalendarCheck, CalendarDays, CheckCircle2, CreditCard, Download, Loader2,
   RefreshCw, Search, TrendingUp, UserCheck, Users, X,
 } from 'lucide-react';
-import type { AdminBooking, AdminDashboardSummary, AdminPaymentSummary } from '../../types';
+import type { AdminBooking, AdminDashboardSummary, AdminPaymentSummary, AdminRevenueRow } from '../../types';
 import { beautyApi, getApiErrorMessage } from '../../services/beautyApi';
 import { AdminNav, type AdminSection } from './AdminNav';
 
@@ -80,6 +80,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
   const [includeDemo, setIncludeDemo] = useState(false);
   const [summary, setSummary] = useState<AdminDashboardSummary | null>(null);
   const [payments, setPayments] = useState<AdminPaymentSummary | null>(null);
+  const [revenuePage, setRevenuePage] = useState<{ content: AdminRevenueRow[]; totalElements: number; totalPages: number } | null>(null);
+  const [revenuePageIndex, setRevenuePageIndex] = useState(0);
+  const [exportingRevenue, setExportingRevenue] = useState(false);
   const [bookingPage, setBookingPage] = useState<{ content: AdminBooking[]; totalElements: number; totalPages: number; page: number } | null>(null);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
@@ -97,15 +100,42 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
     setLoading(true); setError('');
     try {
       if (mode === 'overview') { const data = await beautyApi.adminDashboardSummary(requestParams); if (requestId === requestSequence.current) setSummary(data); }
-      if (mode === 'payments') { const data = await beautyApi.adminPaymentSummary(requestParams); if (requestId === requestSequence.current) setPayments(data); }
+      if (mode === 'payments') {
+        const [data, rows] = await Promise.all([
+          beautyApi.adminPaymentSummary(requestParams),
+          beautyApi.adminRevenue({ ...requestParams, page: revenuePageIndex, size: 20 }),
+        ]);
+        if (requestId === requestSequence.current) { setPayments(data); setRevenuePage(rows); }
+      }
       if (mode === 'bookings') { const data = await beautyApi.adminBookings({ ...requestParams, query: deferredQuery.trim() || undefined, status: status || undefined, paymentStatus: paymentStatus || undefined, page, size: 20 }); if (requestId === requestSequence.current) setBookingPage(data); }
     } catch (err) {
       if (requestId === requestSequence.current) setError(getApiErrorMessage(err, 'Không thể tải dữ liệu quản trị.'));
     } finally { if (requestId === requestSequence.current) setLoading(false); }
-  }, [mode, requestParams, deferredQuery, status, paymentStatus, page]);
+  }, [mode, requestParams, deferredQuery, status, paymentStatus, page, revenuePageIndex]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { setPage(0); }, [from, to, includeDemo, query, status, paymentStatus]);
+  useEffect(() => { setRevenuePageIndex(0); }, [from, to, includeDemo]);
+
+  const downloadRevenue = async () => {
+    setExportingRevenue(true);
+    setError('');
+    try {
+      const blob = await beautyApi.exportAdminRevenueCsv(requestParams);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `beautylink-revenue-${from}-to-${to}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Không thể tải CSV doanh thu.'));
+    } finally {
+      setExportingRevenue(false);
+    }
+  };
 
   const preset = (days: number) => { setFrom(daysAgo(days - 1)); setTo(daysAgo(0)); };
   const maxTrend = Math.max(...(summary?.bookingTrends.map((item) => item.bookings) || [1]), 1);
@@ -169,6 +199,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
           ].map(([label, value, note]) => <article key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-black text-slate-500">{label}</p><p className="mt-2 text-2xl font-black text-pink-700">{value}</p><p className="mt-3 text-[11px] font-semibold text-slate-400">{note}</p></article>)}
         </section>
         <section className="mt-5 grid gap-4 lg:grid-cols-2"><div className="rounded-3xl border border-amber-200 bg-amber-50 p-6"><div className="flex gap-3"><AlertTriangle className="h-6 w-6 shrink-0 text-amber-600" /><div><h2 className="font-black text-amber-950">{payments.reconciliationIssues} giao dịch cần đối soát</h2><p className="mt-2 text-sm leading-6 text-amber-900">Khoản đang chờ hoặc cần xem xét không được cộng vào tiền đã thu. Dùng quy trình Payment Review hiện có để xử lý.</p></div></div></div><div className="rounded-3xl border border-slate-200 bg-white p-6"><h2 className="font-black">Quy ước kế toán</h2><p className="mt-2 text-sm leading-6 text-slate-600">Số tiền dùng giao dịch PAID xác minh đầu tiên của mỗi booking theo <strong>paidAt</strong> trong kỳ. Webhook lặp và lần thử lại không được cộng trùng. Không hiển thị “lợi nhuận” vì hệ thống chưa mô hình hóa hoa hồng và quyết toán.</p><p className="mt-3 text-[11px] text-slate-400">Cập nhật {dateTime(payments.generatedAt)}</p></div></section>
+        <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5">
+            <div><h2 className="font-black">Bảng doanh thu online đã xác minh</h2><p className="mt-1 text-xs text-slate-500">{(revenuePage?.totalElements || 0).toLocaleString('vi-VN')} giao dịch · theo ngày thanh toán · chưa trừ hoàn tiền · không bao gồm tiền trả tại salon</p></div>
+            <button type="button" onClick={() => void downloadRevenue()} disabled={exportingRevenue} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-pink-600 px-4 text-sm font-black text-white hover:bg-pink-700 disabled:opacity-50"><Download className="h-4 w-4" />{exportingRevenue ? 'Đang xuất CSV...' : 'Tải CSV'}</button>
+          </div>
+          {revenuePage?.content.length ? <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-slate-50 text-xs font-black text-slate-600"><tr><th className="px-4 py-3">Ngày thanh toán</th><th className="px-4 py-3">Mã lịch</th><th className="px-4 py-3">Đối tác / dịch vụ</th><th className="px-4 py-3">Hình thức</th><th className="px-4 py-3 text-right">Đã thu online</th><th className="px-4 py-3 text-right">Còn lại tại salon</th></tr></thead><tbody className="divide-y divide-slate-100">{revenuePage.content.map((row) => <tr key={row.paymentId}><td className="whitespace-nowrap px-4 py-4">{dateTime(row.paidAt)}</td><td className="px-4 py-4 font-bold">{row.bookingCode}</td><td className="px-4 py-4"><strong>{row.supplierName}</strong><span className="block text-xs text-slate-500">{row.serviceName}</span></td><td className="px-4 py-4">{row.paymentOption === 'FULL_100' ? 'Thanh toán 100%' : row.paymentOption === 'DEPOSIT_05' ? 'Đặt cọc 5%' : 'Đặt cọc 50%'}</td><td className="px-4 py-4 text-right font-black text-pink-700">{money(row.amount)}</td><td className="px-4 py-4 text-right">{money(row.remainingAtSalon)}</td></tr>)}</tbody></table></div> : <p className="p-8 text-center text-sm text-slate-500">Chưa có giao dịch đã xác minh trong khoảng ngày này.</p>}
+          <div className="flex items-center justify-end gap-2 border-t border-slate-100 p-4"><button type="button" disabled={revenuePageIndex === 0} onClick={() => setRevenuePageIndex((value) => Math.max(0, value - 1))} className="rounded-xl border px-4 py-2 text-xs font-black disabled:opacity-40">Trang trước</button><span className="px-2 text-xs font-bold">{revenuePageIndex + 1}/{Math.max(revenuePage?.totalPages || 0, 1)}</span><button type="button" disabled={revenuePageIndex + 1 >= (revenuePage?.totalPages || 0)} onClick={() => setRevenuePageIndex((value) => value + 1)} className="rounded-xl border px-4 py-2 text-xs font-black disabled:opacity-40">Trang sau</button></div>
+        </section>
       </>}
     </main>
     {selected && <BookingDetail booking={selected} onClose={() => setSelected(null)} />}
