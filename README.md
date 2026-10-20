@@ -632,6 +632,26 @@ simulation: `postman simulation run postman/simulations/cloudinary.sim.yaml --po
 Automated tests cover signing, response identity/signature, timeout, 4xx/429/5xx, persistence, rollback,
 file validation and private-document separation. Mocks/probe are not production runtime components.
 
+## Cart storage compatibility
+
+Active carts use `beautylink_cart_items_v3` with an explicit version/source envelope. Neither legacy
+`beautylink_cart_items_v2` arrays nor the old general cache are automatically restored as active items.
+This prevents an old but structurally valid item (for example a test service) from appearing on entry.
+The v2 value is preserved, not deleted: while the new cart has not been initialized, the empty drawer
+offers **Khôi phục giỏ cũ** or **Không khôi phục**. Restoring is an explicit local action; it never creates
+a booking/payment or trusts stored prices as a server quote. An initialized empty v3 cart never falls
+back to v2. New additions persist normally; logout/account-change and cross-tab clear behavior remain.
+
+This is frontend-only: no DB migration, catalog deletion or changes to payment/auth APIs. A one-time
+legacy restoration choice also applies to legitimate old carts; do not bulk-delete browser storage.
+Rollback to pre-v3 frontend may expose the old v2 cart again and cannot read new v3 selections; preserve
+both keys when investigating instead of deleting data. Regression fixture:
+`npm run dev -- --port 5175 --host 127.0.0.1`, then open
+`http://127.0.0.1:5175/tests/cart-migration-smoke.html` (synthetic local-only data, no checkout).
+The fixture is excluded from the production build entry point. Verified: 72 frontend tests,
+TypeScript check, build; real-browser local legacy restore/remove/reload smoke passed. Production
+verification is a separate release step; this local smoke is not a production test.
+
 ## License
 
 No open-source license has been selected. Unless the project owner adds one, the source remains under the owner's default copyright rights.

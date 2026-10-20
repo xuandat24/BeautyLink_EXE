@@ -22,7 +22,8 @@ const STORAGE_KEYS = {
   FAVORITES: 'user_favorites',
 };
 
-const CART_STORAGE_KEY = 'beautylink_cart_items_v2';
+const CART_STORAGE_KEY = 'beautylink_cart_items_v3';
+const LEGACY_CART_STORAGE_KEY = 'beautylink_cart_items_v2';
 const SESSION_USER_KEY = 'beautylink_session_user';
 const LEGACY_PROFILE_KEY = 'beautylink_user_profile_data_v2';
 
@@ -36,20 +37,38 @@ const loadSessionUser = (): CurrentUser | null => {
   }
 };
 
+const parseCartItems = (value: unknown): CartItem[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((value: unknown): value is CartItem => {
+    if (!value || typeof value !== 'object') return false;
+    const { deal, quantity } = value as Partial<CartItem>;
+    return Number.isSafeInteger(quantity) && (quantity ?? 0) > 0
+      && Boolean(deal && typeof deal === 'object' && typeof deal.id === 'string' && deal.id.trim()
+        && typeof deal.title === 'string' && deal.title.trim()
+        && Number.isFinite(deal.salePrice) && deal.salePrice >= 0
+        && Number.isFinite(deal.originalPrice) && deal.originalPrice >= 0);
+  });
+};
+
 const parseStoredCart = (raw: string | null): CartItem[] => {
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((value: unknown): value is CartItem => {
-      if (!value || typeof value !== 'object') return false;
-      const { deal, quantity } = value as Partial<CartItem>;
-      return Number.isSafeInteger(quantity) && (quantity ?? 0) > 0
-        && Boolean(deal && typeof deal === 'object' && typeof deal.id === 'string' && deal.id.trim()
-          && typeof deal.title === 'string' && deal.title.trim()
-          && Number.isFinite(deal.salePrice) && deal.salePrice >= 0
-          && Number.isFinite(deal.originalPrice) && deal.originalPrice >= 0);
-    });
+    if (!parsed || typeof parsed !== 'object' || !('version' in parsed) || parsed.version !== 3
+      || !('source' in parsed) || parsed.source !== 'user-action' || !('items' in parsed)) return [];
+    return parseCartItems(parsed.items);
+  } catch {
+    return [];
+  }
+};
+
+export const loadLegacyCartFromStorage = (): CartItem[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    // Keep old data recoverable, but never merge it into the active cart automatically.
+    if (localStorage.getItem(CART_STORAGE_KEY) !== null) return [];
+    const raw = localStorage.getItem(LEGACY_CART_STORAGE_KEY);
+    return raw ? parseCartItems(JSON.parse(raw)) : [];
   } catch {
     return [];
   }
@@ -68,9 +87,10 @@ export const loadCartFromStorage = (): CartItem[] => {
 };
 
 const persistCartToStorage = (items: CartItem[]) => {
+  memoryState.legacyCartItems = [];
   try {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ version: 3, source: 'user-action', items }));
     }
     cache.delete(STORAGE_KEYS.CART);
   } catch (err) {
@@ -85,6 +105,7 @@ interface MemoryState {
   selectedIntentCategory: string | null;
   onboardingCompleted: boolean;
   cartItems: CartItem[];
+  legacyCartItems: CartItem[];
   appointments: BookingDetails[];
   currentUser: CurrentUser | null;
   favorites: string[];
@@ -99,6 +120,7 @@ let memoryState: MemoryState = {
   selectedIntentCategory: cache.get<string | null>(STORAGE_KEYS.INTENT_CATEGORY) ?? null,
   onboardingCompleted: cache.get<boolean>(STORAGE_KEYS.ONBOARDING_COMPLETED) ?? false,
   cartItems: loadCartFromStorage(),
+  legacyCartItems: loadLegacyCartFromStorage(),
   appointments: [],
   currentUser: loadSessionUser(),
   favorites: cache.get<string[]>(STORAGE_KEYS.FAVORITES) || [],
@@ -125,6 +147,7 @@ export function useBeautyStore() {
       if (e.storageArea && e.storageArea !== localStorage) return;
       if (e.key === CART_STORAGE_KEY || e.key === null) {
         memoryState.cartItems = parseStoredCart(e.newValue);
+        memoryState.legacyCartItems = [];
         notify();
       }
     };
@@ -218,6 +241,13 @@ export function useBeautyStore() {
   const clearCart = useCallback(() => {
     memoryState.cartItems = [];
     persistCartToStorage([]);
+    notify();
+  }, []);
+
+  const restoreLegacyCart = useCallback(() => {
+    if (memoryState.cartItems.length > 0 || memoryState.legacyCartItems.length === 0) return;
+    memoryState.cartItems = loadLegacyCartFromStorage();
+    persistCartToStorage(memoryState.cartItems);
     notify();
   }, []);
 
@@ -352,6 +382,7 @@ export function useBeautyStore() {
     updateCartQuantity,
     removeFromCart,
     clearCart,
+    restoreLegacyCart,
     addAppointment,
     cancelAppointment,
     setCurrentUser,
