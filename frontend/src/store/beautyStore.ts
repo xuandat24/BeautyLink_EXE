@@ -36,18 +36,33 @@ const loadSessionUser = (): CurrentUser | null => {
   }
 };
 
-const loadCartFromStorage = (): CartItem[] => {
+const parseStoredCart = (raw: string | null): CartItem[] => {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((value: unknown): value is CartItem => {
+      if (!value || typeof value !== 'object') return false;
+      const { deal, quantity } = value as Partial<CartItem>;
+      return Number.isSafeInteger(quantity) && (quantity ?? 0) > 0
+        && Boolean(deal && typeof deal === 'object' && typeof deal.id === 'string' && deal.id.trim()
+          && typeof deal.title === 'string' && deal.title.trim()
+          && Number.isFinite(deal.salePrice) && deal.salePrice >= 0
+          && Number.isFinite(deal.originalPrice) && deal.originalPrice >= 0);
+    });
+  } catch {
+    return [];
+  }
+};
+
+export const loadCartFromStorage = (): CartItem[] => {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(CART_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-    const cached = cache.get<CartItem[]>(STORAGE_KEYS.CART);
-    if (Array.isArray(cached) && cached.length > 0) return cached;
-  } catch (err) {
-    console.error('Failed to load cart from localStorage:', err);
+    // Only the dedicated cart written by explicit cart actions is restored.
+    // Do not resurrect older demo/shared cache entries when this key is absent.
+    return parseStoredCart(localStorage.getItem(CART_STORAGE_KEY));
+  } catch {
+    // Storage can be unavailable in private/restricted browser contexts.
   }
   return [];
 };
@@ -57,7 +72,7 @@ const persistCartToStorage = (items: CartItem[]) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
     }
-    cache.set(STORAGE_KEYS.CART, items);
+    cache.delete(STORAGE_KEYS.CART);
   } catch (err) {
     console.error('Failed to persist cart to localStorage:', err);
   }
@@ -107,14 +122,10 @@ export function useBeautyStore() {
 
     // Sync cart across browser tabs and on storage changes
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === CART_STORAGE_KEY && e.newValue) {
-        try {
-          const synced = JSON.parse(e.newValue);
-          if (Array.isArray(synced)) {
-            memoryState.cartItems = synced;
-            notify();
-          }
-        } catch {}
+      if (e.storageArea && e.storageArea !== localStorage) return;
+      if (e.key === CART_STORAGE_KEY || e.key === null) {
+        memoryState.cartItems = parseStoredCart(e.newValue);
+        notify();
       }
     };
 
@@ -225,6 +236,16 @@ export function useBeautyStore() {
 
   // 4. User authentication
   const setCurrentUser = useCallback((user: CurrentUser | null) => {
+    const previousUser = memoryState.currentUser;
+    const sameAccount = previousUser && user && (previousUser.id != null && user.id != null
+      ? String(previousUser.id) === String(user.id)
+      : previousUser.email && user.email
+        ? previousUser.email.toLowerCase() === user.email.toLowerCase()
+        : previousUser.phone && previousUser.phone === user.phone);
+    if (previousUser && !sameAccount) {
+      memoryState.cartItems = [];
+      persistCartToStorage([]);
+    }
     memoryState.currentUser = user;
     cache.delete(STORAGE_KEYS.USER);
     if (typeof window !== 'undefined') {
@@ -244,6 +265,8 @@ export function useBeautyStore() {
 
   const logout = useCallback(() => {
     memoryState.currentUser = null;
+    memoryState.cartItems = [];
+    persistCartToStorage([]);
     memoryState.appointments = [];
     memoryState.notifications = [];
     cache.delete(STORAGE_KEYS.USER);
