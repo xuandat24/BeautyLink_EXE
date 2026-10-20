@@ -83,6 +83,56 @@ class PublicImageApiIntegrationTest {
                 """.formatted(category, PNG)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.imageUrl").value(URL));
         verify(gateway, times(5)).upload(PNG);
+        // Gallery is persisted in the database, returned to the supplier on reload and exposed publicly.
+        String second = "https://res.cloudinary.com/test-cloud/image/upload/v123/beautylink/public/second.webp";
+        mvc.perform(put("/api/v1/supplier/services/" + service).header("Authorization", bearer)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                {"categoryId":%d,"name":"Makeup du tiec","price":450000,"durationMinutes":90,
+                 "imageUrls":["%s","%s"],"active":true}
+                """.formatted(category, PNG, second)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.imageUrl").value(URL))
+                .andExpect(jsonPath("$.imageUrls[1]").value(second));
+        assertEquals(java.util.List.of(URL, second), services.findById(service).orElseThrow().getImageUrls());
+        mvc.perform(get("/api/v1/supplier/services").header("Authorization", bearer))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].imageUrls[1]").value(second));
+        mvc.perform(get("/api/v1/services/" + service))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.imageUrls[1]").value(second));
+        // A legacy cover-only update must not destroy a gallery it cannot display.
+        mvc.perform(put("/api/v1/supplier/services/" + service).header("Authorization", bearer)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                {"categoryId":%d,"name":"Makeup du tiec","price":450000,"durationMinutes":90,"imageUrl":"%s","active":true}
+                """.formatted(category, URL))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.imageUrls[1]").value(second));
+        int uploadsBeforeInvalid = mockingDetails(gateway).getInvocations().size();
+        mvc.perform(put("/api/v1/supplier/services/" + service).header("Authorization", bearer)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                {"categoryId":%d,"name":"Bad gallery","price":450000,"durationMinutes":90,
+                 "imageUrls":["%s","javascript:alert(1)"],"active":true}
+                """.formatted(category, PNG))).andExpect(status().isBadRequest());
+        assertEquals(uploadsBeforeInvalid, mockingDetails(gateway).getInvocations().size());
+        assertEquals(java.util.List.of(URL, second), services.findById(service).orElseThrow().getImageUrls());
+        mvc.perform(put("/api/v1/supplier/services/" + service).header("Authorization", bearer)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                {"categoryId":%d,"name":"No gallery","price":450000,"durationMinutes":90,"imageUrls":[],"active":true}
+                """.formatted(category))).andExpect(status().isOk()).andExpect(jsonPath("$.imageUrls").isEmpty());
+        assertNull(services.findById(service).orElseThrow().getImageUrl(), "Never silently insert a category/stock photo");
+        mvc.perform(put("/api/v1/supplier/services/" + service).header("Authorization", bearer)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                {"categoryId":%d,"name":"Too many","price":450000,"durationMinutes":90,"imageUrls":%s,"active":true}
+                """.formatted(category, json.writeValueAsString(java.util.Collections.nCopies(7, URL)))))
+                .andExpect(status().isBadRequest());
+        var jpegBytes = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_RGB), "jpeg", jpegBytes);
+        String jpeg = "data:image/jpeg;base64," + java.util.Base64.getEncoder().encodeToString(jpegBytes.toByteArray());
+        when(gateway.upload(jpeg)).thenThrow(new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "IMAGE_STORAGE_UNAVAILABLE", "safe"));
+        mvc.perform(put("/api/v1/supplier/services/" + service).header("Authorization", bearer)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                {"categoryId":%d,"name":"Must roll back","price":450000,"durationMinutes":90,"imageUrls":["%s","%s"],"active":true}
+                """.formatted(category, PNG, jpeg)))
+                .andExpect(status().isServiceUnavailable());
+        assertEquals("No gallery", services.findById(service).orElseThrow().getName());
+        assertTrue(services.findById(service).orElseThrow().getImageUrls().isEmpty());
+        verify(gateway).destroy(any(CloudinaryImageGateway.UploadedImage.class));
         mvc.perform(get("/api/v1/supplier/profile").header("Authorization", bearer))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.imageUrl").value(URL));
 

@@ -300,3 +300,38 @@ production build and `git diff --check` passed. Postman simulation observed actu
 requests returning 200. Production JAR inspection found no mock/probe/test contract classes/resources.
 Live Cloudinary/account quota and deployed persistence smoke remain NOT RUN pending owner configuration
 and release approval. Existing Rollup/zod annotation and chunk-size warnings are non-blocking and unchanged.
+
+## Service image gallery (manual release prerequisite)
+
+Service creation/edit supports up to 6 public images. `imageUrl` remains the cover URL;
+the additive `imageUrls` request/response contains the ordered gallery (first = cover).
+Omitting `imageUrls` preserves gallery compatibility for old clients; explicit `[]` removes it.
+New services no longer silently substitute Unsplash/category images. Existing covers are untouched.
+
+Before deploying this backend, back up the database and inspect `service_offerings.image_urls`.
+If absent, apply `backend/src/main/resources/db/migration/mysql/V20261020_01__service_image_gallery.sql`
+once using the approved database maintenance process. It adds one nullable LONGTEXT column with JSON
+URL arrays; it does not backfill or delete data. These scripts are not an automatic migration runner;
+do not rely on Hibernate `update` as the production migration procedure.
+Deploy backend before frontend. Keep existing Cloudinary configuration (including enabled flag) and
+secrets server-side. No browser API key/secret is needed. Upload failures fail the service save and
+trigger the existing transaction rollback asset-cleanup mechanism. Existing removed/replaced assets
+are not automatically destroyed because URLs may still be referenced elsewhere.
+
+Smoke on a non-production supplier: create with 2 images, reload/edit, reorder cover, remove one,
+reload and inspect public service response/booking images. Test a provider error without calling
+Cloudinary in automated tests. Allow up to 120 seconds for the bounded six-image service save.
+Code rollback: revert frontend/backend code while **retaining the nullable column and its contents**;
+old versions still use `image_url`. Do not DROP the column during rollback. A pre-gallery backend
+may update covers without synchronizing gallery order, so pause gallery edits until re-enabled.
+
+Gallery verification (2026-10-20): 77 frontend tests, TypeScript and build passed; gallery converter,
+public-image H2/JWT MockMvc integration (including gallery persistence/legacy updates/invalid URLs/
+provider-failure rollback), and storage unit tests passed (7 tests). Local browser form preview
+confirmed no initial stock image, adding two images and changing the cover; this preview does not save.
+The full local Maven run executed 362 tests: 144 passed, 216 errored, 2 existing conditional tests
+skipped. The errors originate from this Windows Java runtime failing to establish a loopback
+connection (`SocketException: Invalid argument: connect`), including HTTP mock startup and
+RestClient auto-configuration. No assertions failed; this is not a full-regression PASS.
+Do not release until CI/full verification in a functioning Java networking environment passes.
+Live Cloudinary multi-upload, isolated MySQL migration and production gallery smoke remain NOT RUN.

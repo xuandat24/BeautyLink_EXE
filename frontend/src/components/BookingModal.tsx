@@ -212,6 +212,11 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </p>
               <h2 className="mt-1 text-lg sm:text-xl font-black text-slate-900">{service.name}</h2>
               <p className="mt-0.5 text-xs text-slate-500 font-semibold">{service.supplierName}</p>
+              {service.imageUrls && service.imageUrls.length > 0 && <div className="mt-3 flex gap-2 overflow-x-auto max-w-xs" aria-label="Ảnh dịch vụ">
+                {service.imageUrls.map((image, index) => <a key={image} href={image} target="_blank" rel="noreferrer">
+                  <img src={image} alt={`${service.name} — ảnh ${index + 1}`} className="h-20 w-24 shrink-0 rounded-lg object-cover" />
+                </a>)}
+              </div>}
             </div>
             <button
               type="button"

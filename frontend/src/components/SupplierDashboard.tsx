@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PublicImageUploadField } from './PublicImageUploadField';
+import { ServiceImageUploadField } from './ServiceImageUploadField';
 import {
   ArrowLeft,
   LayoutDashboard,
@@ -1215,7 +1216,7 @@ interface SupplierServiceModalProps {
   onSave: (data: any) => Promise<void>;
 }
 
-const SupplierServiceModal: React.FC<SupplierServiceModalProps> = ({
+export const SupplierServiceModal: React.FC<SupplierServiceModalProps> = ({
   service,
   categories,
   onClose,
@@ -1227,7 +1228,8 @@ const SupplierServiceModal: React.FC<SupplierServiceModalProps> = ({
     price: service?.price || 200000,
     durationMinutes: service?.durationMinutes || 60,
     description: service?.description || '',
-    imageUrl: service?.imageUrl || 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80',
+    imageUrl: service?.imageUrl || '',
+    imageUrls: service?.imageUrls?.length ? service.imageUrls : service?.imageUrl ? [service.imageUrl] : [],
   });
   const [submitting, setSubmitting] = useState(false);
   const [preparingImage, setPreparingImage] = useState(false);
@@ -1339,8 +1341,8 @@ const SupplierServiceModal: React.FC<SupplierServiceModalProps> = ({
             />
           </label>
 
-          <PublicImageUploadField label="Ảnh dịch vụ" value={formData.imageUrl}
-            onChange={imageUrl => setFormData(previous => ({ ...previous, imageUrl }))}
+          <ServiceImageUploadField value={formData.imageUrls}
+            onChange={imageUrls => setFormData(previous => ({ ...previous, imageUrls, imageUrl: imageUrls[0] ?? '' }))}
             onBusyChange={setPreparingImage} disabled={submitting} />
           {saveError && <p role="alert" className="text-xs text-red-600">{saveError}</p>}
 

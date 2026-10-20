@@ -221,8 +221,28 @@ public class SupplierAccountService {
         offering.setPrice(request.price());
         offering.setOriginalPrice(request.originalPrice());
         offering.setDurationMinutes(request.durationMinutes());
-        String image = normalizeImageSource(request.imageUrl(), offering.getSupplier().getOwner().getId());
-        offering.setImageUrl(image == null ? category.getImageUrl() : image);
+        Long ownerId = offering.getSupplier().getOwner().getId();
+        if (request.imageUrls() != null) {
+            // Explicit [] removes all images. Validate every item before the first external upload.
+            if (request.imageUrls().size() > 6 || request.imageUrls().stream().anyMatch(v -> v == null || v.isBlank())) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IMAGE", "Chỉ được chọn tối đa 6 ảnh hợp lệ");
+            }
+            for (String source : request.imageUrls()) validateImageSource(source);
+            List<String> images = request.imageUrls().stream().map(String::trim).distinct().map(v -> normalizeImageSource(v, ownerId)).toList();
+            offering.setImageUrls(images);
+            offering.setImageUrl(images.isEmpty() ? null : images.getFirst());
+        } else {
+            // Old clients only know the cover; preserve the remaining gallery on updates.
+            List<String> previous = offering.getImageUrls();
+            String image = normalizeImageSource(request.imageUrl(), ownerId);
+            if (image != null) {
+                var images = new java.util.ArrayList<String>();
+                images.add(image);
+                previous.stream().skip(1).filter(v -> !v.equals(image)).forEach(images::add);
+                offering.setImageUrls(images);
+                offering.setImageUrl(image);
+            }
+        }
         offering.setHighlightText(blankToNull(request.description()));
         offering.setActive(request.active());
         if (autoVerify && !offering.getSupplier().isDemoData()) offering.setFeatured(true);
@@ -240,7 +260,7 @@ public class SupplierAccountService {
         ServiceCategory category = service.getCategory();
         return new SupplierServiceResponse(service.getId(), category.getId(), category.getSlug(), category.getName(),
                 service.getName(), service.getDescription(), service.getPrice(), service.getOriginalPrice(),
-                service.getDurationMinutes(), service.getImageUrl(), service.isActive());
+                service.getDurationMinutes(), service.getImageUrl(), service.isActive(), service.getImageUrls());
     }
 
     private void createDefaultSchedule(Practitioner practitioner) {
@@ -296,6 +316,19 @@ public class SupplierAccountService {
             // Converted into a stable API validation response below.
         }
         throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IMAGE", "Ảnh phải là tệp JPG, PNG, WEBP hoặc đường dẫn HTTP hợp lệ");
+    }
+
+    private void validateImageSource(String value) {
+        String source = value.trim();
+        if (source.startsWith("data:image/")) {
+            imageDataValidator.requireValidDataImage(source, 1_100_000, "INVALID_IMAGE", "Ảnh phải là tệp JPG, PNG hoặc WEBP hợp lệ");
+            return;
+        }
+        try {
+            URI uri = URI.create(source);
+            if (("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) && uri.getHost() != null) return;
+        } catch (IllegalArgumentException ignored) { }
+        throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IMAGE", "Đường dẫn ảnh không hợp lệ");
     }
 
     private String requireIdentityImage(String value) {

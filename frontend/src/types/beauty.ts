@@ -64,6 +64,7 @@ export interface BackendService {
   originalPrice?: number;
   durationMinutes: number;
   imageUrl: string;
+  imageUrls?: string[];
   categorySlug: string;
   categoryName?: string;
   featured?: boolean;

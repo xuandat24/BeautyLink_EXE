@@ -119,10 +119,11 @@ public final class ApiDtos {
             @DecimalMin("1000") @Digits(integer = 10, fraction = 2) BigDecimal originalPrice,
             @Min(15) @Max(480) int durationMinutes,
             @Size(max = 1_500_000) String imageUrl,
-            boolean active) {}
+            boolean active,
+            @Size(max = 6) List<@NotBlank @Size(max = 1_500_000) String> imageUrls) {}
     public record SupplierServiceResponse(Long id, Long categoryId, String categorySlug, String categoryName,
                                           String name, String description, BigDecimal price, BigDecimal originalPrice,
-                                          int durationMinutes, String imageUrl, boolean active) {}
+                                          int durationMinutes, String imageUrl, boolean active, List<String> imageUrls) {}
     public record ServiceResponse(Long id, String name, String description, BigDecimal price, int durationMinutes,
                                   String imageUrl, String categorySlug, Long supplierId, String supplierName,
                                   String supplierAddress, double rating, int serviceReviewCount,
@@ -130,7 +131,7 @@ public final class ApiDtos {
                                   BigDecimal originalPrice, String highlightText, boolean featured,
                                   String supplierImageUrl, String supplierBusinessType, int supplierReviewCount,
                                   boolean supplierDemo, boolean supplierNearbyFeatured, boolean supplierNewPartner,
-                                  Double supplierLatitude, Double supplierLongitude) {}
+                                  Double supplierLatitude, Double supplierLongitude, List<String> imageUrls) {}
     public record AvailabilityResponse(Long practitionerId, LocalDate date, List<LocalTime> availableSlots) {}
     public record CapacitySlotResponse(LocalTime time, int availablePractitioners, String state) {}
     public record ServiceCapacityResponse(LocalDate date, int qualifiedPractitioners,

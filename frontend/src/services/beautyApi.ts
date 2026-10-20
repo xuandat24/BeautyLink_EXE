@@ -862,11 +862,11 @@ export const beautyApi = {
   },
 
   async createSupplierService(data: any): Promise<BackendService> {
-    return unwrap(apiClient.post('/v1/supplier/services', { ...data, active: true }, { timeout: 30000 }));
+    return unwrap(apiClient.post('/v1/supplier/services', { ...data, active: true }, { timeout: 120000 }));
   },
 
   async updateSupplierService(id: number, data: any): Promise<BackendService> {
-    return unwrap(apiClient.put(`/v1/supplier/services/${id}`, { ...data, active: true }, { timeout: 30000 }));
+    return unwrap(apiClient.put(`/v1/supplier/services/${id}`, { ...data, active: true }, { timeout: 120000 }));
   },
 
   async deactivateSupplierService(id: number): Promise<void> {

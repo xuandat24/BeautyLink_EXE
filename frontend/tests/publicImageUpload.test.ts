@@ -76,7 +76,7 @@ test('image-bearing save APIs preserve existing paths/payload and allow bounded 
   const calls: string[] = [];
   apiClient.defaults.adapter = async config => {
     calls.push(config.url ?? '');
-    assert.equal(config.timeout, 30000);
+    assert.equal(config.timeout, config.url?.includes('/supplier/services') ? 120000 : 30000);
     assert.doesNotMatch(JSON.stringify(config.data), /api_secret|signature|api_key/);
     return { data: { id: 1, addressLine: 'Address' }, status: 200, statusText: 'OK', headers: {}, config };
   };
