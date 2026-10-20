@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Phone, Mail, MapPin, ShieldCheck, Heart, QrCode } from 'lucide-react';
+import { Phone, Mail, MapPin, ShieldCheck, Heart, QrCode } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
@@ -9,9 +9,6 @@ export const Footer: React.FC = () => {
           {/* Col 1: Brand Info */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#e1146c] to-[#f472b6] flex items-center justify-center text-white shadow-md shadow-pink-500/20">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
               <span className="text-2xl font-black bg-gradient-to-r from-[#be185d] via-[#db2777] to-[#ec4899] bg-clip-text text-transparent">
                 BeautyLink
               </span>

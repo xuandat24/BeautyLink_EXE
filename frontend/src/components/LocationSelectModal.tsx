@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   MapPin,
   X,
-  Sparkles,
   ArrowLeft,
   ArrowRight,
   Loader2,
@@ -85,7 +84,7 @@ const SERVICE_CARD_OPTIONS: ServiceCardOption[] = [
     desc: 'Xem toàn bộ 2.000+ dịch vụ & ưu đãi hot nhất',
     tag: 'Toàn bộ danh mục',
     bgImage: 'https://images.unsplash.com/photo-1560869713-7d0a29430803?auto=format&fit=crop&w=700&q=80',
-    iconEmoji: '✨',
+    iconEmoji: '🗂️',
   },
 ];
 
@@ -191,7 +190,7 @@ export const LocationSelectModal: React.FC<LocationSelectModalProps> = ({
         <div className="shrink-0 bg-gradient-to-r from-pink-50/90 via-white to-pink-50/90 px-6 py-4 sm:px-7 sm:py-5 border-b border-pink-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-[#EB0F51] to-[#B42D58] text-white flex items-center justify-center shrink-0 shadow-md shadow-pink-500/20">
-              {step === 1 ? <MapPin className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+              <MapPin className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base sm:text-xl font-black text-slate-900 leading-tight">
@@ -249,7 +248,7 @@ export const LocationSelectModal: React.FC<LocationSelectModalProps> = ({
                   {/* Top Badge */}
                   <div className="relative z-10 flex items-center justify-between">
                     <span className="px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white text-[11px] font-bold border border-white/20 shadow-xs">
-                      ✦ 1.500+ Địa điểm
+                      1.500+ Địa điểm
                     </span>
                     {selectedLoc.slug === 'ho-chi-minh' && (
                       <span className="w-7 h-7 rounded-full bg-[#EB0F51] text-white flex items-center justify-center shadow-md">
@@ -294,7 +293,7 @@ export const LocationSelectModal: React.FC<LocationSelectModalProps> = ({
                   {/* Top Badge */}
                   <div className="relative z-10 flex items-center justify-between">
                     <span className="px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white text-[11px] font-bold border border-white/20 shadow-xs">
-                      ✦ 1.200+ Địa điểm
+                      1.200+ Địa điểm
                     </span>
                     {selectedLoc.slug === 'ha-noi' && (
                       <span className="w-7 h-7 rounded-full bg-[#EB0F51] text-white flex items-center justify-center shadow-md">

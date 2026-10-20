@@ -10,7 +10,6 @@ import {
   Wallet,
   Tag,
   Check,
-  Sparkles,
   Lock,
   AlertCircle,
   ChevronRight,

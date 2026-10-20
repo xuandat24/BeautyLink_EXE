@@ -6,7 +6,6 @@ import {
   ThumbsUp,
   MessageSquare,
   Camera,
-  Sparkles,
   Plus,
   X,
   Award,
@@ -627,7 +626,6 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = Rea
             {/* Modal Header */}
             <div className="shrink-0 bg-gradient-to-r from-[#be185d] via-[#db2777] to-[#e1146c] text-white p-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-white" />
                 <h3 className="text-base font-extrabold">Đánh giá trải nghiệm dịch vụ</h3>
               </div>
               <button

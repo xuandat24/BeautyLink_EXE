@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Flower2, Hand, Palette, Scissors, Sparkles, type LucideIcon } from 'lucide-react';
+import { Flower2, Hand, Palette, Scissors, type LucideIcon } from 'lucide-react';
 import { BackendCategory } from '../types';
 import { beautyApi, DEFAULT_CATEGORIES } from '../services/beautyApi';
 
@@ -21,7 +21,7 @@ const FEATURED_CATEGORY_ICONS: Record<(typeof FEATURED_CATEGORY_SLUGS)[number], 
   hair: Scissors,
   spa: Flower2,
   nails: Hand,
-  skincare: Sparkles,
+  skincare: Flower2,
 };
 
 export const FeaturedCategories: React.FC<FeaturedCategoriesProps> = React.memo(

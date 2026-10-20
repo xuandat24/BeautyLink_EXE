@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface HeroSectionProps {
   onBookDirect: (title: string, price: number, originalPrice: number) => void;
@@ -73,7 +73,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onBookDirect }) => {
         <div className="relative z-10 flex h-full flex-col justify-between p-4 sm:p-5 md:p-6">
           <div className="min-w-0">
             <div className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/15 px-2.5 py-1 text-[10px] font-bold tracking-wide text-pink-100 backdrop-blur-md">
-              <Sparkles className="h-3 w-3 text-pink-300" />
               <span>{slide.badge}</span>
             </div>
             <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-pink-300">

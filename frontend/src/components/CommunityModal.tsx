@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, Heart, MessageCircle, Star, Sparkles, Send, CheckCircle2 } from 'lucide-react';
+import { X, Users, Heart, MessageCircle, Star, Send, CheckCircle2 } from 'lucide-react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { communityCommentSchema } from '../lib/validation';
 import { FieldError } from './FieldError';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, User, Calendar, Clock, Loader2, CheckCircle, ShieldCheck, CheckCircle2, Sparkles } from 'lucide-react';
+import { X, User, Calendar, Clock, Loader2, CheckCircle, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { BackendService, BackendPractitioner, CurrentUser } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
@@ -184,7 +184,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               <div>
                 <p className="text-xs font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
                   <span>Đặt lịch thành công</span>
-                  <Sparkles className="h-3.5 w-3.5 text-pink-500" />
                 </p>
                 <h2 className="mt-0.5 text-lg sm:text-xl font-black text-slate-900">
                   Lịch hẹn đã được xác nhận!

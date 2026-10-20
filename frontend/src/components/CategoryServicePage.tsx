@@ -6,7 +6,6 @@ import {
   Loader2,
   MapPin,
   Search,
-  Sparkles,
   Star,
   Store,
 } from 'lucide-react';
@@ -272,7 +271,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
             <div className="absolute inset-0 flex items-center px-6 sm:px-10">
               <div className="max-w-xl text-white">
                 <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-bold backdrop-blur-sm">
-                  <Sparkles className="h-3.5 w-3.5 text-pink-300" /> Danh mục nổi bật
+                  Danh mục nổi bật
                 </div>
                 <h1 className="text-2xl font-black sm:text-4xl">{activeCategory.name}</h1>
                 <p className="mt-2 text-sm text-white/85">

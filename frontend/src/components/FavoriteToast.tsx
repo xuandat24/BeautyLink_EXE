@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Heart, Sparkles, X, Check } from 'lucide-react';
+import { Heart, X, Check } from 'lucide-react';
 
 export interface FavoriteToastInfo {
   id: string;
@@ -105,7 +105,6 @@ export const FavoriteToast: React.FC<FavoriteToastProps> = ({
             >
               {toast.isFavorited ? (
                 <>
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin" />
                   <span>Đã lưu vào danh sách yêu thích</span>
                 </>
               ) : (

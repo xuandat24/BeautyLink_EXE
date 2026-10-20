@@ -194,7 +194,6 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-slate-800 font-medium hover:text-[#e1146c] transition-colors">
             {item.text}
           </span>
-          <span className="text-pink-300 font-bold ml-2">✦</span>
         </span>
       ))}
     </>

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
-  Sparkles,
   User,
   Phone,
   Mail,
@@ -301,9 +300,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         </button>
 
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#be185d] to-[#e1146c] flex items-center justify-center text-white shadow-md shadow-pink-500/20">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
           <div>
             <span className="text-lg font-black tracking-tight text-slate-900 leading-none">
               Beauty<span className="text-[#be185d]">Link</span>
@@ -796,9 +792,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-amber-400/20 border border-amber-300/40 flex items-center justify-center text-amber-300 font-black">
-                      <Sparkles className="w-4 h-4 text-amber-300" />
-                    </div>
                     <div>
                       <span className="text-[10px] font-mono tracking-widest text-pink-200 uppercase block">
                         BeautyLink Privilege
