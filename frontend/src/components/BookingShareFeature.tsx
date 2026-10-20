@@ -9,7 +9,6 @@ import {
   User,
   Tag,
   CalendarPlus,
-  Sparkles,
   ExternalLink,
   MessageCircle,
   Heart,
@@ -87,7 +86,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
     const addressText = data.supplierAddress ? `\n📍 Địa chỉ: ${data.supplierAddress}` : '';
 
     if (type === 'busy') {
-      return `🌸 TẶNG / CHIA SẺ LỊCH LÀM ĐẸP (HÔM ĐÓ MÌNH BẬN) ✨\n` +
+      return `🌸 TẶNG / CHIA SẺ LỊCH LÀM ĐẸP (HÔM ĐÓ MÌNH BẬN)\n` +
         `Chào bạn! Hôm đó mình có lịch bận đột xuất nên muốn chia sẻ lại lịch hẹn làm đẹp này cho bạn trải nghiệm nhé:\n` +
         `💅 Dịch vụ: ${data.serviceName}\n` +
         `🏢 Cơ sở: ${data.supplierName}${addressText}\n` +
@@ -99,7 +98,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
     }
 
     if (type === 'invite') {
-      return `🌸 Cuối tuần này có ai muốn đi làm đẹp cùng mình không nè? ✨\n` +
+      return `🌸 Cuối tuần này có ai muốn đi làm đẹp cùng mình không nè?\n` +
         `Mình vừa đặt lịch hẹn làm đẹp tại ${data.supplierName}:\n` +
         `💅 Dịch vụ: ${data.serviceName}\n` +
         `⏰ Thời gian: ${timeFormatted} · ${formattedDate}${specialistText}${addressText}\n` +
@@ -108,7 +107,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
     }
 
     if (type === 'excited') {
-      return `✨ Vừa săn được lịch làm đẹp cực ưng ý tại BeautyLink! 💖\n` +
+      return `Vừa săn được lịch làm đẹp cực ưng ý tại BeautyLink! 💖\n` +
         `Dịch vụ: ${data.serviceName}\n` +
         `Cơ sở: ${data.supplierName}\n` +
         `Lịch hẹn: ${timeFormatted} · ${formattedDate}${specialistText}\n` +
@@ -233,7 +232,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
   };
 
   const handleShareTwitter = () => {
-    const text = `🌸 Mình vừa đặt lịch làm đẹp tại BeautyLink: ${data.serviceName} ở ${data.supplierName} (${data.startTime} · ${formattedDate})! ✨`;
+    const text = `🌸 Mình vừa đặt lịch làm đẹp tại BeautyLink: ${data.serviceName} ở ${data.supplierName} (${data.startTime} · ${formattedDate})!`;
     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
       text
     )}&url=${encodeURIComponent(shareUrl)}`;
@@ -374,9 +373,6 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
 
               {data.totalAmount != null && (
                 <div className="flex items-center gap-2.5 rounded-2xl bg-white/90 p-2.5 border border-pink-100/60 shadow-2xs">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-700">
-                    <Sparkles className="h-4 w-4" />
-                  </span>
                   <div className="min-w-0">
                     <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Giá dịch vụ

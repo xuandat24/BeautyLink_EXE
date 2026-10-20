@@ -4,7 +4,6 @@ import {
   Upload,
   Camera,
   Check,
-  Sparkles,
   Link as LinkIcon,
   Trash2,
   User,
@@ -324,7 +323,6 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
               onClick={handleSave}
               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 via-[#db2777] to-[#be185d] text-white text-xs font-black shadow-md hover:opacity-95 transition flex items-center gap-1.5 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
               <span>Lưu ảnh đại diện</span>
             </button>
           </div>

@@ -2,7 +2,7 @@ export type { HotDeal, Salon, NewPartner, CityDestination, Voucher } from '../ty
 import type { HotDeal, Salon, NewPartner, CityDestination, Voucher } from '../types';
 
 export const CATEGORIES = [
-  { id: '1', name: 'Thẩm Mỹ Mặt - Hàm', icon: 'Sparkles', count: '1.2k+ dịch vụ' },
+  { id: '1', name: 'Thẩm Mỹ Mặt - Hàm', icon: 'Heart', count: '1.2k+ dịch vụ' },
   { id: '2', name: 'Phun Xăm Điêu Khắc', icon: 'Feather', count: '850+ dịch vụ' },
   { id: '3', name: 'Trị Liệu Da Chuyên Sâu', icon: 'Activity', count: '2.4k+ dịch vụ' },
   { id: '4', name: 'Thẩm Mỹ Mắt', icon: 'Eye', count: '620+ dịch vụ' },

@@ -7,7 +7,6 @@ import {
   Star,
   MapPin,
   Clock,
-  Sparkles,
   RotateCcw,
   Check,
   ChevronDown,
@@ -285,7 +284,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
       case 'nearby':
         return 'Tất Cả Địa Điểm Gần Bạn 📍';
       case 'new-partners':
-        return 'Doanh Nghiệp Mới Tham Gia ✨';
+        return 'Doanh Nghiệp Mới Tham Gia';
       default:
         return 'Khám Phá Toàn Bộ Dịch Vụ & Spa 🌸';
     }
@@ -314,9 +313,6 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
         {/* Modal Top Header */}
         <div className="p-4 sm:p-5 bg-gradient-to-r from-[#be185d] via-[#e1146c] to-[#fb7185] text-white flex items-center justify-between shadow-md shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-xs">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
             <div>
               <h2 className="text-base sm:text-xl font-black tracking-tight">{getModalTitle()}</h2>
               <p className="text-xs text-pink-100 font-medium hidden sm:block">
@@ -396,7 +392,6 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
                   : 'bg-white text-slate-600 hover:text-[#e1146c] border border-pink-100'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
               <span>Tất Cả Dịch Vụ</span>
             </button>
           </div>
@@ -661,7 +656,7 @@ export const ViewAllServicesModal: React.FC<ViewAllServicesModalProps> = ({
                       {/* Highlight Subtext */}
                       {item.highlightText && (
                         <p className="mt-1 text-[11px] text-slate-500 line-clamp-1 italic">
-                          ✨ {item.highlightText}
+                          {item.highlightText}
                         </p>
                       )}
                     </div>

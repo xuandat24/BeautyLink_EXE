@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, TicketPercent, Copy, Check, Clock, Sparkles } from 'lucide-react';
+import { X, TicketPercent, Copy, Check, Clock } from 'lucide-react';
 import { VOUCHERS } from '../data/mockData';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 

@@ -9,7 +9,6 @@ import {
   Play,
   Flame,
   Clock,
-  Sparkles,
   Gift,
   ExternalLink,
   ChevronRight,

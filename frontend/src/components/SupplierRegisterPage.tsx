@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { PublicImageUploadField } from './PublicImageUploadField';
 import {
   ArrowLeft,
-  Sparkles,
   ShieldCheck,
   Lock,
   Eye,
@@ -306,7 +305,6 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
 
           <div className="relative z-10 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur text-pink-200 text-xs font-bold border border-white/20">
-              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
               <span>BeautyLink for Business · Cổng Đăng Ký Đối Tác</span>
             </div>
 

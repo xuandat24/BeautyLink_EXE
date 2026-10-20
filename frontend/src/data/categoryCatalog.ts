@@ -5,7 +5,7 @@ export interface CategoryShortcut {
 }
 
 const defaultShortcuts: CategoryShortcut[] = [
-  { label: 'Dịch vụ nổi bật', caption: 'Được yêu thích nhất', icon: '✨' },
+  { label: 'Dịch vụ nổi bật', caption: 'Được yêu thích nhất', icon: '🌷' },
   { label: 'Gói trải nghiệm', caption: 'Dành cho khách mới', icon: '🎁' },
   { label: 'Chăm sóc chuyên sâu', caption: 'Tư vấn theo nhu cầu', icon: '🌷' },
   { label: 'Ưu đãi hôm nay', caption: 'Đặt lịch giá tốt', icon: '🏷️' },
@@ -14,7 +14,7 @@ const defaultShortcuts: CategoryShortcut[] = [
 export const categoryShortcuts: Record<string, CategoryShortcut[]> = {
   makeup: [
     { label: 'Trang điểm cô dâu', caption: 'Rạng rỡ ngày trọng đại', icon: '👰' },
-    { label: 'Trang điểm sự kiện', caption: 'Tiệc, lễ và sân khấu', icon: '✨' },
+    { label: 'Trang điểm sự kiện', caption: 'Tiệc, lễ và sân khấu', icon: '💄' },
     { label: 'Makeup cá nhân', caption: 'Phong cách riêng của bạn', icon: '💄' },
     { label: 'Makeup chụp ảnh', caption: 'Lên hình thật nổi bật', icon: '📸' },
   ],

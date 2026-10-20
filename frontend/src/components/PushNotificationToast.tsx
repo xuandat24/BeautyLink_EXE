@@ -3,7 +3,6 @@ import {
   X,
   Flame,
   Clock,
-  Sparkles,
   Gift,
   BellRing,
   ChevronRight,
@@ -66,7 +65,7 @@ export const PushNotificationToast: React.FC<PushNotificationToastProps> = ({
       case 'deal_expiring':
         return <Clock className="w-4 h-4 text-rose-500" />;
       case 'new_promo':
-        return <Sparkles className="w-4 h-4 text-fuchsia-500" />;
+        return <Gift className="w-4 h-4 text-fuchsia-500" />;
       default:
         return <Gift className="w-4 h-4 text-[#e1146c]" />;
     }

@@ -54,7 +54,7 @@ export const INITIAL_NOTIFICATIONS: PushNotification[] = [
   {
     id: 'notif-3',
     type: 'new_promo',
-    title: '✨ CỰC HOT: Liệu Trình Trẻ Hóa Da PMT Radiance 199K vừa mở bán',
+    title: 'CỰC HOT: Liệu Trình Trẻ Hóa Da PMT Radiance 199K vừa mở bán',
     message: 'Trải nghiệm trẻ hóa da công nghệ cao chuẩn y khoa, soi da 3D và điện di Collagen tươi giảm 92% (Giá gốc 2.500.000đ). Đặt chỗ ngay kẻo lỡ!',
     timestamp: '45 phút trước',
     createdAt: Date.now() - 45 * 60 * 1000,

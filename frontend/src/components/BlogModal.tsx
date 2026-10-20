@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { X, Sparkles, BookOpen, Clock, Heart, Share2 } from 'lucide-react';
+import { X, BookOpen, Clock, Heart, Share2 } from 'lucide-react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface BlogModalProps {

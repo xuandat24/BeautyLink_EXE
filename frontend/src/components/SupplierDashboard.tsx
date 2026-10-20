@@ -8,7 +8,6 @@ import {
   Users,
   Clock,
   LogOut,
-  Sparkles,
   MapPin,
   CheckCircle,
   AlertTriangle,
@@ -387,9 +386,6 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
                   <p className="mt-1 text-xs font-semibold text-slate-500">Tỷ lệ hoàn thành</p>
                 </div>
                 <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="grid h-10 w-10 place-items-center rounded-xl text-emerald-600 bg-emerald-50">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
                   <p className="mt-5 text-2xl font-black">{formatCurrency(totalRevenue)}</p>
                   <p className="mt-1 text-xs font-semibold text-slate-500">Tổng giá trị đơn</p>
                 </div>

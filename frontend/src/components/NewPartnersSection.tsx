@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ChevronRight, ChevronLeft, Sparkles, MapPin, Star, Users, ShieldCheck } from 'lucide-react';
+import { ChevronRight, ChevronLeft, MapPin, Star, Users, ShieldCheck } from 'lucide-react';
 import { NewPartner } from '../data/mockData';
 import { useScrollReveal } from '../hooks/useScrollReveal';
 

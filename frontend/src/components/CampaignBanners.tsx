@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
-  Sparkles,
   ArrowUpRight,
   Clock,
   UserCheck,
@@ -445,7 +444,6 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
 
           <h2 className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight leading-snug uppercase flex items-center gap-2">
             <span>{currentSlide.headerTitle}</span>
-            <Sparkles className="w-5 h-5 text-[#e1146c] shrink-0 animate-pulse" />
           </h2>
         </div>
 
@@ -813,7 +811,6 @@ export const CampaignBanners: React.FC<CampaignBannersProps> = ({
                           {step.description}
                         </p>
                         <div className="mt-2 pl-8 flex items-center gap-1.5 text-[11px] font-semibold text-[#be185d]">
-                          <Sparkles className="w-3.5 h-3.5" />
                           <span>Mẹo sản phẩm: {step.productTip}</span>
                         </div>
                       </div>

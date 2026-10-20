@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Store, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, Store, CheckCircle2 } from 'lucide-react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface PartnerRegisterModalProps {

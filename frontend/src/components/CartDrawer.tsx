@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Trash2, ShoppingBag, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, Trash2, ShoppingBag, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { HotDeal } from '../data/mockData';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { voucherCodeSchema } from '../lib/validation';

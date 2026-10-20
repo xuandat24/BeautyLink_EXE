@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Gift, Sparkles, Award, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Gift, Award, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface RewardsModalProps {

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft,
-  Sparkles,
   MapPin,
   Clock,
   Phone,
@@ -290,7 +289,6 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Sparkles className="w-4 h-4 text-[#e1146c]" />
             <span>Tất cả dịch vụ & Đánh giá</span>
           </button>
 
@@ -428,7 +426,6 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
             {/* Shop Amenities & Space intro */}
             <div className="bg-white rounded-3xl border border-pink-100 p-6 sm:p-8 space-y-4">
               <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#e1146c]" />
                 <span>Tiện ích & Tiêu chuẩn phục vụ tại {partnerProfile.name}</span>
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">

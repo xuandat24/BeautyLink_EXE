@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Sparkles,
   User,
   Phone,
   Mail,
@@ -228,9 +227,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             onClick={onBackToHome}
             className="flex items-center gap-2.5 group cursor-pointer text-left"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-[#be185d] via-[#db2777] to-[#e1146c] flex items-center justify-center text-white shadow-md shadow-pink-500/25 group-hover:scale-105 transition-transform duration-300">
-              <Sparkles className="w-5 h-5 text-white animate-pulse" />
-            </div>
             <div className="flex flex-col">
               <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 group-hover:text-[#e1146c] transition-colors leading-none">
                 Beauty<span className="text-[#e1146c]">Link</span>

@@ -7,7 +7,6 @@ import {
   Star,
   MapPin,
   Clock,
-  Sparkles,
   RotateCcw,
   Check,
   ChevronDown,
@@ -420,10 +419,10 @@ export const FilterExplorePage: React.FC<FilterExplorePageProps> = ({
           {/* Context Tabs (Tất cả, Khuyến mãi hot, Gần bạn, Doanh nghiệp mới) */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1">
             {[
-              { id: 'all', label: 'Tất cả dịch vụ', icon: Sparkles },
+              { id: 'all', label: 'Tất cả dịch vụ', icon: Layers },
               { id: 'deals', label: 'Khuyến mãi HOT 🔥', icon: Flame },
               { id: 'nearby', label: 'Gần vị trí của tôi 📍', icon: MapPin },
-              { id: 'new-partners', label: 'Doanh nghiệp mới tham gia ✨', icon: Building2 },
+              { id: 'new-partners', label: 'Doanh nghiệp mới tham gia', icon: Building2 },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;

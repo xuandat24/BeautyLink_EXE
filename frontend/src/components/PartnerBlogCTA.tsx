@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Sparkles, BookOpen, Store, CheckCircle } from 'lucide-react';
+import { ArrowRight, BookOpen, Store, CheckCircle } from 'lucide-react';
 
 interface PartnerBlogCTAProps {
   onOpenPartnerModal: () => void;
@@ -85,11 +85,9 @@ export const PartnerBlogCTA: React.FC<PartnerBlogCTAProps> = ({
 
             <ul className="mt-3 space-y-1.5 text-xs text-slate-600 font-medium">
               <li className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#e1146c]" />
                 <span>Chia sẻ kiến thức từ Bác Sĩ Da Liễu chuyên khoa</span>
               </li>
               <li className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#e1146c]" />
                 <span>Review thực tế không qua chỉnh sửa ảnh</span>
               </li>
             </ul>
@@ -109,7 +107,6 @@ export const PartnerBlogCTA: React.FC<PartnerBlogCTAProps> = ({
           <div className="absolute right-4 bottom-4 w-32 h-32 md:w-44 md:h-44 rounded-full bg-gradient-to-tr from-purple-200 to-pink-200/40 blur-2xl pointer-events-none" />
           <div className="absolute right-6 bottom-6 opacity-85 hidden sm:block">
             <div className="w-24 h-24 rounded-2xl bg-white border border-pink-200 shadow-md p-3 flex flex-col justify-between -rotate-6">
-              <Sparkles className="w-7 h-7 text-[#be185d]" />
               <div className="text-[10px] font-bold text-slate-700">
                 120+ Mẹo Dưỡng Da
               </div>
