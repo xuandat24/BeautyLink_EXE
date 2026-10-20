@@ -22,8 +22,12 @@ const STORAGE_KEYS = {
   FAVORITES: 'user_favorites',
 };
 
-const CART_STORAGE_KEY = 'beautylink_cart_items_v3';
-const LEGACY_CART_STORAGE_KEY = 'beautylink_cart_items_v2';
+const CART_STORAGE_PREFIX = 'beautylink_cart_items_v4:';
+const cartOwnerId = (user: CurrentUser | null): string | null => {
+  const id = user?.id;
+  return (typeof id === 'number' && Number.isSafeInteger(id) && id > 0)
+    || (typeof id === 'string' && /^[1-9]\d*$/.test(id)) ? String(id) : null;
+};
 const SESSION_USER_KEY = 'beautylink_session_user';
 const LEGACY_PROFILE_KEY = 'beautylink_user_profile_data_v2';
 
@@ -50,11 +54,12 @@ const parseCartItems = (value: unknown): CartItem[] => {
   });
 };
 
-const parseStoredCart = (raw: string | null): CartItem[] => {
+const parseStoredCart = (raw: string | null, ownerId: string): CartItem[] => {
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || !('version' in parsed) || parsed.version !== 3
+    if (!parsed || typeof parsed !== 'object' || !('version' in parsed) || parsed.version !== 4
+      || !('ownerId' in parsed) || parsed.ownerId !== ownerId
       || !('source' in parsed) || parsed.source !== 'user-action' || !('items' in parsed)) return [];
     return parseCartItems(parsed.items);
   } catch {
@@ -62,24 +67,12 @@ const parseStoredCart = (raw: string | null): CartItem[] => {
   }
 };
 
-export const loadLegacyCartFromStorage = (): CartItem[] => {
-  if (typeof window === 'undefined') return [];
+export const loadCartFromStorage = (user: CurrentUser | null = loadSessionUser()): CartItem[] => {
+  const ownerId = cartOwnerId(user);
+  if (typeof window === 'undefined' || !ownerId) return [];
   try {
-    // Keep old data recoverable, but never merge it into the active cart automatically.
-    if (localStorage.getItem(CART_STORAGE_KEY) !== null) return [];
-    const raw = localStorage.getItem(LEGACY_CART_STORAGE_KEY);
-    return raw ? parseCartItems(JSON.parse(raw)) : [];
-  } catch {
-    return [];
-  }
-};
-
-export const loadCartFromStorage = (): CartItem[] => {
-  if (typeof window === 'undefined') return [];
-  try {
-    // Only the dedicated cart written by explicit cart actions is restored.
-    // Do not resurrect older demo/shared cache entries when this key is absent.
-    return parseStoredCart(localStorage.getItem(CART_STORAGE_KEY));
+    // Unscoped legacy carts have no reliable owner and must never be imported.
+    return parseStoredCart(localStorage.getItem(CART_STORAGE_PREFIX + ownerId), ownerId);
   } catch {
     // Storage can be unavailable in private/restricted browser contexts.
   }
@@ -87,10 +80,11 @@ export const loadCartFromStorage = (): CartItem[] => {
 };
 
 const persistCartToStorage = (items: CartItem[]) => {
-  memoryState.legacyCartItems = [];
+  const ownerId = cartOwnerId(memoryState.currentUser);
+  if (!ownerId) return; // Guest selections live only in this page's memory.
   try {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ version: 3, source: 'user-action', items }));
+      localStorage.setItem(CART_STORAGE_PREFIX + ownerId, JSON.stringify({ version: 4, ownerId, source: 'user-action', items }));
     }
     cache.delete(STORAGE_KEYS.CART);
   } catch (err) {
@@ -105,7 +99,6 @@ interface MemoryState {
   selectedIntentCategory: string | null;
   onboardingCompleted: boolean;
   cartItems: CartItem[];
-  legacyCartItems: CartItem[];
   appointments: BookingDetails[];
   currentUser: CurrentUser | null;
   favorites: string[];
@@ -120,7 +113,6 @@ let memoryState: MemoryState = {
   selectedIntentCategory: cache.get<string | null>(STORAGE_KEYS.INTENT_CATEGORY) ?? null,
   onboardingCompleted: cache.get<boolean>(STORAGE_KEYS.ONBOARDING_COMPLETED) ?? false,
   cartItems: loadCartFromStorage(),
-  legacyCartItems: loadLegacyCartFromStorage(),
   appointments: [],
   currentUser: loadSessionUser(),
   favorites: cache.get<string[]>(STORAGE_KEYS.FAVORITES) || [],
@@ -145,9 +137,9 @@ export function useBeautyStore() {
     // Sync cart across browser tabs and on storage changes
     const handleStorageChange = (e: StorageEvent) => {
       if (e.storageArea && e.storageArea !== localStorage) return;
-      if (e.key === CART_STORAGE_KEY || e.key === null) {
-        memoryState.cartItems = parseStoredCart(e.newValue);
-        memoryState.legacyCartItems = [];
+      const ownerId = cartOwnerId(memoryState.currentUser);
+      if (ownerId && (e.key === CART_STORAGE_PREFIX + ownerId || e.key === null)) {
+        memoryState.cartItems = parseStoredCart(e.newValue, ownerId);
         notify();
       }
     };
@@ -244,13 +236,6 @@ export function useBeautyStore() {
     notify();
   }, []);
 
-  const restoreLegacyCart = useCallback(() => {
-    if (memoryState.cartItems.length > 0 || memoryState.legacyCartItems.length === 0) return;
-    memoryState.cartItems = loadLegacyCartFromStorage();
-    persistCartToStorage(memoryState.cartItems);
-    notify();
-  }, []);
-
   // 3. Appointments
   const addAppointment = useCallback((appointment: BookingDetails) => {
     const updated = [appointment, ...memoryState.appointments];
@@ -267,16 +252,20 @@ export function useBeautyStore() {
   // 4. User authentication
   const setCurrentUser = useCallback((user: CurrentUser | null) => {
     const previousUser = memoryState.currentUser;
-    const sameAccount = previousUser && user && (previousUser.id != null && user.id != null
-      ? String(previousUser.id) === String(user.id)
-      : previousUser.email && user.email
-        ? previousUser.email.toLowerCase() === user.email.toLowerCase()
-        : previousUser.phone && previousUser.phone === user.phone);
-    if (previousUser && !sameAccount) {
-      memoryState.cartItems = [];
-      persistCartToStorage([]);
+    const ownerId = cartOwnerId(user);
+    const sameAccount = ownerId !== null && ownerId === cartOwnerId(previousUser);
+    if (!sameAccount) {
+      const guestItems = previousUser === null && ownerId ? memoryState.cartItems : [];
+      const savedItems = loadCartFromStorage(user);
+      memoryState.cartItems = [...savedItems];
+      for (const item of guestItems) {
+        const saved = memoryState.cartItems.find((entry) => entry.deal.id === item.deal.id);
+        if (!saved) memoryState.cartItems.push(item);
+        else if (Number.isSafeInteger(saved.quantity + item.quantity)) saved.quantity += item.quantity;
+      }
     }
     memoryState.currentUser = user;
+    if (!sameAccount && ownerId) persistCartToStorage(memoryState.cartItems);
     cache.delete(STORAGE_KEYS.USER);
     if (typeof window !== 'undefined') {
       if (user && hasPersistentSession()) {
@@ -296,7 +285,6 @@ export function useBeautyStore() {
   const logout = useCallback(() => {
     memoryState.currentUser = null;
     memoryState.cartItems = [];
-    persistCartToStorage([]);
     memoryState.appointments = [];
     memoryState.notifications = [];
     cache.delete(STORAGE_KEYS.USER);
@@ -382,7 +370,6 @@ export function useBeautyStore() {
     updateCartQuantity,
     removeFromCart,
     clearCart,
-    restoreLegacyCart,
     addAppointment,
     cancelAppointment,
     setCurrentUser,

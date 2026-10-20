@@ -634,23 +634,24 @@ file validation and private-document separation. Mocks/probe are not production 
 
 ## Cart storage compatibility
 
-Active carts use `beautylink_cart_items_v3` with an explicit version/source envelope. Neither legacy
-`beautylink_cart_items_v2` arrays nor the old general cache are automatically restored as active items.
-This prevents an old but structurally valid item (for example a test service) from appearing on entry.
-The v2 value is preserved, not deleted: while the new cart has not been initialized, the empty drawer
-offers **Khôi phục giỏ cũ** or **Không khôi phục**. Restoring is an explicit local action; it never creates
-a booking/payment or trusts stored prices as a server quote. An initialized empty v3 cart never falls
-back to v2. New additions persist normally; logout/account-change and cross-tab clear behavior remain.
+Active carts use `beautylink_cart_items_v4:<accountId>` with a version/source/owner envelope.
+New guests start empty; guest additions stay in page memory only. Login merges explicit guest choices
+with that account's saved cart. Returning on the same browser or logging back into the same account
+loads its saved selections automatically, without a restoration prompt. Logout clears the visible cart,
+not the account's saved selections. Switching accounts loads only the next account's cart. Account IDs
+are required for persistence; names, emails and phone numbers are not storage identities.
+Unscoped v2/v3 and old general-cache carts are ignored and left untouched because ownership is unknown.
+Cross-tab updates are scoped to the active account. This is browser-local storage, not cross-device sync
+or an authorization boundary; booking prices and permissions remain server-validated.
 
-This is frontend-only: no DB migration, catalog deletion or changes to payment/auth APIs. A one-time
-legacy restoration choice also applies to legitimate old carts; do not bulk-delete browser storage.
-Rollback to pre-v3 frontend may expose the old v2 cart again and cannot read new v3 selections; preserve
-both keys when investigating instead of deleting data. Regression fixture:
+This is frontend-only: no DB migration or changes to auth, JWT/remember-me or payment APIs.
+Rollback to older frontend code may expose unscoped legacy carts and cannot read v4 selections;
+preserve storage while investigating rather than bulk-deleting it. Local regression fixture:
 `npm run dev -- --port 5175 --host 127.0.0.1`, then open
 `http://127.0.0.1:5175/tests/cart-migration-smoke.html` (synthetic local-only data, no checkout).
-The fixture is excluded from the production build entry point. Verified: 72 frontend tests,
-TypeScript check, build; real-browser local legacy restore/remove/reload smoke passed. Production
-verification is a separate release step; this local smoke is not a production test.
+The fixture is excluded from the production build entry point. It exercises synthetic account IDs
+and the actual cart store, not real authentication or production API calls. Production verification
+is a separate release step.
 
 ## License
 

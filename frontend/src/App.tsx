@@ -202,8 +202,6 @@ export default function App() {
     completeOnboarding,
     setSelectedLocation,
     cartItems,
-    legacyCartItems,
-    restoreLegacyCart,
     addToCart,
     removeFromCart,
     clearCart,
@@ -1040,8 +1038,6 @@ export default function App() {
           isOpen={isCartOpen}
           onClose={() => setIsCartOpen(false)}
           items={cartItems}
-          legacyCartCount={legacyCartItems.length}
-          onRestoreLegacyCart={restoreLegacyCart}
           onRemoveItem={handleRemoveFromCart}
           onClearCart={clearCart}
           onCheckout={() => {
@@ -1287,8 +1283,6 @@ export default function App() {
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         items={cartItems}
-        legacyCartCount={legacyCartItems.length}
-        onRestoreLegacyCart={restoreLegacyCart}
         onRemoveItem={handleRemoveFromCart}
         onClearCart={clearCart}
         onCheckout={() => {
