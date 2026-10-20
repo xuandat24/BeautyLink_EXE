@@ -81,7 +81,6 @@ export const Header: React.FC<HeaderProps> = ({
   const [searchInput, setSearchInput] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [language, setLanguage] = useState<'vi' | 'en'>('vi');
 
   const [internalFilters, setInternalFilters] = useState<SearchFilters>({
     priceRange: 'all',
@@ -382,7 +381,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onOpenPartnerModal}
               className="hidden lg:inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-pink-200 text-xs font-semibold text-[#be185d] bg-pink-50/70 hover:bg-pink-100 hover:border-pink-300 transition-all whitespace-nowrap cursor-pointer"
             >
-              <span>{language === 'vi' ? 'Trở thành đối tác' : 'Partner with us'}</span>
+              <span>Trở thành đối tác</span>
             </button>
 
             {/* User Profile / Login & Register */}
@@ -419,13 +418,13 @@ export const Header: React.FC<HeaderProps> = ({
                   onClick={() => onOpenAuthModal('register')}
                   className="hidden sm:inline-flex px-2.5 py-1.5 rounded-full text-xs font-semibold text-slate-700 hover:text-[#be185d] hover:bg-pink-50 transition-colors cursor-pointer"
                 >
-                  {language === 'vi' ? 'Đăng ký' : 'Sign up'}
+                  Đăng ký
                 </button>
                 <button
                   onClick={() => onOpenAuthModal('login')}
                   className="px-3.5 py-1.5 rounded-full text-xs font-bold text-white bg-gradient-to-r from-[#EB0F51] to-[#B42D58] hover:from-[#c2185b] hover:to-[#9d174d] shadow-sm shadow-pink-500/25 transition-all whitespace-nowrap cursor-pointer"
                 >
-                  {language === 'vi' ? 'Đăng nhập' : 'Log in'}
+                  Đăng nhập
                 </button>
               </div>
             )}
@@ -493,34 +492,15 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Language Toggle VN / EN */}
+            {/* Vietnamese-only language indicator */}
             <div className="flex items-center p-0.5 rounded-full bg-pink-50 border border-pink-200 text-[11px] font-bold shadow-xs">
-              <button
-                type="button"
-                onClick={() => setLanguage('vi')}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-full transition-all cursor-pointer ${
-                  language === 'vi'
-                    ? 'bg-[#EB0F51] text-white shadow-xs font-extrabold'
-                    : 'text-slate-600 hover:text-[#be185d]'
-                }`}
-                title="Việt Nam (VN)"
+              <span
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EB0F51] text-white shadow-xs font-extrabold"
+                title="Tiếng Việt"
               >
                 <span className="text-xs leading-none">🇻🇳</span>
                 <span>VN</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setLanguage('en')}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-full transition-all cursor-pointer ${
-                  language === 'en'
-                    ? 'bg-[#EB0F51] text-white shadow-xs font-extrabold'
-                    : 'text-slate-600 hover:text-[#be185d]'
-                }`}
-                title="English (EN)"
-              >
-                <span className="text-xs leading-none">🇬🇧</span>
-                <span>EN</span>
-              </button>
+              </span>
             </div>
 
             {/* Mobile menu trigger */}

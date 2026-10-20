@@ -3,126 +3,134 @@ import { test } from 'node:test';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
-import type { HotDeal } from '../src/types';
+import type { CurrentUser, HotDeal } from '../src/types';
 
 const deal: HotDeal = { id: 'service-42', serviceId: 42, supplierId: 7, title: 'Dịch vụ kiểm thử',
-  brandName: 'Salon kiểm thử', brandLogo: '', image: 'https://example.com/image.jpg', originalPrice: 200000,
+  brandName: 'Salon kiểm thử', brandLogo: '', image: '/assets/beauty-placeholder.svg', originalPrice: 200000,
   salePrice: 150000, discountPercent: 25, rating: 0, reviewsCount: 0, duration: '60 phút', category: 'spa', highlightText: '' };
-const cartKey = 'beautylink_cart_items_v3';
-const storedCart = (items: unknown[]) => JSON.stringify({ version: 3, source: 'user-action', items });
-const legacyCart = JSON.stringify([{ deal: { ...deal, title: 'Test 1', brandName: 'Nail nhà Chuối', salePrice: 11000, originalPrice: 11000 }, quantity: 1 }]);
+const a: CurrentUser = { id: 10, name: 'Khách A', role: 'CUSTOMER' };
+const b: CurrentUser = { id: 11, name: 'Khách B', role: 'CUSTOMER' };
+const key = (id: number) => `beautylink_cart_items_v4:${id}`;
+const stored = (ownerId: string, items: unknown[]) => JSON.stringify({ version: 4, ownerId, source: 'user-action', items });
 
-test('cart starts empty without explicit additions and stays isolated on logout/storage removal', async t => {
+test('account carts persist independently without legacy restoration UI or auth changes', async t => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
   Object.assign(globalThis, { window: dom.window, document: dom.window.document,
     localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage });
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
-  localStorage.setItem('beautylink_v2_user_cart_items', JSON.stringify({ data: [{ deal, quantity: 1 }], timestamp: Date.now(), ttl: 0, hash: 'old-cache' }));
-  localStorage.setItem('beautylink_cart_items_v2', legacyCart);
-  const { useBeautyStore, loadCartFromStorage, loadLegacyCartFromStorage } = await import('../src/store/beautyStore.ts');
-  const { Header } = await import('../src/components/Header.tsx');
+  localStorage.setItem('beautylink_cart_items_v2', JSON.stringify([{ deal, quantity: 1 }]));
+  localStorage.setItem('beautylink_cart_items_v3', JSON.stringify({ version: 3, source: 'user-action', items: [{ deal, quantity: 1 }] }));
+  const { useBeautyStore, loadCartFromStorage } = await import('../src/store/beautyStore.ts');
+  const { setAccessToken, getAccessToken } = await import('../src/services/beautyApi.ts');
   const { CartDrawer } = await import('../src/components/CartDrawer.tsx');
-  let checkouts = 0;
   let state!: ReturnType<typeof useBeautyStore>;
   function Harness() {
     state = useBeautyStore();
-    return React.createElement(React.Fragment, {},
-      React.createElement(Header, { cartCount: state.cartItems.length, onOpenCart() {}, onOpenPartnerModal() {}, onOpenAuthModal() {}, onSearch() {} }),
-      React.createElement('output', {}, String(state.cartItems.length)),
-      React.createElement(CartDrawer, { isOpen: true, items: state.cartItems, onClose() {}, onRemoveItem: state.removeFromCart,
-        onClearCart: state.clearCart, onCheckout() { checkouts += 1; }, legacyCartCount: state.legacyCartItems.length,
-        onRestoreLegacyCart: state.restoreLegacyCart }));
+    return React.createElement(CartDrawer, { isOpen: true, items: state.cartItems, onClose() {},
+      onRemoveItem: state.removeFromCart, onClearCart: state.clearCart, onCheckout() { assert.fail('No checkout expected'); } });
   }
   const root = createRoot(document.getElementById('root')!);
   await act(async () => root.render(React.createElement(Harness)));
+  const action = async (fn: () => void) => { await act(async () => fn()); };
+  const storageEvent = async (storageKey: string | null, newValue: string | null) => action(() => {
+    window.dispatchEvent(new dom.window.StorageEvent('storage', { key: storageKey, newValue, storageArea: localStorage }));
+  });
   try {
-    await t.test('legacy cache alone must not populate a new visitor cart', () => {
-      assert.equal(state.cartItems.length, 0);
-      assert.equal(document.querySelector('output')?.textContent, '0');
-      assert.equal(document.querySelector('button[title="Giỏ dịch vụ & Lịch hẹn"] span'), null);
+    await t.test('fresh guest is empty and has no restore controls despite old carts', () => {
+      assert.deepEqual(state.cartItems, []);
       assert.match(document.body.textContent ?? '', /Dịch vụ đã chọn \(0\)/);
-      assert.doesNotMatch(document.body.textContent ?? '', /Test 1/);
-      assert.equal(loadLegacyCartFromStorage()[0]?.deal.title, 'Test 1');
-      assert.equal(localStorage.getItem('beautylink_cart_items_v2'), legacyCart, 'do not delete archived cart');
+      assert.doesNotMatch(document.body.textContent ?? '', /Khôi phục|Không khôi phục|phiên bản trước/);
+      assert.deepEqual(loadCartFromStorage(null), []);
+      assert.ok(localStorage.getItem('beautylink_cart_items_v2'));
     });
-    await t.test('legacy Test 1 returns only after explicit restore and repeated clicks do not duplicate it', async () => {
-      const restore = [...document.querySelectorAll('button')].find(button => button.textContent === 'Khôi phục giỏ cũ');
-      assert.ok(restore);
-      await act(async () => { restore.click(); restore.click(); });
+    await t.test('guest selection is memory-only and moves on intentional login', async () => {
+      await action(() => state.addToCart(deal));
       assert.equal(state.cartItems.length, 1);
-      assert.equal(state.cartItems[0].deal.title, 'Test 1');
-      assert.equal(state.cartItems[0].quantity, 1);
-      assert.equal(loadCartFromStorage()[0]?.deal.title, 'Test 1');
-      assert.equal(checkouts, 0, 'restore is not a booking or payment operation');
-      assert.equal(localStorage.getItem('beautylink_cart_items_v2'), legacyCart);
+      assert.equal(localStorage.getItem(key(10)), null);
+      assert.deepEqual(loadCartFromStorage(null), []);
+      await action(() => state.setCurrentUser(a));
+      assert.deepEqual(loadCartFromStorage(a), [{ deal, quantity: 1 }]);
     });
-    await act(async () => state.clearCart());
-    await t.test('an empty new-version cart never falls back to the old valid cart', () => {
+    await t.test('profile refresh keeps cart and remember-me token/session unchanged', async () => {
+      setAccessToken('synthetic-test-token', true);
+      await action(() => state.setCurrentUser({ ...a, id: '10', name: 'Tên mới' }));
+      assert.equal(state.cartItems.length, 1);
+      assert.equal(getAccessToken(), 'synthetic-test-token');
+      assert.equal(JSON.parse(localStorage.getItem('beautylink_session_user')!).id, '10');
+      assert.equal(sessionStorage.getItem('beautylink_session_user'), null);
+      assert.deepEqual(loadCartFromStorage(), [{ deal, quantity: 1 }], 'page reload reads the saved account cart');
+    });
+    await t.test('logout empties visible cart but re-login restores saved selections', async () => {
+      await action(() => state.logout());
+      assert.equal(getAccessToken(), null);
+      assert.deepEqual(state.cartItems, []);
       assert.deepEqual(loadCartFromStorage(), []);
-      assert.deepEqual(loadLegacyCartFromStorage(), []);
-      assert.equal(localStorage.getItem('beautylink_cart_items_v2'), legacyCart);
-      assert.equal([...document.querySelectorAll('button')].some(button => button.textContent === 'Khôi phục giỏ cũ'), false);
-    });
-    await t.test('explicit additions persist but logout clears only cart and session data', async () => {
-      localStorage.setItem('unrelated-preference', 'preserve-me');
-      await act(async () => state.addToCart(deal));
+      assert.equal(loadCartFromStorage(a).length, 1);
+      await action(() => state.setCurrentUser(a));
       assert.equal(state.cartItems.length, 1);
-      assert.equal(document.querySelector('button[title="Giỏ dịch vụ & Lịch hẹn"] span')?.textContent, '1');
-      assert.equal(JSON.parse(localStorage.getItem(cartKey) ?? '{}').items.length, 1);
-      assert.deepEqual(loadCartFromStorage(), [{ deal, quantity: 1 }], 'refresh may restore the explicitly added cart');
-      await act(async () => state.logout());
-      assert.equal(state.cartItems.length, 0);
-      assert.deepEqual(JSON.parse(localStorage.getItem(cartKey) ?? '{}').items, []);
-      assert.equal(localStorage.getItem('unrelated-preference'), 'preserve-me');
-      assert.equal(document.querySelector('button[title="Giỏ dịch vụ & Lịch hẹn"] span'), null);
-      assert.equal(localStorage.getItem('beautylink_v2_user_cart_items'), null, 'old cache must not resurrect after a clear');
+      assert.ok(sessionStorage.getItem('beautylink_session_user'));
     });
-    await t.test('missing, malformed and invalid rows cannot create phantom items', async () => {
-      for (const raw of ['not-json', '{}', '[null,{},1]', JSON.stringify([{ deal, quantity: 0 }]),
-        JSON.stringify([{ deal, quantity: 1 }]),
-        JSON.stringify({ version: 3, items: [{ deal, quantity: 1 }] }),
-        storedCart([{ deal: { ...deal, salePrice: '150000' }, quantity: 1 }])]) {
-        localStorage.setItem(cartKey, raw);
-        assert.deepEqual(loadCartFromStorage(), []);
+    await t.test('different accounts never inherit each other cart', async () => {
+      await action(() => state.setCurrentUser(b));
+      assert.equal(state.cartItems.length, 0);
+      await action(() => state.addToCart({ ...deal, id: 'service-99' }));
+      await action(() => state.setCurrentUser(a));
+      assert.equal(state.cartItems[0].deal.id, deal.id);
+      await action(() => state.setCurrentUser(b));
+      assert.equal(state.cartItems[0].deal.id, 'service-99');
+    });
+    await t.test('remove and clear affect only the active owner', async () => {
+      await action(() => state.removeFromCart('service-99'));
+      assert.deepEqual(loadCartFromStorage(b), []);
+      assert.equal(loadCartFromStorage(a).length, 1);
+      await action(() => state.addToCart(deal));
+      await action(() => state.clearCart());
+      assert.deepEqual(loadCartFromStorage(b), []);
+      assert.equal(loadCartFromStorage(a).length, 1);
+    });
+    await t.test('wrong-owner and malformed storage fail closed', () => {
+      for (const raw of ['not-json', '{}', stored('10', [{ deal, quantity: 1 }]),
+        stored('11', [{ deal, quantity: 0 }]), stored('11', [{ deal: { ...deal, salePrice: '123' }, quantity: 1 }])]) {
+        localStorage.setItem(key(11), raw);
+        assert.deepEqual(loadCartFromStorage(b), []);
       }
-      localStorage.removeItem(cartKey);
-      assert.deepEqual(loadCartFromStorage(), []);
-      localStorage.setItem(cartKey, storedCart([null, { deal, quantity: 1 }]));
-      assert.deepEqual(loadCartFromStorage(), [{ deal, quantity: 1 }]);
-      await act(async () => state.clearCart());
+      localStorage.removeItem(key(11));
     });
-    await t.test('same-account profile refresh keeps cart, switching account clears it', async () => {
-      await act(async () => state.setCurrentUser({ id: 10, name: 'Khách A', role: 'CUSTOMER' }));
-      await act(async () => state.addToCart(deal));
-      await act(async () => state.setCurrentUser({ id: '10', name: 'Khách A cập nhật', role: 'CUSTOMER' }));
-      assert.equal(state.cartItems.length, 1);
-      await act(async () => state.setCurrentUser({ id: 11, name: 'Khách B', role: 'CUSTOMER' }));
-      assert.equal(state.cartItems.length, 0);
-      assert.deepEqual(loadCartFromStorage(), []);
-      await act(async () => state.logout());
+    await t.test('guest selections merge once with existing account cart', async () => {
+      await action(() => state.logout());
+      await action(() => state.addToCart(deal));
+      await action(() => state.setCurrentUser(a));
+      assert.equal(state.cartItems[0].quantity, 2);
+      await action(() => state.setCurrentUser(a));
+      assert.equal(state.cartItems[0].quantity, 2);
     });
-    await t.test('guest cart survives intentional login, but session removal clears it', async () => {
-      await act(async () => state.addToCart(deal));
-      await act(async () => state.setCurrentUser({ id: 10, name: 'Khách A', role: 'CUSTOMER' }));
-      assert.equal(state.cartItems.length, 1);
-      await act(async () => state.setCurrentUser(null));
-      assert.equal(state.cartItems.length, 0);
+    await t.test('cross-tab updates apply only to current account and validate owner', async () => {
+      await storageEvent(key(11), stored('11', [{ deal, quantity: 5 }]));
+      assert.equal(state.cartItems[0].quantity, 2);
+      await storageEvent(key(10), stored('10', [{ deal, quantity: 3 }]));
+      assert.equal(state.cartItems[0].quantity, 3);
+      await storageEvent(key(10), stored('11', [{ deal, quantity: 5 }]));
+      assert.deepEqual(state.cartItems, []);
+      await action(() => state.addToCart(deal));
+      await storageEvent(key(10), null);
+      assert.deepEqual(state.cartItems, []);
     });
-    await act(async () => state.clearCart());
-    await t.test('clearing cart storage in another tab clears the badge', async () => {
-      await act(async () => state.addToCart(deal));
-      await act(async () => window.dispatchEvent(new dom.window.StorageEvent('storage', { key: cartKey, newValue: null, storageArea: localStorage })));
-      assert.equal(state.cartItems.length, 0);
+    await t.test('missing stable account ID cannot read or write a shared cart', async () => {
+      await action(() => state.setCurrentUser({ name: 'No ID', role: 'CUSTOMER' }));
+      await action(() => state.addToCart(deal));
+      assert.deepEqual(loadCartFromStorage({ name: 'No ID', role: 'CUSTOMER' }), []);
+      assert.equal(localStorage.getItem('beautylink_cart_items_v4:undefined'), null);
+      await action(() => state.logout());
+      assert.deepEqual(state.cartItems, []);
     });
-    await t.test('invalid cross-tab rows and a full storage clear remove the badge', async () => {
-      await act(async () => window.dispatchEvent(new dom.window.StorageEvent('storage', { key: cartKey, newValue: '[{}]', storageArea: localStorage })));
-      assert.equal(state.cartItems.length, 0);
-      await act(async () => state.addToCart(deal));
-      await act(async () => window.dispatchEvent(new dom.window.StorageEvent('storage', { key: null, newValue: null, storageArea: localStorage })));
-      assert.equal(state.cartItems.length, 0);
+    await t.test('full storage clear empties active cart', async () => {
+      await action(() => state.setCurrentUser(a));
+      await action(() => state.addToCart(deal));
+      await storageEvent(null, null);
+      assert.deepEqual(state.cartItems, []);
     });
   } finally {
-    await act(async () => { state.clearCart(); root.unmount(); });
+    await act(async () => root.unmount());
     dom.window.close();
   }
 });
