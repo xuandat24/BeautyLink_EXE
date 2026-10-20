@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { PublicImageUploadField } from './PublicImageUploadField';
 import {
   ArrowLeft,
   LayoutDashboard,
@@ -873,6 +874,8 @@ const SupplierStoreTab: React.FC<SupplierStoreTabProps> = ({ profile, onProfileU
   const [services, setServices] = useState<BackendService[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [preparingImage, setPreparingImage] = useState(false);
+  const savingProfileRef = useRef(false);
   const [profileMsg, setProfileMsg] = useState('');
   const [serviceModal, setServiceModal] = useState<BackendService | 'new' | null>(null);
 
@@ -899,15 +902,19 @@ const SupplierStoreTab: React.FC<SupplierStoreTabProps> = ({ profile, onProfileU
 
   const handleSaveStoreProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingProfileRef.current || preparingImage) return;
+    savingProfileRef.current = true;
     setSavingProfile(true);
     setProfileMsg('');
     try {
       const updated = await beautyApi.updateSupplierProfile(storeForm);
       onProfileUpdated(updated);
+      setStoreForm(previous => ({ ...previous, imageUrl: updated.imageUrl || '' }));
       setProfileMsg('Đã lưu thông tin và hình ảnh gian hàng.');
-    } catch {
-      setProfileMsg('Không thể lưu thông tin gian hàng.');
+    } catch (failure) {
+      setProfileMsg(getApiErrorMessage(failure, 'Không thể lưu thông tin gian hàng.'));
     } finally {
+      savingProfileRef.current = false;
       setSavingProfile(false);
     }
   };
@@ -966,14 +973,9 @@ const SupplierStoreTab: React.FC<SupplierStoreTabProps> = ({ profile, onProfileU
             />
           </label>
 
-          <label className="block">
-            <span className="mb-1 block text-xs font-bold text-slate-700">Ảnh đại diện URL</span>
-            <input
-              value={storeForm.imageUrl}
-              onChange={(e) => setStoreForm({ ...storeForm, imageUrl: e.target.value })}
-              className="field"
-            />
-          </label>
+          <PublicImageUploadField label="Ảnh gian hàng" value={storeForm.imageUrl}
+            onChange={imageUrl => setStoreForm(previous => ({ ...previous, imageUrl }))}
+            onBusyChange={setPreparingImage} disabled={savingProfile} />
 
           {profileMsg && (
             <p className="rounded-xl bg-pink-50 p-3 text-xs font-bold text-[#B42D58]">
@@ -983,7 +985,7 @@ const SupplierStoreTab: React.FC<SupplierStoreTabProps> = ({ profile, onProfileU
 
           <button
             type="submit"
-            disabled={savingProfile}
+            disabled={savingProfile || preparingImage}
             className="inline-flex items-center gap-2 rounded-xl bg-[#EB0F51] px-5 py-3 text-xs font-black text-white hover:bg-[#B42D58] transition"
           >
             {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -1084,9 +1086,15 @@ const SupplierPractitionerModal: React.FC<SupplierPractitionerModalProps> = ({
   const [specialty, setSpecialty] = useState(person?.specialty || '');
   const [avatarUrl, setAvatarUrl] = useState(person?.avatarUrl || '');
   const [submitting, setSubmitting] = useState(false);
+  const [preparingImage, setPreparingImage] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const submittingRef = useRef(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current || preparingImage) return;
+    submittingRef.current = true;
+    setSaveError('');
     setSubmitting(true);
     try {
       if (person) {
@@ -1104,16 +1112,10 @@ const SupplierPractitionerModal: React.FC<SupplierPractitionerModalProps> = ({
         });
         onSaved(created);
       }
-    } catch {
-      // fallback mock object
-      onSaved({
-        id: person?.id || Date.now(),
-        name,
-        displayName: name,
-        specialty,
-        avatarUrl,
-      });
+    } catch (failure) {
+      setSaveError(getApiErrorMessage(failure, 'Không thể lưu chuyên viên. Vui lòng thử lại.'));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -1181,15 +1183,9 @@ const SupplierPractitionerModal: React.FC<SupplierPractitionerModalProps> = ({
             />
           </label>
 
-          <label className="block">
-            <span className="mb-1 block text-xs font-bold text-slate-700">Ảnh đại diện URL</span>
-            <input
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              className="field"
-              placeholder="https://..."
-            />
-          </label>
+          <PublicImageUploadField label="Ảnh chuyên viên" value={avatarUrl} onChange={setAvatarUrl}
+            onBusyChange={setPreparingImage} disabled={submitting} />
+          {saveError && <p role="alert" className="text-xs text-red-600">{saveError}</p>}
 
           <div className="flex justify-end gap-3 pt-3">
             <button
@@ -1201,7 +1197,7 @@ const SupplierPractitionerModal: React.FC<SupplierPractitionerModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || preparingImage}
               className="rounded-xl bg-[#EB0F51] px-5 py-2.5 text-xs font-black text-white hover:bg-[#B42D58]"
             >
               {submitting ? 'Đang lưu...' : 'Lưu hồ sơ'}
@@ -1238,13 +1234,22 @@ const SupplierServiceModal: React.FC<SupplierServiceModalProps> = ({
     imageUrl: service?.imageUrl || 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [preparingImage, setPreparingImage] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const submittingRef = useRef(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current || preparingImage) return;
+    submittingRef.current = true;
+    setSaveError('');
     setSubmitting(true);
     try {
       await onSave(formData);
+    } catch (failure) {
+      setSaveError(getApiErrorMessage(failure, 'Không thể lưu dịch vụ. Vui lòng thử lại.'));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -1338,14 +1343,10 @@ const SupplierServiceModal: React.FC<SupplierServiceModalProps> = ({
             />
           </label>
 
-          <label className="block">
-            <span className="mb-1 block text-xs font-bold text-slate-700">Ảnh dịch vụ URL</span>
-            <input
-              value={formData.imageUrl}
-              onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-              className="field"
-            />
-          </label>
+          <PublicImageUploadField label="Ảnh dịch vụ" value={formData.imageUrl}
+            onChange={imageUrl => setFormData(previous => ({ ...previous, imageUrl }))}
+            onBusyChange={setPreparingImage} disabled={submitting} />
+          {saveError && <p role="alert" className="text-xs text-red-600">{saveError}</p>}
 
           <label className="block">
             <span className="mb-1 block text-xs font-bold text-slate-700">Mô tả chi tiết</span>
@@ -1367,7 +1368,7 @@ const SupplierServiceModal: React.FC<SupplierServiceModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || preparingImage}
               className="rounded-xl bg-[#EB0F51] px-5 py-2.5 text-xs font-black text-white hover:bg-[#B42D58]"
             >
               {submitting ? 'Đang lưu...' : 'Lưu dịch vụ'}

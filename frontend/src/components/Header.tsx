@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Search,
   ShoppingCart,
-  Sparkles,
   Menu,
   X,
   ChevronRight,
@@ -209,9 +208,6 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Logo BeautyLink */}
           <div className="flex items-center gap-3 shrink-0">
             <a href="#" className="flex items-center gap-2 group">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-[#be185d] via-[#db2777] to-[#EB0F51] flex items-center justify-center text-white shadow-md shadow-pink-500/30 group-hover:scale-105 transition-transform duration-300">
-                <Sparkles className="w-5 h-5 text-white animate-pulse" />
-              </div>
               <div className="flex flex-col">
                 <div className="flex items-baseline tracking-tight">
                   <span className="text-xl sm:text-2xl font-black text-slate-800">
@@ -387,7 +383,6 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onOpenPartnerModal}
               className="hidden lg:inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-pink-200 text-xs font-semibold text-[#be185d] bg-pink-50/70 hover:bg-pink-100 hover:border-pink-300 transition-all whitespace-nowrap cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-[#EB0F51]" />
               <span>{language === 'vi' ? 'Trở thành đối tác' : 'Partner with us'}</span>
             </button>
 

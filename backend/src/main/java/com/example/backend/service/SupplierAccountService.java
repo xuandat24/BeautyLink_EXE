@@ -34,6 +34,7 @@ public class SupplierAccountService {
     private final SupplierVerificationRepository verifications;
     private final SensitiveDataCipher sensitiveData;
     private final ImageDataValidator imageDataValidator;
+    private final PublicImageStorage publicImages;
     private final RegistrationVerificationService registrationVerification;
     private final boolean autoVerify;
 
@@ -41,7 +42,7 @@ public class SupplierAccountService {
                                   PractitionerRepository practitioners, AvailabilityRuleRepository rules,
                                   PasswordEncoder encoder, AuthService auth, ServiceCategoryRepository categories,
                                   ServiceOfferingRepository services, SupplierVerificationRepository verifications,
-                                  SensitiveDataCipher sensitiveData, ImageDataValidator imageDataValidator,
+                                  SensitiveDataCipher sensitiveData, ImageDataValidator imageDataValidator, PublicImageStorage publicImages,
                                   RegistrationVerificationService registrationVerification,
                                   @Value("${app.supplier.auto-verify:false}") boolean autoVerify) {
         this.users = users;
@@ -56,6 +57,7 @@ public class SupplierAccountService {
         this.verifications = verifications;
         this.sensitiveData = sensitiveData;
         this.imageDataValidator = imageDataValidator;
+        this.publicImages = publicImages;
         this.registrationVerification = registrationVerification;
         this.autoVerify = autoVerify;
     }
@@ -94,7 +96,7 @@ public class SupplierAccountService {
         supplier.setAddressLine(request.addressLine().trim());
         supplier.setLatitude(request.latitude());
         supplier.setLongitude(request.longitude());
-        supplier.setImageUrl(normalizeImageSource(request.imageUrl()));
+        supplier.setImageUrl(normalizeImageSource(request.imageUrl(), owner.getId()));
         supplier.setVerificationStatus(autoVerify ? VerificationStatus.VERIFIED : VerificationStatus.PENDING);
         supplier.setNewPartner(true);
         suppliers.save(supplier);
@@ -130,7 +132,7 @@ public class SupplierAccountService {
         supplier.setBusinessType(request.businessType().trim());
         supplier.setDescription(blankToNull(request.description()));
         supplier.setAddressLine(request.addressLine().trim());
-        supplier.setImageUrl(normalizeImageSource(request.imageUrl()));
+        supplier.setImageUrl(normalizeImageSource(request.imageUrl(), owner.getId()));
         supplier.setLatitude(request.latitude());
         supplier.setLongitude(request.longitude());
         promoteManualSupplier(supplier);
@@ -180,7 +182,7 @@ public class SupplierAccountService {
         practitioner.setDisplayName(request.displayName().trim());
         practitioner.setSpecialty(blankToNull(request.specialty()));
         practitioner.setBio(blankToNull(request.bio()));
-        practitioner.setAvatarUrl(normalizeImageSource(request.avatarUrl()));
+        practitioner.setAvatarUrl(normalizeImageSource(request.avatarUrl(), owner.getId()));
         practitioners.save(practitioner);
         createDefaultSchedule(practitioner);
         return new PractitionerResponse(practitioner.getId(), practitioner.getDisplayName(), practitioner.getSpecialty(), practitioner.getAvatarUrl(), practitioner.getBio());
@@ -193,7 +195,7 @@ public class SupplierAccountService {
         practitioner.setDisplayName(request.displayName().trim());
         practitioner.setSpecialty(blankToNull(request.specialty()));
         practitioner.setBio(blankToNull(request.bio()));
-        practitioner.setAvatarUrl(normalizeImageSource(request.avatarUrl()));
+        practitioner.setAvatarUrl(normalizeImageSource(request.avatarUrl(), owner.getId()));
         practitioners.save(practitioner);
         return new PractitionerResponse(practitioner.getId(), practitioner.getDisplayName(), practitioner.getSpecialty(), practitioner.getAvatarUrl(), practitioner.getBio());
     }
@@ -219,7 +221,7 @@ public class SupplierAccountService {
         offering.setPrice(request.price());
         offering.setOriginalPrice(request.originalPrice());
         offering.setDurationMinutes(request.durationMinutes());
-        String image = normalizeImageSource(request.imageUrl());
+        String image = normalizeImageSource(request.imageUrl(), offering.getSupplier().getOwner().getId());
         offering.setImageUrl(image == null ? category.getImageUrl() : image);
         offering.setHighlightText(blankToNull(request.description()));
         offering.setActive(request.active());
@@ -280,11 +282,12 @@ public class SupplierAccountService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private String normalizeImageSource(String value) {
+    private String normalizeImageSource(String value, Long ownerId) {
         String source = blankToNull(value);
         if (source == null) return null;
         if (source.startsWith("data:image/")) {
-            return imageDataValidator.requireValidDataImage(source, 1_100_000, "INVALID_IMAGE", "Ảnh phải là tệp JPG, PNG hoặc WEBP hợp lệ");
+            String validated = imageDataValidator.requireValidDataImage(source, 1_100_000, "INVALID_IMAGE", "Ảnh phải là tệp JPG, PNG hoặc WEBP hợp lệ");
+            return publicImages.storeValidatedImage(validated, ownerId);
         }
         try {
             URI uri = URI.create(source);

@@ -1,0 +1,5 @@
+simulation: beautylink-cloudinary-local
+routing: path
+mocks:
+  - routeKey: cloudinary
+    path: ../mocks/cloudinary/config.yaml
