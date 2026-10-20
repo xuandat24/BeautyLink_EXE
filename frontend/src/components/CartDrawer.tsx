@@ -16,6 +16,8 @@ interface CartDrawerProps {
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
   onCheckout: () => void;
+  legacyCartCount?: number;
+  onRestoreLegacyCart?: () => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -25,6 +27,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onClearCart,
   onCheckout,
+  legacyCartCount = 0,
+  onRestoreLegacyCart,
 }) => {
   const [voucherCode, setVoucherCode] = useState('');
   const [discountApplied, setDiscountApplied] = useState(0);
@@ -124,6 +128,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <p className="text-xs text-slate-400 mt-1 max-w-xs">
                   Hãy khám phá mục Khuyến Mãi Hot và thêm các gói spa, chăm sóc da ưng ý!
                 </p>
+                {legacyCartCount > 0 && onRestoreLegacyCart && (
+                  <div className="mt-6 max-w-xs rounded-xl border border-slate-200 p-3 text-left">
+                    <p className="text-xs text-slate-600">Có giỏ đã lưu từ phiên bản trước. Giỏ này chưa được thêm vào lựa chọn hiện tại; chỉ khôi phục nếu bạn muốn sử dụng lại.</p>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <button type="button" onClick={onRestoreLegacyCart} className="text-xs font-bold text-[#be185d]">Khôi phục giỏ cũ</button>
+                      <button type="button" onClick={onClearCart} className="text-xs font-bold text-slate-600">Không khôi phục</button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               items.map((item) => (
