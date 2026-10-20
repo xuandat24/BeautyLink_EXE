@@ -1,0 +1,11 @@
+version: 1
+id: 467c5239-113a-4b66-afb6-7f21c75c9585
+name: BeautyLink Cloudinary dependency contract (tested subset)
+slug: beautylink-cloudinary-dependency
+protocol: http
+port: 4900
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

@@ -606,6 +606,32 @@ scope, test evidence, release gates and rollback baseline.
 3. Run the backend tests and frontend checks.
 4. Open a pull request explaining the change and how it was tested.
 
+## Cloudinary public image uploads
+
+Supplier registration/storefront, services and practitioners accept file selection (JPG/PNG/WebP).
+The browser prepares the image; saving the existing form sends it through the backend, which validates
+the raster and performs a signed Cloudinary HTTPS upload. Existing image columns store the verified
+`secure_url`; no schema change or new upload endpoint is required. Existing HTTP(S) image URLs remain
+unchanged and are **not** fetched/re-uploaded by the server.
+
+Configure **backend only**: `CLOUDINARY_ENABLED=true`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
+`CLOUDINARY_API_SECRET`. See [deployment instructions](DEPLOYMENT.md#cloudinary-public-images).
+Default `false` preserves the explicit legacy base64 storage mode until credentials are configured;
+once enabled, missing configuration/provider failure blocks the save rather than silently falling back.
+Never put credentials in `VITE_*`, Git, screenshots, or chat. No unsigned upload preset is needed.
+
+Only `Supplier.imageUrl`, `ServiceOffering.imageUrl`, and `Practitioner.avatarUrl` are integrated.
+Account avatars are unchanged (no persistent avatar column). CCCD/KYC documents remain encrypted
+in the existing private flow, never sent to the public CDN. This is not an AI image generator or a
+multi-image gallery migration.
+
+Tests use fake provider credentials and local HTTP mocks; no live Cloudinary upload is claimed.
+The dependency contract is `backend/src/test/resources/cloudinary-upload.openapi.yaml`; local Postman
+simulation: `postman simulation run postman/simulations/cloudinary.sim.yaml --port 4900 --output ndjson --no-history`.
+`CloudinarySimulationProbe` in test sources exercises upload/destroy through that local simulation.
+Automated tests cover signing, response identity/signature, timeout, 4xx/429/5xx, persistence, rollback,
+file validation and private-document separation. Mocks/probe are not production runtime components.
+
 ## License
 
 No open-source license has been selected. Unless the project owner adds one, the source remains under the owner's default copyright rights.

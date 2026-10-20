@@ -226,3 +226,77 @@ Read-only backup metadata now exists, but restore into an approved isolated targ
 Book/payment DTO changes are additive; deploy backend before frontend after separate approval.
 Verify current image/commit and how frontend auto-promotion is held **before** merging main.
 No schema/entity mapping, DDL, secrets, webhook URL, CORS or domain changes are required.
+
+## Cloudinary public images
+
+Preparation only: do not change production variables or deploy without the owner's release approval.
+In the existing Railway **backend** service, configure these variables privately:
+
+```properties
+CLOUDINARY_ENABLED=true
+CLOUDINARY_CLOUD_NAME=<Cloudinary cloud name>
+CLOUDINARY_API_KEY=<Cloudinary API key>
+CLOUDINARY_API_SECRET=<Cloudinary API secret>
+CLOUDINARY_CONNECT_TIMEOUT_MS=3000
+CLOUDINARY_READ_TIMEOUT_MS=6000
+```
+
+Use an existing authorized Cloudinary account; inspect its quota/billing before enabling. No account,
+resource or paid plan is provisioned by this change. No frontend secret, unsigned preset, webhook,
+DNS or database migration is needed. Cloudinary is disabled by default for staged rollout. Missing
+credentials do not stop application startup; enabled uploads fail closed with a safe 503 response.
+
+Deploy backend before frontend under the project's approved release procedure. Then smoke-test with
+an owner-controlled supplier: select a non-sensitive photo, save storefront, service and practitioner,
+reload and verify the persisted URL uses `https://res.cloudinary.com/<cloud>/image/upload/`.
+Verify public cards display the photo. Test permission boundaries and errors in a test environment,
+not by uploading personal documents. Supplier registration uploads only the public storefront image;
+CCCD images continue through existing encrypted storage. Customer account avatars are out of scope.
+
+Limits: browser source 10 MB, prepared data URI 1,100,000 characters; backend validates raster bytes,
+dimensions and format before provider upload; 20 new uploads/hour per owner via the configured existing
+rate-limit backend. Redis retains the project's existing multi-instance behavior. Incoming Cloudinary
+transformation limits output to 2048 px and WebP. Upload requests are signed server-side; responses must
+match generated public ID, signature, version, image type and trusted HTTPS delivery URL. No automatic
+upload retries (a timeout can be ambiguous). Save APIs retain the existing request/response shape,
+authorization and transactions; frontend upload-bearing requests allow 30 seconds.
+
+Failure behavior: 429 becomes a safe rate-limit error; other provider/network errors become 503,
+invalid provider identity/signature becomes 502. A failed save is not reported as successful. A confirmed
+new asset is deleted best-effort if its DB transaction rolls back; old images are never automatically
+deleted. Ambiguous upload timeout, process crash, invalid response or failed rollback cleanup may leave
+an unreferenced asset. Inspect the Cloudinary `beautylink/public/` folder against stored image URLs before
+manual cleanup; never bulk-delete by age/prefix alone. Do not log provider bodies, signed multipart
+payloads or credentials. Existing assets and base64 rows are not bulk-migrated.
+
+Rollback: restore the previous compatible code/image via the approved procedure; no DB restore/DDL.
+Existing persisted HTTPS URLs remain compatible. Setting `CLOUDINARY_ENABLED=false` is an explicit
+operator choice to restore legacy base64 storage for future uploads, not a fallback on provider error.
+Do not rotate/delete Cloudinary credentials/assets as part of a code rollback.
+
+Local verification (no provider account required):
+
+```powershell
+cd backend
+mvn --batch-mode --no-transfer-progress verify
+# Optional contract-derived HTTP simulation, from repository root in another terminal:
+postman simulation run postman/simulations/cloudinary.sim.yaml --port 4900 --output ndjson --no-history
+# Then from backend (test-only probe, fake credentials):
+mvn test-compile dependency:build-classpath -Dmdep.outputFile=target/cloudinary-classpath.txt
+$cloudClasspath = (Get-Content target/cloudinary-classpath.txt -Raw).Trim()
+java -cp "target/test-classes;target/classes;$cloudClasspath" com.example.backend.service.CloudinarySimulationProbe
+```
+
+Windows/MSIX environments that fail Java's local socket initialization may add
+`-DargLine=-Djdk.net.unixdomain.tmpdir=C:/Temp` to Maven tests and
+`-Djdk.net.unixdomain.tmpdir=C:/Temp` to the probe's Java command. This is a local test-JVM workaround,
+not a production setting. No Postman login, workspace publication or paid mock server is required.
+
+Implementation verification (2026-10-20, isolated H2/local HTTP, not production): Maven verify/package
+passed 357 executed tests with 2 existing opt-in migration tests skipped (`GoogleSigninMigrationTest`,
+`WorkforceMigrationTest`); subsequent focused gateway/API run passed 18 tests, including the added
+SHA-256 response, network failure and service-update cases. Frontend 59/59 tests, TypeScript check,
+production build and `git diff --check` passed. Postman simulation observed actual Java upload/destroy
+requests returning 200. Production JAR inspection found no mock/probe/test contract classes/resources.
+Live Cloudinary/account quota and deployed persistence smoke remain NOT RUN pending owner configuration
+and release approval. Existing Rollup/zod annotation and chunk-size warnings are non-blocking and unchanged.

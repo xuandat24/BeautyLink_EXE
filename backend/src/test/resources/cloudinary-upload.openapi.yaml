@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: BeautyLink Cloudinary dependency contract (tested subset)
+  version: 1.0.0
+  description: Signed server-side image upload/destroy only; not an application API change.
+servers:
+  - url: https://api.cloudinary.com
+paths:
+  /v1_1/{cloudName}/image/upload:
+    post:
+      operationId: uploadPublicImage
+      parameters:
+        - { name: cloudName, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, api_key, signature, timestamp, public_id, overwrite, allowed_formats, transformation]
+              properties:
+                file: { type: string, description: Validated JPEG/PNG/WebP data URI, never KYC }
+                api_key: { type: string }
+                signature: { type: string }
+                timestamp: { type: string }
+                public_id: { type: string, pattern: '^beautylink/public/' }
+                overwrite: { type: string, enum: ['false'] }
+                allowed_formats: { type: string, enum: ['jpg,png,webp'] }
+                transformation: { type: string, enum: ['c_limit,w_2048,h_2048/f_webp'] }
+      responses:
+        '200':
+          description: Provider accepted image; app also verifies signature, identity and trusted secure_url
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [public_id, version, signature, secure_url, bytes, format, resource_type, type]
+                properties:
+                  public_id: { type: string }
+                  version: { type: integer }
+                  signature: { type: string }
+                  secure_url: { type: string, format: uri }
+                  bytes: { type: integer }
+                  format: { type: string, enum: [webp] }
+                  resource_type: { type: string, enum: [image] }
+                  type: { type: string, enum: [upload] }
+        '400': { description: Invalid image or request }
+        '401': { description: Invalid credentials/signature }
+        '403': { description: Account not permitted }
+        '413': { description: Image too large }
+        '429': { description: Provider quota/rate limit }
+        '500': { description: Provider unavailable }
+  /v1_1/{cloudName}/image/destroy:
+    post:
+      operationId: cleanupRolledBackUpload
+      parameters:
+        - { name: cloudName, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [api_key, signature, timestamp, public_id]
+              properties:
+                api_key: { type: string }
+                signature: { type: string }
+                timestamp: { type: string }
+                public_id: { type: string }
+      responses:
+        '200':
+          description: Asset deleted or already absent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [result]
+                properties:
+                  result: { type: string, enum: [ok, 'not found'] }
+        '401': { description: Invalid credentials/signature }
+        '429': { description: Provider quota/rate limit }
+        '500': { description: Provider unavailable }

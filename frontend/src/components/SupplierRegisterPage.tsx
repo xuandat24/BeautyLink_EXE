@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PublicImageUploadField } from './PublicImageUploadField';
 import {
   ArrowLeft,
   Sparkles,
@@ -127,6 +128,7 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
   const [locations, setLocations] = useState<BackendLocation[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [preparingPublicImage, setPreparingPublicImage] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -201,6 +203,7 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting || preparingPublicImage) return;
     setError('');
 
     if (formData.password !== formData.confirmPassword) {
@@ -573,9 +576,8 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
 
               {/* Cover Photo / Storefront */}
               <div>
-                <ImageUploadField
+                <PublicImageUploadField
                   label="Ảnh mặt tiền hoặc Không gian sảnh chính của cơ sở"
-                  subLabel="Ảnh đẹp giúp tăng 60% tỷ lệ khách đặt lịch"
                   value={formData.imageUrl}
                   onChange={(val) =>
                     updateField(
@@ -583,7 +585,8 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
                       val || 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1200&q=80'
                     )
                   }
-                  placeholderText="Tải lên ảnh không gian tiệm / banner cơ sở"
+                  onBusyChange={setPreparingPublicImage}
+                  disabled={submitting}
                 />
               </div>
             </div>
@@ -739,7 +742,7 @@ export const SupplierRegisterPage: React.FC<SupplierRegisterPageProps> = ({
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || preparingPublicImage}
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-pink-500 via-[#db2777] to-[#be185d] text-white text-sm sm:text-base font-black shadow-lg shadow-pink-500/25 hover:opacity-95 hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {submitting ? (

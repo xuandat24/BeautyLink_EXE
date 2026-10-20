@@ -593,7 +593,7 @@ export const beautyApi = {
 
   async registerSupplier(data: any): Promise<{ auth: { accessToken: string; user: any }; supplier: any; user: any }> {
     const response = await unwrap<{ auth: { accessToken: string; user: any }; supplier: any }>(
-      apiClient.post('/v1/auth/register-supplier', data)
+      apiClient.post('/v1/auth/register-supplier', data, { timeout: 30000 })
     );
     if (response?.auth?.accessToken) {
       setAccessToken(response.auth.accessToken);
@@ -812,7 +812,7 @@ export const beautyApi = {
       imageUrl: data.imageUrl,
       latitude: data.latitude,
       longitude: data.longitude,
-    }));
+    }, { timeout: 30000 }));
     return { ...profile, address: profile.addressLine };
   },
 
@@ -829,11 +829,11 @@ export const beautyApi = {
   },
 
   async createPractitioner(data: { name: string; specialty?: string; bio?: string; avatarUrl?: string }): Promise<BackendPractitioner> {
-    return unwrap(apiClient.post('/v1/supplier/practitioners', { ...data, displayName: data.name }));
+    return unwrap(apiClient.post('/v1/supplier/practitioners', { ...data, displayName: data.name }, { timeout: 30000 }));
   },
 
   async updatePractitioner(id: number, data: { name: string; specialty?: string; bio?: string; avatarUrl?: string }): Promise<BackendPractitioner> {
-    return unwrap(apiClient.put(`/v1/supplier/practitioners/${id}`, { ...data, displayName: data.name }));
+    return unwrap(apiClient.put(`/v1/supplier/practitioners/${id}`, { ...data, displayName: data.name }, { timeout: 30000 }));
   },
 
   async practitionerSchedule(practitionerId: number): Promise<ScheduleRule[]> {
@@ -862,11 +862,11 @@ export const beautyApi = {
   },
 
   async createSupplierService(data: any): Promise<BackendService> {
-    return unwrap(apiClient.post('/v1/supplier/services', { ...data, active: true }));
+    return unwrap(apiClient.post('/v1/supplier/services', { ...data, active: true }, { timeout: 30000 }));
   },
 
   async updateSupplierService(id: number, data: any): Promise<BackendService> {
-    return unwrap(apiClient.put(`/v1/supplier/services/${id}`, { ...data, active: true }));
+    return unwrap(apiClient.put(`/v1/supplier/services/${id}`, { ...data, active: true }, { timeout: 30000 }));
   },
 
   async deactivateSupplierService(id: number): Promise<void> {
