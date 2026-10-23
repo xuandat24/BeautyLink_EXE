@@ -44,9 +44,15 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         encoder = new BCryptPasswordEncoder(4);
-        jwt = new JwtService("test-jwt-secret-that-is-long-enough-for-hmac-sha", 3_600_000);
+        jwt = TestJwtFactory.create("test-jwt-secret-that-is-long-enough-for-hmac-sha", 3_600_000);
+        String token = jwt.createToken(activeUser(encoder.encode(PASSWORD)));
+        var authentication = new org.springframework.security.authentication.TestingAuthenticationToken("test", null);
+        authentication.setDetails(new JwtService.SessionIdentity(jwt.extractClaims(token).get("sid", String.class)));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(authentication);
         service = new AuthService(users, encoder, jwt, verification);
     }
+
+    @org.junit.jupiter.api.AfterEach void clearContext() { org.springframework.security.core.context.SecurityContextHolder.clearContext(); }
 
     @Test
     void loginByEmailIsCaseInsensitiveAndReturnsJwt() {

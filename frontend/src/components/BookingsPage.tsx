@@ -22,6 +22,7 @@ import { canCancelBooking, canPayBooking, canCompleteBooking, canReviewBooking, 
 import { PaymentContinuationDialog } from './PaymentContinuationDialog';
 import { paymentBookingId, setPaymentBookingId } from '../lib/paymentNavigation';
 import { useBeautyStore } from '../store/beautyStore';
+import { isAuthStorageEvent } from '../lib/authSession';
 
 interface BookingsPageProps {
   embedded?: boolean;
@@ -45,10 +46,13 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
   const [paymentId, setPaymentId] = useState<number | null>(() => paymentBookingId());
   const [sessionRevision, setSessionRevision] = useState(0);
   const sessionToken = getAccessToken();
-  const priorSession = useRef(sessionToken);
+  const priorAccount = useRef(currentUser?.id);
   useEffect(() => {
-    if (priorSession.current !== sessionToken) { setPaymentId(null); setPaymentBookingId(null); priorSession.current = sessionToken; }
-  }, [sessionToken]);
+    if (currentUser?.id != null && priorAccount.current != null && String(priorAccount.current) !== String(currentUser.id)) {
+      setPaymentId(null); setPaymentBookingId(null);
+    }
+    if (currentUser?.id != null) priorAccount.current = currentUser.id;
+  }, [currentUser?.id]);
   const [bookings, setBookings] = useState<BackendBooking[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
@@ -100,7 +104,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
   }, [loadBookings, sessionToken, currentUser?.id, sessionRevision]);
   useEffect(() => {
     const pop = () => setPaymentId(paymentBookingId());
-    const changed = () => { setPaymentId(null); setPaymentBookingId(null); setSessionRevision(n => n + 1); };
+    const changed = (event: StorageEvent) => { if (isAuthStorageEvent(event)) { setPaymentId(null); setSessionRevision(n => n + 1); } };
     window.addEventListener('popstate', pop); window.addEventListener('storage', changed);
     return () => { window.removeEventListener('popstate', pop); window.removeEventListener('storage', changed); };
   }, []);

@@ -15,17 +15,25 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final AccountDetailsService accountDetailsService;
-    public JwtAuthenticationFilter(JwtService jwtService, AccountDetailsService accountDetailsService) {
+    private final AuthenticationSessions sessions;
+    public JwtAuthenticationFilter(JwtService jwtService, AccountDetailsService accountDetailsService, AuthenticationSessions sessions) {
         this.jwtService = jwtService; this.accountDetailsService = accountDetailsService;
+        this.sessions = sessions;
     }
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ") && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 String token = header.substring(7);
-                UserDetails details = accountDetailsService.loadUserForToken(jwtService.extractClaims(token), jwtService);
+                var claims = jwtService.extractClaims(token);
+                UserDetails details = accountDetailsService.loadUserForToken(claims, jwtService);
+                var principal = (AccountDetailsService.AccountPrincipal) details;
+                String sessionId = claims.get("sid", String.class);
+                sessions.require(sessionId, principal.getAccountId());
                 if (details.isEnabled() && details.isAccountNonLocked() && details.isAccountNonExpired()) {
-                    SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(details, null, details.getAuthorities()));
+                    var authenticated = new UsernamePasswordAuthenticationToken(details, null, details.getAuthorities());
+                    authenticated.setDetails(new JwtService.SessionIdentity(sessionId));
+                    SecurityContextHolder.getContext().setAuthentication(authenticated);
                 }
             } catch (JwtException | IllegalArgumentException | UsernameNotFoundException ignored) { }
         }

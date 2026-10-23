@@ -4,6 +4,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import type { CurrentUser, HotDeal } from '../src/types';
+import { sessionToken } from './sessionFixtures';
 
 const deal: HotDeal = { id: 'service-42', serviceId: 42, supplierId: 7, title: 'Dịch vụ kiểm thử',
   brandName: 'Salon kiểm thử', brandLogo: '', image: '/assets/beauty-placeholder.svg', originalPrice: 200000,
@@ -51,14 +52,24 @@ test('account carts persist independently without legacy restoration UI or auth 
       await action(() => state.setCurrentUser(a));
       assert.deepEqual(loadCartFromStorage(a), [{ deal, quantity: 1 }]);
     });
-    await t.test('profile refresh keeps cart and remember-me token/session unchanged', async () => {
-      setAccessToken('synthetic-test-token', true);
+    await t.test('profile refresh keeps cart but persistent login/profile storage stays disabled', async () => {
+      const token = sessionToken();
+      setAccessToken(token, true);
       await action(() => state.setCurrentUser({ ...a, id: '10', name: 'Tên mới' }));
       assert.equal(state.cartItems.length, 1);
-      assert.equal(getAccessToken(), 'synthetic-test-token');
-      assert.equal(JSON.parse(localStorage.getItem('beautylink_session_user')!).id, '10');
+      assert.equal(getAccessToken(), token);
+      assert.equal(localStorage.getItem('beautylink_access_token'), null);
+      assert.equal(localStorage.getItem('beautylink_session_user'), null);
       assert.equal(sessionStorage.getItem('beautylink_session_user'), null);
-      assert.deepEqual(loadCartFromStorage(), [{ deal, quantity: 1 }], 'page reload reads the saved account cart');
+      assert.deepEqual(loadCartFromStorage(a), [{ deal, quantity: 1 }], 'cart can be restored after backend verifies its owner');
+    });
+    await t.test('account switch cannot inherit previous account notification/profile state', async () => {
+      await action(() => state.setNotifications([{ id: 'private-A', title: 'Private account A', message: 'Private booking' } as any]));
+      await action(() => state.setCurrentUser(b));
+      assert.deepEqual(state.notifications, []);
+      assert.deepEqual(state.appointments, []);
+      await action(() => state.setCurrentUser(a));
+      assert.equal(state.cartItems.length, 1, 'account A cart remains intact');
     });
     await t.test('logout empties visible cart but re-login restores saved selections', async () => {
       await action(() => state.logout());
@@ -68,7 +79,7 @@ test('account carts persist independently without legacy restoration UI or auth 
       assert.equal(loadCartFromStorage(a).length, 1);
       await action(() => state.setCurrentUser(a));
       assert.equal(state.cartItems.length, 1);
-      assert.ok(sessionStorage.getItem('beautylink_session_user'));
+      assert.equal(sessionStorage.getItem('beautylink_session_user'), null);
     });
     await t.test('different accounts never inherit each other cart', async () => {
       await action(() => state.setCurrentUser(b));

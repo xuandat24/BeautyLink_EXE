@@ -1,5 +1,35 @@
 # BeautyLink booking/review integration checkpoint
 
+## Latest task checkpoint — auth/session + 24h onboarding, 2026-10-24
+
+- Working directory `C:\Temp\beautylink-cloudinary`, branch `codex/session-onboarding-expiry` from fetched
+  main `ef13ac9e0f6ff64669289ffcb02e66773c620d98`. Existing gallery/branding/bundle branches preserved.
+  Earlier release instructions below are historical, NOT authority for this task. NO merge/deploy/prod DB.
+- Added persisted sid sessions: server idle 10m, absolute <=1h, explicit activity only, revocation,
+  profile-token replacement retains deadlines. No persistent login/cached-profile restore; verified `/me`
+  gate and fail-closed frontend requests, distinct 401 vs 403/network/5xx, cross-tab scoped hints.
+- Atomic completedAt onboarding expires at 24h and validates live options. Preserves user auth/cart data;
+  does not force modal on checkout/payment return/active booking. Backend booking/PayOS logic untouched.
+- One independent candidate review confirmed three races; addressed late profile/auth response after
+  logout/account switch, payment-return child mount before initialization, and checkout reauth route.
+  Tests added/retained; do not start another broad security review cycle.
+- Focused Java 21 result: 45 PASS / 0 fail/error / 1 MySQL-only skip, log
+  `backend/target/session-final-focused.log`. Real JWT/filter/MockMvc/H2 + existing Google/EMAIL OTP,
+  supplier registration/reset checks. Image/OTP/Google external seams mocked, no live provider claim.
+- Frontend 93/93 tests + TypeScript + production build PASS (ignored session-tests.log/session-build.log).
+  Full Maven verify attempted, NOT PASS due Windows JVM loopback failure in HTTP/image contexts;
+  374 cases / 160 passed / 211 setup errors / 3 MySQL skips, zero assertion failures;
+  details in `backend/target/session-full-verify-final.log`. No production runtime workaround or skipped assertion.
+- Additive session-table SQL PREPARED ONLY, not run on production. Existing MySQL CI job now includes
+  AuthenticationSessionMigrationTest (strict loopback isolated DB guard); Docker daemon unavailable locally.
+- DEPLOYMENT.md contains all changed-file groups, contract, limitations, evidence and exact staged rollout/
+  rollback. Exact browser-close cannot be guaranteed; restored session must satisfy /me + server deadlines.
+  MySQL/browser/full CI must pass before any release-ready claim. No secrets/config rotation is required.
+- NEXT_ACTION: inspect final feature commit/diff and run full Linux CI plus isolated MySQL migration;
+  if no PR permission, owner can open compare main...codex/session-onboarding-expiry. No production actions.
+- DO_NOT_REPEAT: baseline audit, already-passing focused/frontend tests absent code change, seeding,
+  backup/restore, booking/payment redesign, historical release/merge/deploy work.
+
 Status: MANUAL_PAYMENT_CONVERGENCE_CODE_VERIFIED — latest narrow fix below; local code/test gates passed. Resolve exact final HEAD CI via GitHub/final report; do not substitute historical CI. Preserve commits and inspect Git before resuming. Production gates remain separate.
 
 ## Current webhook/reconciliation convergence release — 13 October 2026

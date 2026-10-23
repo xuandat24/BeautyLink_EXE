@@ -7,9 +7,10 @@ import {
   Loader2,
   CheckCircle2,
 } from 'lucide-react';
-import { BackendLocation } from '../types';
+import { BackendCategory, BackendLocation } from '../types';
 import { beautyApi } from '../services/beautyApi';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { useBeautyStore } from '../store/beautyStore';
 
 interface LocationSelectModalProps {
   isOpen: boolean;
@@ -17,6 +18,8 @@ interface LocationSelectModalProps {
   selectedLocationId: number | null;
   selectedIntentCategory?: string | null;
   required?: boolean;
+  availableLocations?: BackendLocation[];
+  availableCategories?: BackendCategory[];
   onSelectLocation: (location: BackendLocation, name: string, categorySlug?: string) => void;
 }
 
@@ -108,32 +111,45 @@ export const LocationSelectModal: React.FC<LocationSelectModalProps> = ({
   selectedLocationId,
   selectedIntentCategory = 'all',
   required = false,
+  availableLocations,
+  availableCategories,
   onSelectLocation,
 }) => {
+  const { validateOnboardingOptions } = useBeautyStore();
   const [locations, setLocations] = useState<BackendLocation[]>([]);
   const [selectedLoc, setSelectedLoc] = useState<BackendLocation>(
     selectedLocationId === 2 ? DEFAULT_HN_LOC : DEFAULT_HCM_LOC
   );
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState('');
+  const [categories, setCategories] = useState<BackendCategory[]>(availableCategories ?? []);
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
+      setError('');
       setStep(1);
-      beautyApi
-        .locations()
-        .then((data) => {
+      let active = true;
+      Promise.all([availableLocations?.length ? Promise.resolve(availableLocations) : beautyApi.locations(),
+        availableCategories?.length ? Promise.resolve(availableCategories) : beautyApi.categories()])
+        .then(([data, options]) => {
+          if (!active) return;
+          validateOnboardingOptions(data, options.map(category => category.slug));
+          setCategories(options);
+          setLocations(data);
+          if (!data.length || !options.length) setError('Chưa có khu vực hoặc dịch vụ khả dụng. Vui lòng thử lại.');
           if (data && data.length > 0) {
-            setLocations(data);
             const found = data.find((l) => l.id === selectedLocationId);
             if (found) setSelectedLoc(found);
           }
         })
-        .catch(() => {})
-        .finally(() => setLoading(false));
+        .catch(() => { if (active) setError('Không thể tải khu vực và dịch vụ. Vui lòng thử lại.'); })
+        .finally(() => { if (active) setLoading(false); });
+      return () => { active = false; };
     }
-  }, [isOpen, selectedLocationId]);
+  }, [isOpen, selectedLocationId, availableLocations, availableCategories, revision, validateOnboardingOptions]);
 
   // Lock body scroll when modal is open
   useBodyScrollLock(isOpen);
@@ -151,8 +167,8 @@ export const LocationSelectModal: React.FC<LocationSelectModalProps> = ({
   const currentCityName =
     selectedLoc?.slug === 'ha-noi' ? 'Hà Nội' : 'TP. Hồ Chí Minh';
 
-  const hcmLoc = locations.find((l) => l.slug === 'ho-chi-minh') || DEFAULT_HCM_LOC;
-  const hnLoc = locations.find((l) => l.slug === 'ha-noi') || DEFAULT_HN_LOC;
+  const hcmLoc = locations.find((l) => l.slug === 'ho-chi-minh');
+  const hnLoc = locations.find((l) => l.slug === 'ha-noi');
 
   // Bấm chọn thành phố -> chuyển mượt sang Bước 2
   const handleSelectCity = (loc: BackendLocation) => {
@@ -162,6 +178,8 @@ export const LocationSelectModal: React.FC<LocationSelectModalProps> = ({
 
   // Bấm chọn dịch vụ -> đóng modal và nhảy thẳng sang trang dịch vụ đó
   const handleSelectServiceAndProceed = (serviceSlug: string) => {
+    if (!locations.some(location => location.id === selectedLoc.id)
+      || (serviceSlug !== 'all' && !categories.some(category => category.slug === serviceSlug))) return;
     onSelectLocation(selectedLoc, currentCityName, serviceSlug);
     onClose();
   };
@@ -218,6 +236,9 @@ export const LocationSelectModal: React.FC<LocationSelectModalProps> = ({
 
         {/* Modal Body */}
         <div className="flex-1 p-5 sm:p-7 overflow-y-auto overscroll-contain">
+          {error && <div role="alert" className="mb-3 text-sm text-red-600">{error}
+            <button type="button" className="ml-2 underline" onClick={() => setRevision(value => value + 1)}>Thử lại</button>
+          </div>}
           {loading ? (
             <div className="grid h-44 place-items-center">
               <Loader2 className="h-8 w-8 animate-spin text-[#EB0F51]" />
@@ -229,7 +250,7 @@ export const LocationSelectModal: React.FC<LocationSelectModalProps> = ({
                 {/* 1. TP. Hồ Chí Minh */}
                 <button
                   type="button"
-                  onClick={() => handleSelectCity(hcmLoc)}
+                  disabled={!hcmLoc} onClick={() => { if (hcmLoc) handleSelectCity(hcmLoc); }}
                   className={`group relative h-44 sm:h-52 rounded-3xl overflow-hidden cursor-pointer border-2 text-left p-5 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-pink-500/30 ${
                     selectedLoc.slug === 'ho-chi-minh'
                       ? 'border-[#EB0F51] ring-2 ring-pink-400/40 shadow-xl'
@@ -274,7 +295,7 @@ export const LocationSelectModal: React.FC<LocationSelectModalProps> = ({
                 {/* 2. Hà Nội */}
                 <button
                   type="button"
-                  onClick={() => handleSelectCity(hnLoc)}
+                  disabled={!hnLoc} onClick={() => { if (hnLoc) handleSelectCity(hnLoc); }}
                   className={`group relative h-44 sm:h-52 rounded-3xl overflow-hidden cursor-pointer border-2 text-left p-5 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-pink-500/30 ${
                     selectedLoc.slug === 'ha-noi'
                       ? 'border-[#EB0F51] ring-2 ring-pink-400/40 shadow-xl'
@@ -335,7 +356,7 @@ export const LocationSelectModal: React.FC<LocationSelectModalProps> = ({
 
               {/* Lưới các dịch vụ có hình nền Background đẹp mắt */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5">
-                {SERVICE_CARD_OPTIONS.map((opt) => (
+                {SERVICE_CARD_OPTIONS.filter(opt => opt.slug === 'all' || categories.some(category => category.slug === opt.slug)).map((opt) => (
                   <button
                     key={opt.slug}
                     type="button"

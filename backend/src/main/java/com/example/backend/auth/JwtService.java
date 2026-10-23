@@ -9,24 +9,39 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
+import com.example.backend.model.AuthenticationSession;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @Service
 public class JwtService {
     public static final String ACCOUNT_SUBJECT_PREFIX = "account:";
     private final SecretKey key;
     private final long expirationMs;
-    public JwtService(@Value("${app.jwt.secret}") String secret, @Value("${app.jwt.expiration-ms}") long expirationMs) {
+    private final AuthenticationSessions sessions;
+    public JwtService(@Value("${app.jwt.secret}") String secret, @Value("${app.jwt.expiration-ms}") long expirationMs, AuthenticationSessions sessions) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-        this.expirationMs = expirationMs;
+        this.expirationMs = Math.min(expirationMs, AuthenticationSessions.MAX_ABSOLUTE_MS);
+        this.sessions = sessions;
     }
     public String createToken(UserAccount user) {
-        Instant now = Instant.now();
+        return token(user, sessions.open(user.getId(), expirationMs));
+    }
+    public String replaceToken(UserAccount user) {
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getDetails() instanceof SessionIdentity identity)) {
+            throw new JwtException("Missing authenticated session");
+        }
+        return token(user, sessions.require(identity.id(), user.getId()));
+    }
+    private String token(UserAccount user, AuthenticationSession session) {
+        Instant now = sessions.now();
         return Jwts.builder().subject(ACCOUNT_SUBJECT_PREFIX + user.getId()).claim("role", user.getRole().name())
                 .claim("accountId", user.getId())
                 .claim("identityVersion", 2)
                 .claim("accountUpdatedAt", user.getUpdatedAt().toEpochMilli())
                 .claim("authVersion", user.getAuthVersion())
-                .issuedAt(Date.from(now)).expiration(Date.from(now.plusMillis(expirationMs)))
+                .claim("sid", session.getId())
+                .issuedAt(Date.from(now)).expiration(Date.from(session.getExpiresAt()))
                 .signWith(key).compact();
     }
     public String extractSubject(String token) {
@@ -56,4 +71,5 @@ public class JwtService {
                 && issuedAt.toInstant().isAfter(user.getUpdatedAt());
     }
     public long getExpirationMs() { return expirationMs; }
+    public record SessionIdentity(String id) {}
 }

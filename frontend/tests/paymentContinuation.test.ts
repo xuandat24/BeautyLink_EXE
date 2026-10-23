@@ -11,6 +11,7 @@ import { paymentBookingId, setPaymentBookingId, continuationDestination } from '
 import { bookingToday, bookingDay, bookingMaxDate, validBookingDate } from '../src/lib/bookingTime';
 import { safeCheckout } from '../src/lib/bookingPolicy';
 import type { BackendBooking, PayOSPayment, CurrentUser } from '../src/types';
+import { sessionToken } from './sessionFixtures';
 
 const pending = { id: 42, bookingCode: 'RESUME-42', serviceName: 'Backend service', supplierName: 'Backend supplier', practitionerName: 'Test',
   status: 'PENDING', paymentStatus: 'UNPAID', appointmentDate: '2030-01-01', startTime: '10:00', endTime: '11:00', totalAmount: 500000,
@@ -19,7 +20,7 @@ function environment(query = '') {
   const dom = new JSDOM('<div id="root"></div>', { url: `http://localhost/${query}` });
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, sessionStorage: dom.window.sessionStorage, localStorage: dom.window.localStorage });
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
-  setAccessToken('test-session');
+  setAccessToken(sessionToken());
   return { dom, root: createRoot(document.getElementById('root')!) };
 }
 const click = async (text: string, twice = false) => act(async () => {
@@ -61,6 +62,8 @@ test('continuation rereads same booking, preserves pending options and double su
   beautyApi.createPayOSPayment = async (id, input) => { assert.equal(id, 42); assert.equal(input.paymentOption, 'FULL_100'); assert.equal(input.voucherCode, 'SERVER-VOUCHER'); pays++; return new Promise(resolve => { finish = resolve; }); };
   try {
     await act(async () => root.render(React.createElement(PaymentContinuationDialog, { bookingId: 42, onClose() {} })));
+    await act(async () => window.dispatchEvent(new dom.window.StorageEvent('storage', { key: 'beautylink_activity:11111111-1111-4111-8111-111111111111', newValue: String(Date.now()) })));
+    assert.equal(reads, 1, 'activity from another tab cannot reset checkout');
     assert.equal((document.querySelector('select') as HTMLSelectElement).value, 'FULL_100'); assert.equal((document.querySelector('select') as HTMLSelectElement).disabled, true);
     assert.equal((document.querySelector('input') as HTMLInputElement).value, 'SERVER-VOUCHER');
     await click('Tiếp tục tới PayOS', true); assert.equal(reads, 2); assert.equal(pays, 1); assert.equal(creates, 0);

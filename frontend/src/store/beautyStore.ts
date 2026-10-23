@@ -8,7 +8,8 @@ import {
 } from '../types';
 import { cache } from '../lib/cache';
 import { notificationService } from '../services/notificationService';
-import { clearAccessToken, hasPersistentSession } from '../services/beautyApi';
+import { beautyApi, clearAccessToken, getAccessToken } from '../services/beautyApi';
+import { ONBOARDING_KEY, ONBOARDING_TTL, readOnboarding, type OnboardingSelection } from '../lib/onboarding';
 
 const STORAGE_KEYS = {
   CART: 'user_cart_items',
@@ -32,13 +33,8 @@ const SESSION_USER_KEY = 'beautylink_session_user';
 const LEGACY_PROFILE_KEY = 'beautylink_user_profile_data_v2';
 
 const loadSessionUser = (): CurrentUser | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = sessionStorage.getItem(SESSION_USER_KEY) || localStorage.getItem(SESSION_USER_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  // Profiles are not credentials. Only a current backend response may populate currentUser.
+  return null;
 };
 
 const parseCartItems = (value: unknown): CartItem[] => {
@@ -98,6 +94,7 @@ interface MemoryState {
   locationConfirmed: boolean;
   selectedIntentCategory: string | null;
   onboardingCompleted: boolean;
+  onboardingReady: boolean;
   cartItems: CartItem[];
   appointments: BookingDetails[];
   currentUser: CurrentUser | null;
@@ -107,16 +104,17 @@ interface MemoryState {
 }
 
 let memoryState: MemoryState = {
-  selectedCity: cache.get<string>(STORAGE_KEYS.CITY) || 'Chọn khu vực',
-  selectedLocationId: cache.get<number | null>(STORAGE_KEYS.LOCATION_ID) ?? null,
-  locationConfirmed: cache.get<boolean>(STORAGE_KEYS.LOCATION_CONFIRMED) ?? false,
-  selectedIntentCategory: cache.get<string | null>(STORAGE_KEYS.INTENT_CATEGORY) ?? null,
-  onboardingCompleted: cache.get<boolean>(STORAGE_KEYS.ONBOARDING_COMPLETED) ?? false,
+  selectedCity: 'Chọn khu vực',
+  selectedLocationId: null,
+  locationConfirmed: false,
+  selectedIntentCategory: null,
+  onboardingCompleted: false,
+  onboardingReady: false,
   cartItems: loadCartFromStorage(),
   appointments: [],
   currentUser: loadSessionUser(),
   favorites: cache.get<string[]>(STORAGE_KEYS.FAVORITES) || [],
-  notifications: notificationService.getStoredNotifications(),
+  notifications: [], // Legacy unscoped notification cache is not an authenticated account response.
   soundEnabled: notificationService.isSoundEnabled(),
 };
 
@@ -126,6 +124,32 @@ const listeners = new Set<StateListener>();
 function notify() {
   listeners.forEach((listener) => listener());
 }
+
+let onboardingOptions: { locations: Array<{ id: number; name: string }>; categories: string[] } | null = null;
+let onboardingDeadline: number | undefined;
+const scheduleOnboardingExpiry = (selection: OnboardingSelection | null) => {
+  if (onboardingDeadline !== undefined) window.clearTimeout(onboardingDeadline);
+  onboardingDeadline = selection ? window.setTimeout(syncOnboarding, Math.max(1, selection.completedAt + ONBOARDING_TTL - Date.now())) : undefined;
+};
+const applyOnboarding = (selection: OnboardingSelection | null) => {
+  memoryState = { ...memoryState, selectedCity: selection?.city ?? 'Chọn khu vực',
+    selectedLocationId: selection?.locationId ?? null, selectedIntentCategory: selection?.category ?? null,
+    locationConfirmed: Boolean(selection), onboardingCompleted: Boolean(selection) };
+};
+const syncOnboarding = () => {
+  if (!onboardingOptions) return;
+  let selection: OnboardingSelection | null = null;
+  try { selection = readOnboarding(localStorage.getItem(ONBOARDING_KEY)); } catch { /* Empty in restricted storage. */ }
+  const location = selection && onboardingOptions.locations.find(option => option.id === selection?.locationId);
+  if (!location || (selection?.category !== 'all' && !onboardingOptions.categories.includes(selection?.category ?? ''))) selection = null;
+  if (selection && location) selection = { ...selection, city: location.name };
+  if (!selection) { try { localStorage.removeItem(ONBOARDING_KEY); } catch { /* storage unavailable */ } }
+  scheduleOnboardingExpiry(selection);
+  if (memoryState.onboardingReady && memoryState.selectedLocationId === (selection?.locationId ?? null)
+    && memoryState.selectedCity === (selection?.city ?? 'Chọn khu vực')
+    && memoryState.selectedIntentCategory === (selection?.category ?? null) && memoryState.onboardingCompleted === Boolean(selection)) return;
+  applyOnboarding(selection); memoryState.onboardingReady = true; notify();
+};
 
 export function useBeautyStore() {
   const [state, setState] = useState(memoryState);
@@ -145,54 +169,67 @@ export function useBeautyStore() {
     };
 
     window.addEventListener('storage', handleStorageChange);
+    const onboardingChanged = (event: StorageEvent) => { if (event.key === ONBOARDING_KEY || event.key === null) syncOnboarding(); };
+    const resume = () => syncOnboarding();
+    window.addEventListener('storage', onboardingChanged);
+    window.addEventListener('focus', resume); document.addEventListener('visibilitychange', resume);
 
     return () => {
       listeners.delete(listener);
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('storage', onboardingChanged); window.removeEventListener('focus', resume);
+      document.removeEventListener('visibilitychange', resume);
+      if (!listeners.size && onboardingDeadline !== undefined) { window.clearTimeout(onboardingDeadline); onboardingDeadline = undefined; }
     };
   }, []);
 
   // 1. City & Location actions
   const setSelectedCity = useCallback((city: string) => {
+    try { localStorage.removeItem(ONBOARDING_KEY); } catch { /* memory only */ }
+    applyOnboarding(null);
     memoryState.selectedCity = city;
-    cache.set(STORAGE_KEYS.CITY, city);
     notify();
   }, []);
 
   const setSelectedLocation = useCallback((id: number, name: string) => {
+    try { localStorage.removeItem(ONBOARDING_KEY); } catch { /* memory only */ }
+    applyOnboarding(null);
     memoryState.selectedLocationId = id;
     memoryState.selectedCity = name;
-    memoryState.locationConfirmed = true;
-    cache.set(STORAGE_KEYS.LOCATION_ID, id);
-    cache.set(STORAGE_KEYS.CITY, name);
-    cache.set(STORAGE_KEYS.LOCATION_CONFIRMED, true);
     notify();
   }, []);
 
   const completeOnboarding = useCallback((id: number, name: string, categorySlug: string = 'all') => {
-    memoryState.selectedLocationId = id;
-    memoryState.selectedCity = name;
-    memoryState.locationConfirmed = true;
-    memoryState.selectedIntentCategory = categorySlug;
-    memoryState.onboardingCompleted = true;
-    cache.set(STORAGE_KEYS.LOCATION_ID, id);
-    cache.set(STORAGE_KEYS.CITY, name);
-    cache.set(STORAGE_KEYS.LOCATION_CONFIRMED, true);
-    cache.set(STORAGE_KEYS.INTENT_CATEGORY, categorySlug);
-    cache.set(STORAGE_KEYS.ONBOARDING_COMPLETED, true);
-    notify();
+    const location = onboardingOptions?.locations.find(location => location.id === id);
+    if (!location
+      || (categorySlug !== 'all' && !onboardingOptions?.categories.includes(categorySlug))) return;
+    void name; // Retain callback compatibility; canonical display name comes from current API options.
+    const selection: OnboardingSelection = { version: 1, completedAt: Date.now(), locationId: id, city: location.name, category: categorySlug };
+    try { localStorage.setItem(ONBOARDING_KEY, JSON.stringify(selection)); } catch { /* Memory-only preference when storage is unavailable. */ }
+    applyOnboarding(selection); scheduleOnboardingExpiry(selection); notify();
   }, []);
 
   const setSelectedIntentCategory = useCallback((categorySlug: string) => {
-    memoryState.selectedIntentCategory = categorySlug;
-    cache.set(STORAGE_KEYS.INTENT_CATEGORY, categorySlug);
+    let selection: OnboardingSelection | null = null;
+    try { selection = readOnboarding(localStorage.getItem(ONBOARDING_KEY)); } catch { /* Restricted storage: do not restore an unverified preference. */ }
+    if (selection && (categorySlug === 'all' || onboardingOptions?.categories.includes(categorySlug))) {
+      const updated = { ...selection, category: categorySlug };
+      try { localStorage.setItem(ONBOARDING_KEY, JSON.stringify(updated)); } catch { /* Memory only. */ }
+      applyOnboarding(updated);
+    }
     notify();
   }, []);
 
   const resetOnboarding = useCallback(() => {
-    memoryState.onboardingCompleted = false;
-    cache.set(STORAGE_KEYS.ONBOARDING_COMPLETED, false);
+    try { localStorage.removeItem(ONBOARDING_KEY); } catch { /* no persisted record */ }
+    applyOnboarding(null); scheduleOnboardingExpiry(null);
     notify();
+  }, []);
+  const validateOnboardingOptions = useCallback((locations: Array<{ id: number; name: string }>, categories: string[]) => {
+    onboardingOptions = { locations, categories };
+    // Old permanent records have no trustworthy completion timestamp: clear only those five keys.
+    [STORAGE_KEYS.CITY, STORAGE_KEYS.LOCATION_ID, STORAGE_KEYS.LOCATION_CONFIRMED, STORAGE_KEYS.INTENT_CATEGORY, STORAGE_KEYS.ONBOARDING_COMPLETED].forEach(key => cache.delete(key));
+    syncOnboarding();
   }, []);
 
   // 2. Cart actions
@@ -264,25 +301,21 @@ export function useBeautyStore() {
         else if (Number.isSafeInteger(saved.quantity + item.quantity)) saved.quantity += item.quantity;
       }
     }
+    if (!sameAccount) {
+      memoryState.appointments = [];
+      memoryState.notifications = [];
+      notificationService.clearUserData();
+    }
     memoryState.currentUser = user;
     if (!sameAccount && ownerId) persistCartToStorage(memoryState.cartItems);
     cache.delete(STORAGE_KEYS.USER);
-    if (typeof window !== 'undefined') {
-      if (user && hasPersistentSession()) {
-        sessionStorage.removeItem(SESSION_USER_KEY);
-        localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
-      } else if (user) {
-        localStorage.removeItem(SESSION_USER_KEY);
-        sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
-      } else {
-        sessionStorage.removeItem(SESSION_USER_KEY);
-        localStorage.removeItem(SESSION_USER_KEY);
-      }
-    }
+    if (typeof window !== 'undefined') { sessionStorage.removeItem(SESSION_USER_KEY); localStorage.removeItem(SESSION_USER_KEY); }
     notify();
   }, []);
 
   const logout = useCallback(() => {
+    const token = getAccessToken();
+    if (token) void beautyApi.logoutSession(token).catch(() => { /* Local logout is immediate; server also enforces idle/absolute expiry. */ });
     memoryState.currentUser = null;
     memoryState.cartItems = [];
     memoryState.appointments = [];
@@ -366,6 +399,7 @@ export function useBeautyStore() {
     completeOnboarding,
     setSelectedIntentCategory,
     resetOnboarding,
+    validateOnboardingOptions,
     addToCart,
     updateCartQuantity,
     removeFromCart,
