@@ -5,7 +5,8 @@ import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { PublicImageUploadField } from '../src/components/PublicImageUploadField.tsx';
 import { SupplierDashboard } from '../src/components/SupplierDashboard.tsx';
-import { beautyApi, apiClient } from '../src/services/beautyApi.ts';
+import { beautyApi, apiClient, setAccessToken } from '../src/services/beautyApi.ts';
+import { sessionToken } from './sessionFixtures';
 
 test('public image picker prepares image, keeps old value on error, exposes labels and busy state', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
@@ -71,7 +72,8 @@ test('public image picker prepares image, keeps old value on error, exposes labe
 
 test('image-bearing save APIs preserve existing paths/payload and allow bounded backend upload time', async () => {
   const dom = new JSDOM('', { url: 'http://localhost' });
-  Object.assign(globalThis, { sessionStorage: dom.window.sessionStorage, localStorage: dom.window.localStorage });
+  Object.assign(globalThis, { window: dom.window, sessionStorage: dom.window.sessionStorage, localStorage: dom.window.localStorage });
+  setAccessToken(sessionToken());
   const previous = apiClient.defaults.adapter;
   const calls: string[] = [];
   apiClient.defaults.adapter = async config => {

@@ -65,7 +65,7 @@ public class AuthService {
         String phone = normalizePhone(request.phone());
         if (phone == null || !phone.matches("^0(?:3|5|7|8|9)[0-9]{8}$")) throw new ApiException(HttpStatus.BAD_REQUEST,
                 "INVALID_PHONE", "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 03, 05, 07, 08 hoặc 09");
-        if (Objects.equals(phone, current.getPhone()) && BookingContactPolicy.isReady(current)) return response(current);
+        if (Objects.equals(phone, current.getPhone()) && BookingContactPolicy.isReady(current)) return replacementResponse(current);
         return updateProfile(current, new UpdateCustomerProfileRequest(null, request.phone(), null, null, true));
     }
 
@@ -94,12 +94,16 @@ public class AuthService {
             account.setBookingContactConfirmedPhone(null); account.setBookingContactConfirmedAt(null);
             account.setBookingContactConfirmationRequired(true);
         }
-        try { return response(users.saveAndFlush(account)); }
+        try { return replacementResponse(users.saveAndFlush(account)); }
         catch (DataIntegrityViolationException error) { throw phoneConflict(); }
     }
 
     public AuthResponse response(UserAccount user) {
         return new AuthResponse(jwt.createToken(user), "Bearer", jwt.getExpirationMs(), toUser(user));
+    }
+    private AuthResponse replacementResponse(UserAccount user) {
+        String token = jwt.replaceToken(user);
+        return new AuthResponse(token, "Bearer", Math.max(0, jwt.extractClaims(token).getExpiration().getTime() - System.currentTimeMillis()), toUser(user));
     }
     public UserResponse toUser(UserAccount user) {
         return new UserResponse(user.getId(), user.getFullName(), user.getPhone(), user.getEmail(), user.getGender(),

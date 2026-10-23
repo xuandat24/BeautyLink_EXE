@@ -5,6 +5,7 @@ import { canPayBooking, safeCheckout } from '../lib/bookingPolicy';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import type { BackendBooking, PaymentOption, PaymentQuote } from '../types';
 import { BookingContactDialog } from './BookingContactDialog';
+import { isAuthStorageEvent } from '../lib/authSession';
 
 const formatMoney = (value: number | null | undefined) => value == null ? 'Đang xác minh' : `${value.toLocaleString('vi-VN')}đ`;
 
@@ -24,7 +25,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
   const generation = useRef(0); const submitting = useRef(false); const latestId = useRef(bookingId); latestId.current = bookingId;
   const focus = useRef<HTMLButtonElement>(null);
   useBodyScrollLock(true);
-  useEffect(() => { const changed = () => setSessionRevision(n => n + 1); window.addEventListener('storage', changed); return () => window.removeEventListener('storage', changed); }, []);
+  useEffect(() => { const changed = (event: StorageEvent) => { if (isAuthStorageEvent(event)) setSessionRevision(n => n + 1); }; window.addEventListener('storage', changed); return () => window.removeEventListener('storage', changed); }, []);
   useEffect(() => {
     const version = ++generation.current, token = getAccessToken();
     setBooking(null); setError(''); setLoading(true); focus.current?.focus();

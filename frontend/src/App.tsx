@@ -17,6 +17,9 @@ import { AuthPage } from './components/AuthPage';
 import { continuationDestination, setPaymentBookingId } from './lib/paymentNavigation';
 import type { ExploreContext } from './components/FilterExplorePage';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
+import { useSessionLifecycle } from './hooks/useSessionLifecycle';
+import { eligibleOnboardingVisit } from './lib/onboarding';
+import type { SessionPhase } from './lib/authSession';
 
 // Modals
 import { BookingModal } from './components/BookingModal';
@@ -194,13 +197,15 @@ type AppView =
   | 'filter-explore'
   | 'partner-detail';
 
-function BeautyLinkApp() {
+function BeautyLinkApp({ sessionPhase }: { sessionPhase: SessionPhase }) {
   const {
     selectedCity,
     selectedLocationId,
     locationConfirmed,
     selectedIntentCategory,
     onboardingCompleted,
+    onboardingReady,
+    validateOnboardingOptions,
     completeOnboarding,
     setSelectedLocation,
     cartItems,
@@ -220,14 +225,6 @@ function BeautyLinkApp() {
     toggleFavorite,
   } = useBeautyStore();
 
-  useEffect(() => {
-    if (!currentUser || !getAccessToken()) return;
-    let active = true;
-    beautyApi.me().then((user) => {
-      if (active) setCurrentUser({ ...currentUser, ...mapBackendUser(user) });
-    }).catch(() => { /* Keep the existing session until an authenticated action proves it invalid. */ });
-    return () => { active = false; };
-  }, [currentUser?.id, setCurrentUser]);
 
   // Favorite Toast System
   const [favoriteToast, setFavoriteToast] = useState<FavoriteToastInfo | null>(null);
@@ -259,30 +256,25 @@ function BeautyLinkApp() {
   }, []);
 
   // Check if onboarding is required (not logged in and hasn't completed city + service selection)
-  const isVisitorOnboardingRequired = !currentUser && !onboardingCompleted;
+  const isVisitorOnboardingRequired = onboardingReady && !onboardingCompleted;
 
   // Modals state
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
-  const [isLocationModalOpen, setIsLocationModalOpen] = useState(isVisitorOnboardingRequired);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [isBlogModalOpen, setIsBlogModalOpen] = useState(false);
 
-  // If visitor is not logged in and hasn't chosen city & service, keep selection modal open
-  useEffect(() => {
-    if (isVisitorOnboardingRequired) {
-      setIsLocationModalOpen(true);
-    }
-  }, [isVisitorOnboardingRequired]);
 
   // Page Routing & Hash Navigation
   const [currentPage, setCurrentPage] = useState<AppView>('home');
   const continuationAccount = useRef(currentUser?.id);
   useEffect(() => {
-    if (continuationAccount.current !== undefined && continuationAccount.current !== currentUser?.id) setPaymentBookingId(null);
-    continuationAccount.current = currentUser?.id;
+    if (continuationAccount.current != null && currentUser?.id != null && String(continuationAccount.current) !== String(currentUser.id)) setPaymentBookingId(null);
+    if (currentUser?.id != null) continuationAccount.current = currentUser.id;
   }, [currentUser?.id]);
   const [selectedCategory, setSelectedCategory] = useState<BackendCategory | null>(null);
   const [serviceCategories, setServiceCategories] = useState<BackendCategory[]>([]);
+  const [onboardingLocations, setOnboardingLocations] = useState<Awaited<ReturnType<typeof beautyApi.locations>>>([]);
   const [returnTarget, setReturnTarget] = useState<string>('home');
   const [selectedPartner, setSelectedPartner] = useState<NewPartner | null>(null);
   const [filterExploreContext, setFilterExploreContext] = useState<ExploreContext>('all');
@@ -297,11 +289,14 @@ function BeautyLinkApp() {
 
   // Load categories
   useEffect(() => {
-    beautyApi
-      .categories()
-      .then((data) => setServiceCategories(data))
-      .catch(() => setServiceCategories([]));
-  }, []);
+    let active = true;
+    Promise.all([beautyApi.categories(), beautyApi.locations()]).then(([categories, locations]) => {
+      if (!active) return;
+      setServiceCategories(categories); setOnboardingLocations(locations);
+      validateOnboardingOptions(locations, categories.map(category => category.slug));
+    }).catch(() => { if (active) setServiceCategories([]); });
+    return () => { active = false; };
+  }, [validateOnboardingOptions]);
 
   // Listen to hash changes
   useEffect(() => {
@@ -409,6 +404,7 @@ function BeautyLinkApp() {
   }, []);
 
   useEffect(() => {
+    if (sessionPhase === 'checking' || sessionPhase === 'locked') return;
     const params = new URLSearchParams(window.location.search);
     const paymentResult = params.get('payment');
     if (!paymentResult || !['success', 'cancelled'].includes(paymentResult)) return;
@@ -416,7 +412,8 @@ function BeautyLinkApp() {
     const orderCode = params.get('orderCode') || sessionStorage.getItem('beautylink_payos_order_code');
     const hasAuthenticatedSession = Boolean(currentUser && getAccessToken());
     const destination = hasAuthenticatedSession ? 'bookings' : 'login';
-    window.history.replaceState(null, '', `${window.location.pathname}#${destination}`);
+    // Retain untrusted return identifiers through verification/reauthentication; they never prove payment.
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${destination}`);
     setCurrentPage(destination);
 
     if (!hasAuthenticatedSession) {
@@ -430,6 +427,8 @@ function BeautyLinkApp() {
     }
 
     if (!orderCode || !/^\d{1,19}$/.test(orderCode)) {
+      params.delete('payment'); params.delete('orderCode');
+      window.history.replaceState(null, '', `${window.location.pathname}${params.size ? `?${params}` : ''}#bookings`);
       showToast('Không tìm thấy mã giao dịch hợp lệ để xác minh.');
       return;
     }
@@ -437,12 +436,15 @@ function BeautyLinkApp() {
     let stopped = false;
     let timer: number | undefined;
     let attempts = 0;
+    const initiatingToken = getAccessToken();
     const verify = async () => {
       if (stopped) return;
       attempts += 1;
       try {
         const payment = await beautyApi.payOSPaymentStatus(orderCode);
-        if (stopped) return;
+        if (stopped || initiatingToken !== getAccessToken()) return;
+        params.delete('payment'); params.delete('orderCode');
+        window.history.replaceState(null, '', `${window.location.pathname}${params.size ? `?${params}` : ''}#bookings`);
         window.dispatchEvent(new Event('beautylink-bookings-refresh'));
         if (payment.requiresManualReview || payment.status === 'REVIEW_REQUIRED') {
           showToast('Giao dịch cần hỗ trợ đối soát. Không thanh toán lại; vui lòng gửi Phản hồi trong lịch hẹn.');
@@ -471,7 +473,7 @@ function BeautyLinkApp() {
       stopped = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [currentUser, showToast]);
+  }, [currentUser, showToast, sessionPhase]);
 
   // Geolocation state
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -570,6 +572,11 @@ function BeautyLinkApp() {
 
   // Booking Modal State
   const [activeBookingService, setActiveBookingService] = useState<BackendService | null>(null);
+  const eligibleHomeVisit = eligibleOnboardingVisit(currentPage, window.location.search, window.location.hash, Boolean(activeBookingService));
+  useEffect(() => {
+    if (!eligibleHomeVisit) setIsLocationModalOpen(false);
+    else if (isVisitorOnboardingRequired) setIsLocationModalOpen(true);
+  }, [eligibleHomeVisit, isVisitorOnboardingRequired]);
 
   // View All Services Modal
   const [viewAllModal, setViewAllModal] = useState<{
@@ -801,6 +808,14 @@ function BeautyLinkApp() {
   // STANDALONE ROUTING SCREENS (No background overlay)
   // =========================================================================
   const adminPages: AppView[] = ['admin-dashboard', 'admin-bookings', 'admin-customers', 'admin-payments'];
+  const protectedPages: AppView[] = [...adminPages, 'supplier-dashboard', 'reports', 'account', 'bookings', 'checkout'];
+  if (protectedPages.includes(currentPage) && !currentUser) {
+    return <AuthPage initialMode="login" onBackToHome={handleBackToHome}
+      onSuccess={user => {
+        handleUserSuccess(user);
+        if (user.role === 'CUSTOMER' && ['account', 'bookings', 'checkout'].includes(currentPage)) navigateTo(currentPage);
+      }} onNavigateSupplierRegister={() => navigateTo('supplier-register')} onModeChange={mode => navigateTo(mode)} />;
+  }
   if (adminPages.includes(currentPage) && currentUser?.role !== 'ADMIN') {
     if (!currentUser) {
       return <AuthPage initialMode="login" onBackToHome={handleBackToHome} onSuccess={handleUserSuccess}
@@ -1050,6 +1065,7 @@ function BeautyLinkApp() {
         />
 
         <LocationSelectModal
+          availableLocations={onboardingLocations} availableCategories={serviceCategories}
           isOpen={isLocationModalOpen}
           onClose={() => setIsLocationModalOpen(false)}
           required={false}
@@ -1303,19 +1319,16 @@ function BeautyLinkApp() {
       />
 
       <LocationSelectModal
+        availableLocations={onboardingLocations} availableCategories={serviceCategories}
         isOpen={isLocationModalOpen}
         onClose={() => setIsLocationModalOpen(false)}
-        required={isVisitorOnboardingRequired}
+        required={isVisitorOnboardingRequired && eligibleHomeVisit}
         selectedLocationId={selectedLocationId}
         selectedIntentCategory={selectedIntentCategory}
         onSelectLocation={(loc, name, categorySlug) => {
           completeOnboarding(loc.id, name, categorySlug || 'all');
           if (categorySlug && categorySlug !== 'all') {
-            const slugToMatch = categorySlug === 'duong-sinh' ? 'spa' : categorySlug;
-            const matched =
-              serviceCategories.find((c) => c.slug === slugToMatch) ||
-              DEFAULT_CATEGORIES.find((c) => c.slug === slugToMatch) ||
-              DEFAULT_CATEGORIES[0];
+            const matched = serviceCategories.find((c) => c.slug === categorySlug);
 
             if (matched) {
               setSelectedCategory(matched);
@@ -1362,5 +1375,16 @@ function BeautyLinkApp() {
 }
 
 export default function App() {
-  return <PageLoadBoundary><BeautyLinkApp /></PageLoadBoundary>;
+  const session = useSessionLifecycle();
+  const locked = session.phase === 'checking' || session.phase === 'locked';
+  return <PageLoadBoundary>
+    <div hidden={locked} inert={locked}><BeautyLinkApp sessionPhase={session.phase} /></div>
+    {locked && <div className="grid min-h-screen place-items-center bg-pink-50 p-6 text-center" role="status">
+      <div><h1 className="font-bold">{session.phase === 'checking' ? 'Đang xác minh phiên đăng nhập...' : 'Chưa thể xác minh phiên đăng nhập'}</h1>
+        <p className="mt-2 text-sm">Thông tin tài khoản được khóa cho đến khi máy chủ xác nhận.</p>
+        {session.phase === 'locked' && <button className="mt-4 rounded-xl bg-pink-600 px-4 py-2 text-white" onClick={session.retry}>Thử lại</button>}
+        {session.phase === 'locked' && <button className="ml-3 mt-4 underline" onClick={session.logout}>Đăng xuất</button>}
+      </div>
+    </div>}
+  </PageLoadBoundary>;
 }

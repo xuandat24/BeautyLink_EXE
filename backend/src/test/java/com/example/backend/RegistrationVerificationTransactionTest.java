@@ -44,6 +44,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
 class RegistrationVerificationTransactionTest {
+    // OTP/session contract tests do not invoke the unrelated public image provider.
+    @MockitoBean com.example.backend.service.CloudinaryImageGateway imageGateway;
     private static final AtomicInteger CLIENT_NUMBER = new AtomicInteger(100);
     private String clientAddress;
     @BeforeEach void useIndependentClientAddress() { clientAddress = "192.0.2." + CLIENT_NUMBER.incrementAndGet(); }

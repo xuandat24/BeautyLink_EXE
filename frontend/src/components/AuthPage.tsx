@@ -106,7 +106,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [dateOfBirth, setDateOfBirth] = useState('');
   const verificationChannel = 'EMAIL' as const;
   const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [rememberMe, setRememberMe] = useState<boolean>(true);
+  const rememberMe = false;
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [notice, setNotice] = useState<string>('');
@@ -653,18 +653,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
                 )}
 
-                {/* Remember me checkbox */}
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="rounded-md border-pink-300 text-[#be185d] focus:ring-pink-200"
-                    />
-                    <span className="text-slate-600 font-medium">Ghi nhớ đăng nhập trên thiết bị này</span>
-                  </label>
-                </div>
+                <p className="pt-1 text-xs text-slate-500">Phiên đăng nhập tự hết hạn sau 10 phút không thao tác.</p>
 
                 {mode === 'register' && verificationChallengeId && (
                   <section className="rounded-2xl border-2 border-[#be185d]/35 bg-gradient-to-br from-pink-50 to-white p-4 shadow-sm"

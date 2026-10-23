@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class JwtIdentityTest {
     private static final String SECRET = "test-jwt-secret-that-is-long-enough-for-hmac-sha";
-    private final JwtService jwt = new JwtService(SECRET, 3_600_000);
+    private final JwtService jwt = TestJwtFactory.create(SECRET, 3_600_000);
 
     @Test
     void freshTokenMatchesAndOldTokenStaysInvalidAfterPhoneChangesBack() {

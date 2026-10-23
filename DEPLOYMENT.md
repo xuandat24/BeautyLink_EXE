@@ -300,3 +300,134 @@ production build and `git diff --check` passed. Postman simulation observed actu
 requests returning 200. Production JAR inspection found no mock/probe/test contract classes/resources.
 Live Cloudinary/account quota and deployed persistence smoke remain NOT RUN pending owner configuration
 and release approval. Existing Rollup/zod annotation and chunk-size warnings are non-blocking and unchanged.
+
+## Authentication idle sessions and atomic onboarding (2026-10-24 candidate)
+
+Base inspected: `ef13ac9e0f6ff64669289ffcb02e66773c620d98` (main/PR #10).
+Branch: `codex/session-onboarding-expiry`. This is a code candidate, NOT a production deployment.
+
+Verified former behavior: default-true remember-me persisted bearer/profile in localStorage;
+the store trusted that profile before `/me` and App preserved it on any `/me` failure.
+JWT verification had no server idle/revocation row; profile edits issued fresh full-lifetime JWTs.
+Five independent onboarding cache values had indefinite TTL and no common completion timestamp.
+
+### New contract and compatibility
+
+- Every new login, EMAIL-verified registration, supplier registration and explicit Google login
+  issues a signed JWT with a random `sid` bound to `authentication_sessions.account_id`.
+  Every authenticated request checks account identity/status/version AND the persisted session.
+  Idle deadline is `last_activity_at + 10 minutes`; equality is expired. Absolute expiry is
+  the smaller of configured JWT lifetime and **one hour**. No refresh token or automatic renewal.
+- `POST /api/v1/auth/session/activity`, authenticated, no body: returns 200 with
+  `idleExpiresAt` and `absoluteExpiresAt` (UTC ISO instants). Locks/rereads the session before
+  updating activity; cannot revive expired/revoked sessions. Only trusted pointer/keyboard/wheel/touch
+  interaction calls it, at most once per 15 seconds per tab. GET/polling/focus/visibility do not renew.
+- `POST /api/v1/auth/session/logout`, authenticated: revokes this sid and returns 204.
+  Already revoked/expired credentials receive 401; revocation is state-idempotent.
+  Local logout is immediate; offline revocation cannot be guaranteed until a server request succeeds.
+  Idle/absolute enforcement still applies. Independent explicit logins have independent sessions;
+  copied tabs sharing a sid share activity/logout hints, never share bearer tokens via localStorage.
+- Profile/phone replacement preserves sid, last activity and absolute deadline. Late `/me`, login,
+  Google/register and profile responses cannot restore credentials after logout/account switch.
+  Request interception also checks elapsed wall time before protected actions, including after sleep.
+- MVP remember-me is removed. Bearer/meta are sessionStorage-only. Legacy localStorage tokens and
+  cached auth profiles are discarded rather than migrated. A restored browser session starts locked
+  (`checking`) BEFORE child effects, and requires `/me` before exposing protected UI.
+  Matching authenticated 401 clears auth. 403 does not imply revocation; `/me` 403 locks verification.
+  Network/5xx locks UI and retains recoverable credentials, with explicit retry/logout and no retry loop.
+  Public catalog reads omit bearer credentials and remain public.
+- **Browser-close limitation:** browsers may restore sessionStorage, duplicate tabs or preserve a
+  process across window closure. Exact close detection is not claimed. Restored credentials must pass
+  `/me` and both server deadlines; reopening within the valid idle window can still verify successfully.
+  A hostile authenticated client can emulate activity calls; the independent one-hour absolute limit
+  bounds that behavior. sessionStorage remains exposed to same-origin XSS (not an HttpOnly cookie).
+  No cookies were introduced; existing bearer-only CORS/CSRF model is unchanged.
+- Only account auth keys are cleared. Account-scoped v4 carts remain saved under their owner.
+  Protected checkout is stopped on expiry; reauthentication retains selection/booking-id hints and
+  re-fetches server ownership/capabilities before continuation. Different accounts cannot reuse private
+  booking data. PayOS return parameters remain untrusted hints until a backend status read succeeds.
+  No booking/payment cancellation, amount calculation, gateway mutation or reconciliation logic changed.
+- Onboarding uses ONE versioned `beautylink_onboarding_v1` record with `completedAt`, location id,
+  canonical city name and category. Reads/category changes do not renew the 24-hour deadline.
+  Exact deadline timer plus focus/visibility/storage reconciliation resets all five memory fields together.
+  Legacy/corrupt/future/expired selections are cleared deterministically, then options are validated
+  against current location/category APIs. Global cache defaults and unrelated preferences are unchanged.
+  Automatic modal is home-only, includes logged-in users, excludes active booking/checkout/payment return.
+  Expiring onboarding does not revoke auth. Failed option loading offers retry, never fabricated IDs.
+
+### Files and purpose
+
+- Backend enforcement: `auth/{AuthenticationSessions,JwtService,JwtAuthenticationFilter}.java`,
+  `model/AuthenticationSession.java`, `repository/AuthenticationSessionRepository.java`,
+  `controller/SessionController.java`, `service/AuthService.java`.
+- Additive DDL: `backend/src/main/resources/db/migration/mysql/V20261024_01__authentication_sessions.sql`.
+- Frontend: `App.tsx`, `components/{AuthPage,BookingsPage,PaymentContinuationDialog,LocationSelectModal}.tsx`,
+  `hooks/useSessionLifecycle.ts`, `lib/{authSession,onboarding}.ts`, `services/beautyApi.ts`, `store/beautyStore.ts`.
+- Backend tests: `Authentication{SessionsTest,SessionIntegrationTest,SessionMigrationTest}.java`,
+  `TestJwtFactory.java`, `AuthServiceTest.java`, `JwtIdentityTest.java`,
+  `RegistrationVerificationTransactionTest.java` (mock unrelated external image gateway, retain OTP assertions).
+- Frontend tests: `authSession.test.ts`, `sessionLifecycle.test.ts`, `onboardingExpiry.test.ts`,
+  `sessionFixtures.ts`, `cartState.test.ts`, `paymentContinuation.test.ts`, `publicImageUpload.test.ts`.
+  The latter existing tests now establish valid session fixtures; business assertions are retained.
+- `.github/workflows/ci.yml`: add only the isolated authentication-session DDL test to existing MySQL job.
+  This validates table/FK creation and preservation of pre-existing users on loopback test DB only.
+  `DEPLOYMENT.md` and `CODEX_HANDOFF.md`: candidate evidence and release gates, no runtime settings.
+
+### Verification evidence and outstanding gates
+
+Java 21.0.11, Maven 3.9.12; no production DB/services used. Commands from `backend`:
+
+```powershell
+# Standard required regression command (Linux CI must pass before merge):
+mvn --batch-mode --no-transfer-progress verify
+# Windows Mockito agent is test-JVM-only; do not add it to Railway/POM:
+mvn --batch-mode --no-transfer-progress `
+  '-Dtest=AuthenticationSessionsTest,AuthenticationSessionIntegrationTest,AuthenticationSessionMigrationTest,AuthServiceTest,JwtIdentityTest,GoogleAuthIntegrationTest,RegistrationVerificationServiceTest,RegistrationVerificationTransactionTest,PasswordResetServiceTest' `
+  '-Dspring.main.lazy-initialization=true' `
+  '-DargLine=-javaagent:C:/Users/NHATAN~1/.m2/repository/org/mockito/mockito-core/5.17.0/mockito-core-5.17.0.jar' test
+```
+
+Focused result: **45 passed, 0 failures/errors, 1 skipped** (MySQL migration: no isolated target).
+Real JWT/filter/MockMvc/H2 tests cover four roles, exact 10-minute boundary, non-renewing GET,
+activity, revocation, missing/unknown/wrong-owner sid, anonymous/expired JWT and profile deadline retention.
+Google integration, real EMAIL verification/registration transaction/supplier registration and password
+reset tests retain their checks. External OTP delivery/image/Google verifier mocks do not test live providers.
+Lazy initialization avoids constructing unused Windows HTTP clients; auth/OTP paths themselves execute.
+
+Frontend: `npm test` **93 passed**, `npm run lint` (TypeScript) and `npm run build` PASS.
+Tests cover 401/403/500/offline, restored-tab first render, sleep, cross-tab hints, late responses,
+account switch/cart isolation, checkout double submit/ownership, exact 24h timer/visibility/tabs,
+legacy/corrupt selections, validated options, logged-in user and critical-flow modal exclusion.
+Known Zod/Rollup annotation warnings remain; no new dependency was added.
+
+Full local `mvn verify` was attempted and is **NOT PASS**: 374 cases, 160 passed,
+211 setup errors, 3 opt-in MySQL cases skipped, zero assertion failures. Windows Java loopback
+`SocketException: Invalid argument: connect` / `Unable to establish loopback connection`
+prevents unrelated JDK HTTP/Cloudinary test contexts from starting. See ignored
+`backend/target/session-full-verify-final.log`, focused `session-final-focused.log`, and surefire reports.
+Do not treat focused success as full regression success. Docker daemon unavailable; real browser,
+isolated MySQL DDL/locking, full Linux CI, live OAuth/Resend and production smoke remain NOT VERIFIED.
+No application source was changed to conceal this machine restriction and no test was disabled.
+
+### Approval-required deployment and rollback checklist
+
+1. Review exact feature diff and obtain a successful full Java/frontend CI and isolated MySQL migration
+   run on that exact SHA. Run staging browser session/checkout/payment-return smoke without real money.
+2. Confirm a usable recent backup/restore. Apply the additive SQL once on staging; check table,
+   expiry index, account FK and existing account/booking/payment counts. Production DDL needs approval.
+   SQL files are not auto-run by Flyway (not installed); do not rely on Hibernate `update` as release evidence.
+3. Keep JWT secret, Google/OTP/PayOS/CORS values unchanged. **No new Railway/Vercel variable is required**;
+   JWT_EXPIRATION_MS remains supported but is capped at one hour. Do not rotate secrets to revoke sessions.
+4. Hold frontend promotion. Approve/apply production DDL, deploy backend first and verify health,
+   login for all roles, expired/revoked token 401, non-renewing polling, activity and existing webhook
+   availability. Old JWTs lacking sid intentionally require reauthentication; communicate this interruption.
+   Old frontend has no activity heartbeat: keep mixed-version window short and then promote frontend.
+5. Verify frontend SHA, forced legacy reauth, network lock/retry, idle/sleep/multiple tabs,
+   owner carts, checkout reauth/ownership, nonfinancial payment return and 24h onboarding in staging.
+   Do not create production bookings/payments or alter production data as a smoke shortcut.
+6. Rollback code/images only to a reviewed **session-enforcing** compatible build; retain the new table
+   and existing rows. Do not restore production DB or revert to stateless JWT enforcement just to restore
+   login convenience. Stop rollout on session/ownership regression; preserve server booking/payment records.
+   Expired session-row retention/cleanup is an operator maintenance decision, not a deletion in this patch.
+
+No merge, deployment, production configuration mutation or production migration was performed for this task.

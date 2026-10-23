@@ -38,8 +38,8 @@ import {
 } from '../data/mockData';
 import { cache } from '../lib/cache';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
+import { clearSession, getSessionToken, installToken, peekAccessToken, sessionSnapshot, setSessionPhase, sessionCredentialEpoch } from '../lib/authSession';
 
-const TOKEN_KEY = 'beautylink_access_token';
 
 export interface PublicReviewPage {
   content: Array<{ id: number; targetType: 'SERVICE' | 'SUPPLIER'; rating: number; comment: string | null; reviewerDisplayName: string; serviceId: number; serviceName: string; createdAt: string }>;
@@ -105,42 +105,55 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
+    const publicAuth = /\/auth\/(login|google|register|register-supplier|password-reset|registration-verification)(\/|$)/.test(config.url ?? '');
+    if (publicAuth) { delete config.headers.Authorization; return config; }
+    const publicRead = config.method === 'get' && /\/(v1\/(locations|categories|services|suppliers|homepage)|products)(\/|$)/.test(config.url ?? '');
+    if (publicRead) { delete config.headers.Authorization; return config; }
+    if (config.url?.endsWith('/auth/session/logout') && config.headers.Authorization) return config;
     const token = getAccessToken();
     if (token) {
+      const phase = sessionSnapshot().phase;
+      if (phase !== 'verified' && !/\/auth\/(me$|session\/)/.test(config.url ?? '')) {
+        throw new axios.CanceledError('Vui lòng xác minh lại phiên đăng nhập.');
+      }
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      throw new axios.CanceledError('Phiên đăng nhập đã hết hạn.');
     }
   }
   return config;
 });
 
-export function setAccessToken(token: string, rememberMe = false) {
-  if (typeof window !== 'undefined') {
-    if (rememberMe) {
-      sessionStorage.removeItem(TOKEN_KEY);
-      localStorage.setItem(TOKEN_KEY, token);
-    } else {
-      localStorage.removeItem(TOKEN_KEY);
-      sessionStorage.setItem(TOKEN_KEY, token);
-    }
+apiClient.interceptors.response.use(response => response, error => {
+  const authorization = error.config?.headers?.Authorization;
+  if (error.response?.status === 401 && typeof authorization === 'string'
+    && authorization === `Bearer ${peekAccessToken()}`) clearSession();
+  else if (typeof authorization === 'string' && authorization === `Bearer ${peekAccessToken()}`
+    && (!error.response || error.response.status >= 500)) {
+    const token = peekAccessToken(); if (token) setSessionPhase('locked', token);
   }
+  return Promise.reject(error);
+});
+
+export function setAccessToken(token: string, rememberMe = false) {
+  // Kept as a compatible argument for old callers; MVP persistent login is disabled.
+  void rememberMe;
+  if (typeof window !== 'undefined') installToken(token);
 }
 
 export function clearAccessToken() {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(TOKEN_KEY);
-  }
+  if (typeof window !== 'undefined') clearSession();
 }
 
 export function getAccessToken(): string | null {
   if (typeof window !== 'undefined') {
-    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+    return getSessionToken();
   }
   return null;
 }
 
 export function hasPersistentSession(): boolean {
-  return typeof window !== 'undefined' && Boolean(localStorage.getItem(TOKEN_KEY));
+  return false;
 }
 
 export function getApiErrorMessage(err: unknown, defaultMessage = 'Đã xảy ra lỗi. Vui lòng thử lại.'): string {
@@ -545,23 +558,37 @@ export const DEFAULT_HOMEPAGE_SERVICES: BackendService[] = [
   },
 ];
 
+let latestAuthentication = 0;
+function startAuthentication() {
+  const request = ++latestAuthentication, epoch = sessionCredentialEpoch();
+  return (token: string, rememberMe = false) => {
+    if (request !== latestAuthentication || epoch !== sessionCredentialEpoch()) throw new axios.CanceledError('Yêu cầu đăng nhập cũ đã bị hủy.');
+    setAccessToken(token, rememberMe);
+  };
+}
 export const beautyApi = {
+  async sessionActivity(): Promise<void> { await apiClient.post('/v1/auth/session/activity'); },
+  async logoutSession(token: string): Promise<void> {
+    await apiClient.post('/v1/auth/session/logout', {}, { headers: { Authorization: `Bearer ${token}` } });
+  },
   // ==========================================
   // Auth & User Profile
   // ==========================================
   async login(identifier: string, password: string, rememberMe = false): Promise<{ user: any; accessToken: string }> {
+    const accept = startAuthentication();
     const res = await unwrap<{ user: any; accessToken: string }>(
       apiClient.post('/v1/auth/login', { identifier, password })
     );
     if (res?.accessToken) {
-      setAccessToken(res.accessToken, rememberMe);
+      accept(res.accessToken, rememberMe);
     }
     return res;
   },
 
   async googleLogin(credential: string, rememberMe = false): Promise<{ user: any; accessToken: string }> {
+    const accept = startAuthentication();
     const res = await unwrap<{ user: any; accessToken: string }>(apiClient.post('/v1/auth/google', { credential }));
-    if (res?.accessToken) setAccessToken(res.accessToken, rememberMe);
+    if (res?.accessToken) accept(res.accessToken, rememberMe);
     return res;
   },
 
@@ -582,21 +609,23 @@ export const beautyApi = {
   },
 
   async register(data: { fullName: string; phone: string; email: string; password: string; gender: 'MALE' | 'FEMALE' | 'OTHER'; dateOfBirth: string; verificationToken: string }, rememberMe = false): Promise<{ user: any; accessToken: string }> {
+    const accept = startAuthentication();
     const res = await unwrap<{ user: any; accessToken: string }>(
       apiClient.post('/v1/auth/register', data)
     );
     if (res?.accessToken) {
-      setAccessToken(res.accessToken, rememberMe);
+      accept(res.accessToken, rememberMe);
     }
     return res;
   },
 
   async registerSupplier(data: any): Promise<{ auth: { accessToken: string; user: any }; supplier: any; user: any }> {
+    const accept = startAuthentication();
     const response = await unwrap<{ auth: { accessToken: string; user: any }; supplier: any }>(
       apiClient.post('/v1/auth/register-supplier', data, { timeout: 30000 })
     );
     if (response?.auth?.accessToken) {
-      setAccessToken(response.auth.accessToken);
+      accept(response.auth.accessToken);
     }
     return { ...response, user: response.auth.user };
   },
@@ -612,8 +641,10 @@ export const beautyApi = {
     dateOfBirth?: string;
     confirmBookingContact?: boolean;
   }): Promise<{ user: any; accessToken: string }> {
+    const originalToken = getAccessToken();
     const persistent = hasPersistentSession();
     const res = await unwrap<{ user: any; accessToken: string }>(apiClient.patch('/v1/auth/me/profile', data));
+    if (!originalToken || originalToken !== getAccessToken()) throw new axios.CanceledError('Phiên đã thay đổi. Vui lòng đăng nhập lại.');
     if (res?.accessToken) setAccessToken(res.accessToken, persistent);
     return res;
   },
