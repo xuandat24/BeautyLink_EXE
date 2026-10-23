@@ -653,6 +653,17 @@ The fixture is excluded from the production build entry point. It exercises synt
 and the actual cart store, not real authentication or production API calls. Production verification
 is a separate release step.
 
+## Frontend bundle loading
+
+Standalone supplier, account, booking/checkout, Explore, partner and administrative pages are
+loaded via explicit React dynamic imports. `PageLoadBoundary` provides loading and recoverable
+download-error UI. No Vite warning threshold was raised and business/API logic is unchanged.
+Local verification on 2026-10-23: main JS reduced from ~592.5 kB to 350.24 kB (gzip 90.49 kB);
+all chunks are below 500 kB. 79 tests, TypeScript and production build passed. Built-preview
+navigation to supplier registration showed loading then rendered the actual lazy page.
+The preview had no backend attached, so catalog/location APIs were not verified in that smoke.
+These measurements are local, not evidence that Vercel has deployed the change.
+
 ## License
 
 No open-source license has been selected. Unless the project owner adds one, the source remains under the owner's default copyright rights.

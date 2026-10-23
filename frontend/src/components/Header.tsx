@@ -202,10 +202,12 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-pink-100 shadow-[0_2px_15px_-3px_rgba(244,114,182,0.12)]">
       {/* Main Navigation Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3">
-        <div className="flex items-center justify-between gap-3 md:gap-5">
+        <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-3 md:gap-5">
           {/* Logo BeautyLink */}
           <div className="flex items-center gap-3 shrink-0">
-            <a href="#" className="flex items-center gap-2 group">
+            <a href="/" aria-label="BeautyLink — Trang chủ" className="flex items-center gap-2 group">
+              <img src="/beautylink-icon.png" alt="" width={44} height={44}
+                className="h-9 w-9 sm:h-11 sm:w-11 shrink-0 object-contain" />
               <div className="flex flex-col">
                 <div className="flex items-baseline tracking-tight">
                   <span className="text-xl sm:text-2xl font-black text-slate-800">
@@ -216,7 +218,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                   <span className="w-1.5 h-1.5 rounded-full bg-[#EB0F51] ml-0.5" />
                 </div>
-                <span className="text-[10px] text-[#B42D58] font-semibold tracking-wider uppercase -mt-1 hidden sm:block">
+                <span className="text-[8px] sm:text-[10px] text-[#B42D58] font-semibold tracking-wider uppercase -mt-1 whitespace-nowrap">
                   Sắc Đẹp & Spa Uy Tín
                 </span>
               </div>
@@ -375,7 +377,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          <div className="flex flex-wrap md:flex-nowrap justify-end max-w-full items-center gap-2 sm:gap-2.5 shrink-0">
             {/* Trở thành đối tác */}
             <button
               onClick={onOpenPartnerModal}

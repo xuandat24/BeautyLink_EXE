@@ -12,18 +12,11 @@ import { Footer } from './components/Footer';
 
 // Pages
 import { CategoryServicePage } from './components/CategoryServicePage';
-import { SupplierDashboard } from './components/SupplierDashboard';
-import { SupplierRegisterPage } from './components/SupplierRegisterPage';
-import { BookingsPage } from './components/BookingsPage';
-import { ReportsPage } from './components/ReportsPage';
-import { AdminCustomersPage } from './components/AdminCustomersPage';
 import type { AdminSection } from './components/admin/AdminNav';
 import { AuthPage } from './components/AuthPage';
-import { AccountPage } from './components/AccountPage';
-import { CheckoutPage } from './components/CheckoutPage';
 import { continuationDestination, setPaymentBookingId } from './lib/paymentNavigation';
-import { FilterExplorePage, ExploreContext } from './components/FilterExplorePage';
-import { PartnerDetailPage } from './components/PartnerDetailPage';
+import type { ExploreContext } from './components/FilterExplorePage';
+import { PageLoadBoundary } from './components/PageLoadBoundary';
 
 // Modals
 import { BookingModal } from './components/BookingModal';
@@ -35,6 +28,15 @@ import { ViewAllServicesModal, ViewAllContext } from './components/ViewAllServic
 import { FavoriteToast, FavoriteToastInfo } from './components/FavoriteToast';
 
 const AdminDashboardPage = React.lazy(() => import('./components/admin/AdminDashboardPage').then((module) => ({ default: module.AdminDashboardPage })));
+const SupplierDashboard = React.lazy(() => import('./components/SupplierDashboard').then(module => ({ default: module.SupplierDashboard })));
+const SupplierRegisterPage = React.lazy(() => import('./components/SupplierRegisterPage').then(module => ({ default: module.SupplierRegisterPage })));
+const BookingsPage = React.lazy(() => import('./components/BookingsPage').then(module => ({ default: module.BookingsPage })));
+const ReportsPage = React.lazy(() => import('./components/ReportsPage').then(module => ({ default: module.ReportsPage })));
+const AdminCustomersPage = React.lazy(() => import('./components/AdminCustomersPage').then(module => ({ default: module.AdminCustomersPage })));
+const AccountPage = React.lazy(() => import('./components/AccountPage').then(module => ({ default: module.AccountPage })));
+const CheckoutPage = React.lazy(() => import('./components/CheckoutPage').then(module => ({ default: module.CheckoutPage })));
+const FilterExplorePage = React.lazy(() => import('./components/FilterExplorePage').then(module => ({ default: module.FilterExplorePage })));
+const PartnerDetailPage = React.lazy(() => import('./components/PartnerDetailPage').then(module => ({ default: module.PartnerDetailPage })));
 
 // Central Store & Types
 import { useBeautyStore } from './store/beautyStore';
@@ -192,7 +194,7 @@ type AppView =
   | 'filter-explore'
   | 'partner-detail';
 
-export default function App() {
+function BeautyLinkApp() {
   const {
     selectedCity,
     selectedLocationId,
@@ -1357,4 +1359,8 @@ export default function App() {
       />
     </div>
   );
+}
+
+export default function App() {
+  return <PageLoadBoundary><BeautyLinkApp /></PageLoadBoundary>;
 }
