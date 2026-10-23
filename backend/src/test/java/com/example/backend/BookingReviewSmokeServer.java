@@ -47,6 +47,12 @@ public class BookingReviewSmokeServer {
         var users = context.getBean(UserAccountRepository.class);
         var payments = context.getBean(PaymentTransactionRepository.class);
         new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
+            // Dedicated mobile login fixture: preserve password whitespace through real BCrypt/JWT auth.
+            var mobile = new UserAccount(); mobile.setFullName("Mobile Browser Test");
+            mobile.setPhone("0901234567"); mobile.setEmail("mobile-browser@example.com");
+            mobile.setPasswordHash(context.getBean(org.springframework.security.crypto.password.PasswordEncoder.class)
+                    .encode("Synthetic Mobile 123! "));
+            users.saveAndFlush(mobile);
             var offering = services.findAll().stream().filter(s -> !people.findBySupplierIdAndActiveTrue(s.getSupplier().getId()).isEmpty()).findFirst().orElseThrow();
             String[] codes = {"SMOKE-UNPAID", "SMOKE-FUTURE-DEPOSIT", "SMOKE-FUTURE-FULL", "SMOKE-PAST-DEPOSIT", "SMOKE-PAST-FULL", "SMOKE-CANCELLED", "SMOKE-REFUNDED"};
             for (int i = 0; i < codes.length; i++) {

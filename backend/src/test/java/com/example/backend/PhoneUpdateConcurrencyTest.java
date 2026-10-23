@@ -1,6 +1,9 @@
 package com.example.backend;
 
 import com.example.backend.dto.ApiDtos.UpdatePhoneRequest;
+import com.example.backend.auth.JwtAuthenticationFilter;
+import com.example.backend.auth.JwtService;
+import com.example.backend.repository.AuthenticationSessionRepository;
 import com.example.backend.exception.ApiException;
 import com.example.backend.model.UserAccount;
 import com.example.backend.repository.UserAccountRepository;
@@ -9,6 +12,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.core.context.SecurityContextHolder;
+import jakarta.servlet.ServletException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -20,6 +28,9 @@ import static org.junit.jupiter.api.Assertions.*;
 class PhoneUpdateConcurrencyTest {
     @Autowired UserAccountRepository users;
     @Autowired AuthService auth;
+    @Autowired JwtService jwt;
+    @Autowired JwtAuthenticationFilter filter;
+    @Autowired AuthenticationSessionRepository sessions;
 
     @Test
     void twoAccountsCannotClaimSamePhoneAndLoserRetainsOriginalPhone() throws Exception {
@@ -49,13 +60,42 @@ class PhoneUpdateConcurrencyTest {
     }
 
     private int updateAfterBarrier(UserAccount user, String phone, CyclicBarrier barrier) throws Exception {
-        barrier.await(10, TimeUnit.SECONDS);
+        String token = jwt.createToken(user);
+        var issued = jwt.extractClaims(token);
+        var session = sessions.findById(issued.get("sid", String.class)).orElseThrow();
+        var request = new MockHttpServletRequest("PATCH", "/api/v1/auth/me/phone");
+        request.addHeader("Authorization", "Bearer " + token);
+        var result = new AtomicInteger();
         try {
-            auth.updatePhone(user, new UpdatePhoneRequest(phone));
-            return 200;
-        } catch (ApiException error) {
-            if (error.getStatus().value() == 409) assertEquals("PHONE_ALREADY_IN_USE", error.getCode());
-            return error.getStatus().value();
+            // Each executor thread authenticates independently, as a real HTTP request does.
+            // Wait AFTER filtering so both requests hold the original authenticated snapshot.
+            filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> {
+                assertNotNull(SecurityContextHolder.getContext().getAuthentication());
+                try {
+                    barrier.await(10, TimeUnit.SECONDS);
+                    var response = auth.updatePhone(user, new UpdatePhoneRequest(phone));
+                    var replacement = jwt.extractClaims(response.accessToken());
+                    assertEquals(issued.get("sid"), replacement.get("sid"));
+                    assertEquals(issued.getExpiration(), replacement.getExpiration());
+                    var persisted = users.findById(user.getId()).orElseThrow();
+                    assertEquals(phone, persisted.getPhone());
+                    assertFalse(jwt.matchesAccount(issued, persisted), "old phone token is invalidated");
+                    assertTrue(jwt.matchesAccount(replacement, persisted));
+                    assertEquals(session.getLastActivityAt(), sessions.findById(session.getId()).orElseThrow().getLastActivityAt());
+                    result.set(200);
+                } catch (ApiException error) {
+                    if (error.getStatus().value() == 409) assertEquals("PHONE_ALREADY_IN_USE", error.getCode());
+                    result.set(error.getStatus().value());
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new ServletException(error);
+                } catch (BrokenBarrierException | TimeoutException error) {
+                    throw new ServletException(error);
+                }
+            });
+            return result.get();
+        } finally {
+            SecurityContextHolder.clearContext();
         }
     }
 

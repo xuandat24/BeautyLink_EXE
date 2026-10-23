@@ -1,5 +1,48 @@
 # BeautyLink booking/review integration checkpoint
 
+## Latest hotfix checkpoint — session-aware CI fixtures, 2026-10-24
+
+- Base: fetched main `d725ef0bcc8e2ba5bf0bbf86719ea97f15ed980c` (PR #11 merged).
+  Branch: `codex/session-phone-ci-hotfix`, workspace `C:\Temp\beautylink-cloudinary`.
+  No production source, schema, payment, booking or PayOS behavior changed in this hotfix.
+- Root causes: PhoneUpdateConcurrencyTest called AuthService from executor threads without the JWT
+  filter's thread-local SessionIdentity. AuthService correctly refused replacement-token issuance.
+  The mobile browser test returned a fabricated non-JWT token, now correctly rejected by session parsing.
+- Phone race workers now run the real JWT filter before their barrier and clear context in finally.
+  Original 200/409 (different owners) and 200/401 (same owner) assertions remain; replacement sid,
+  expiry, unchanged idle activity and old-token invalidation are also asserted.
+- Two real MockMvc tests add changed-phone/replacement/logout and idle-expired mutation rejection.
+  Mobile Chromium/WebKit now use a dedicated test-classpath H2 account, real BCrypt/login/JWT/profile,
+  and assert logout revocation. Existing exact-password/duplicate-submit assertions remain.
+- Local Java 21 focused regression: **49 PASS, 0 failures/errors/skips**, including phone concurrency,
+  Google, EMAIL registration, password reset, login, logout and expiry. Command:
+  `mvn --batch-mode --no-transfer-progress -Dtest=PhoneUpdateConcurrencyTest,AuthenticationSessionIntegrationTest,AuthenticationSessionsTest,AuthServiceTest,JwtIdentityTest,GoogleAuthIntegrationTest,RegistrationVerificationServiceTest,RegistrationVerificationTransactionTest,PasswordResetServiceTest -Dspring.main.lazy-initialization=true -DargLine=-javaagent:C:/Users/NHATAN~1/.m2/repository/org/mockito/mockito-core/5.17.0/mockito-core-5.17.0.jar test`
+  Log: `backend/target/phone-hotfix-focused.log`. Lazy init and Mockito agent are test-command-only.
+- Full `mvn --batch-mode --no-transfer-progress verify` (same test agent) attempted:
+  **376 cases, 162 passed, 211 context/setup errors, 3 MySQL skips, 0 assertion failures**.
+  Windows JVM still reports `SocketException: Invalid argument: connect` / loopback initialization errors;
+  an IPv4 test-JVM probe did not resolve it. Log: `backend/target/phone-hotfix-full-verify.log`.
+  Do not claim full local verification passed or alter production networking to hide this environment fault.
+- Frontend `npm run lint` and `node --check tests/authMobileSmoke.mjs` PASS; runtime source unchanged.
+- Reviewed CI https://github.com/xuandat24/BeautyLink_EXE/actions/runs/40006746898:
+  PR #11 merge-test ref `6ddf0c99f08d6602fa90f60ca6e64458a1e9a5b6`, not final main SHA.
+  Backend: 374 cases, only the 2 phone fixture errors, 3 migration skips; Docker step consequently skipped.
+  MySQL 8.4.13: **147 PASS / 0 skips**, including unchanged AuthenticationSessionMigrationTest and SQL.
+  Frontend PASS. Real booking/browser smoke PASS; subsequent mobile auth fixture timed out at line 44.
+  This is baseline evidence, not final-hotfix CI. No further baseline regression rerun needed.
+- Local Docker startup attempted; desktop-linux context metadata and Linux engine pipe unavailable.
+  No isolated MySQL or browser rerun claimed locally. Unchanged SQL has isolated CI execution evidence;
+  final hotfix still needs all four CI jobs, including mobile Chromium/WebKit and MySQL.
+- Migration/release: follow DEPLOYMENT.md's session rollout checklist. Check whether production already
+  has authentication_sessions before applying the non-idempotent additive SQL; validate columns/index/FK,
+  never blindly rerun CREATE TABLE. No new variables or hotfix migration. Old no-sid JWTs require login.
+  Hold frontend, approve any necessary DDL, backend first then frontend; keep the session-enforcing
+  rollback build/table and do not restore production DB or roll back to stateless JWT enforcement.
+- NEXT_ACTION: inspect/push this hotfix and open its draft PR; wait for exact-head backend/frontend/
+  MySQL/browser checks. If PR connector returns 403, owner opens main...codex/session-phone-ci-hotfix.
+  Do not merge/deploy while required checks fail. No production operations authorized by this hotfix.
+- DO_NOT_REPEAT: PR #11 implementation/merge, seeders, production backup/restore or payment redesign.
+
 ## Latest task checkpoint — auth/session + 24h onboarding, 2026-10-24
 
 - Working directory `C:\Temp\beautylink-cloudinary`, branch `codex/session-onboarding-expiry` from fetched

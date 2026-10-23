@@ -112,4 +112,42 @@ class AuthenticationSessionIntegrationTest {
         String expired = Jwts.builder().claims(original).expiration(Date.from(Instant.now().minusSeconds(60))).signWith(key).compact();
         mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + expired)).andExpect(status().isUnauthorized());
     }
+
+    @Test void changedPhoneRetainsSessionInvalidatesOldTokenAndLogoutRevokesReplacement() throws Exception {
+        var user = account(Role.CUSTOMER);
+        String token = jwt.createToken(user); var original = jwt.extractClaims(token);
+        String sid = original.get("sid", String.class);
+        var session = rows.findById(sid).orElseThrow();
+        Instant activity = session.getLastActivityAt(); long count = rows.count();
+        String replacement = json.readTree(mvc.perform(patch("/api/v1/auth/me/phone")
+                .header("Authorization", "Bearer " + token).contentType("application/json")
+                .content("{\"phone\":\"0399999998\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("accessToken").asText();
+        assertEquals("0399999998", users.findById(user.getId()).orElseThrow().getPhone());
+        assertEquals(sid, jwt.extractClaims(replacement).get("sid"));
+        assertEquals(original.getExpiration(), jwt.extractClaims(replacement).getExpiration());
+        assertEquals(count, rows.count(), "profile edits must not create a new session");
+        assertEquals(activity, session.getLastActivityAt());
+        mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + token)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + replacement))
+                .andExpect(status().isOk()).andExpect(jsonPath("id").value(user.getId()))
+                .andExpect(jsonPath("phone").value("0399999998"));
+        mvc.perform(post("/api/v1/auth/session/logout").header("Authorization", "Bearer " + replacement)).andExpect(status().isNoContent());
+        mvc.perform(patch("/api/v1/auth/me/phone").header("Authorization", "Bearer " + replacement)
+                .contentType("application/json").content("{\"phone\":\"0399999997\"}"))
+                .andExpect(status().isUnauthorized());
+        assertEquals("0399999998", users.findById(user.getId()).orElseThrow().getPhone());
+    }
+
+    @Test void idleExpiryRejectsPhoneMutationWithoutRenewingSession() throws Exception {
+        var user = account(Role.CUSTOMER); String token = jwt.createToken(user);
+        var session = rows.findById(jwt.extractClaims(token).get("sid", String.class)).orElseThrow();
+        Instant activity = session.getLastActivityAt();
+        clock.time = activity.plusSeconds(600);
+        mvc.perform(patch("/api/v1/auth/me/phone").header("Authorization", "Bearer " + token)
+                .contentType("application/json").content("{\"phone\":\"0399999998\"}"))
+                .andExpect(status().isUnauthorized());
+        assertEquals("0399999999", users.findById(user.getId()).orElseThrow().getPhone());
+        assertEquals(activity, session.getLastActivityAt());
+    }
 }
