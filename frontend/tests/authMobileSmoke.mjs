@@ -13,6 +13,8 @@ for (const [label, browserType, device] of targets) {
   const context = await browser.newContext(device);
   const page = await context.newPage();
   let loginRequests = 0;
+  let issuedToken;
+  let signedInUser;
   const expectedPassword = 'Synthetic Mobile 123! ';
   try {
     await page.route('**/api/v1/auth/login', async route => {
@@ -21,10 +23,16 @@ for (const [label, browserType, device] of targets) {
       assert.equal(body.identifier, '0901234567');
       assert.equal(body.password, expectedPassword);
       await new Promise(resolve => setTimeout(resolve, 100));
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-        accessToken: 'synthetic-browser-test-token',
-        user: { id: 7001, fullName: 'Mobile Browser Test', phone: '0901234567', role: 'CUSTOMER' },
-      }) });
+      // The isolated smoke server owns this synthetic account. Do not fake a JWT or /me.
+      const response = await route.fetch();
+      assert.equal(response.status(), 200);
+      const auth = await response.json();
+      issuedToken = auth.accessToken;
+      signedInUser = auth.user;
+      assert.equal(typeof issuedToken, 'string');
+      assert.equal(signedInUser.phone, '0901234567');
+      assert.equal(signedInUser.role, 'CUSTOMER');
+      await route.fulfill({ response });
     });
     await page.goto('http://127.0.0.1:5173/#login');
     const identifier = page.locator('#customer-identifier');
@@ -43,7 +51,13 @@ for (const [label, browserType, device] of targets) {
     await submit.dblclick();
     await page.waitForFunction(() => location.hash !== '#login');
     assert.equal(loginRequests, 1);
-    console.log(`PASS: ${label} preserves the exact controlled password through show/hide and blocks duplicate submit.`);
+    const headers = { Authorization: `Bearer ${issuedToken}` };
+    const me = await context.request.get('http://127.0.0.1:5173/api/v1/auth/me', { headers });
+    assert.equal(me.status(), 200);
+    assert.equal((await me.json()).id, signedInUser.id);
+    assert.equal((await context.request.post('http://127.0.0.1:5173/api/v1/auth/session/logout', { headers })).status(), 204);
+    assert.equal((await context.request.get('http://127.0.0.1:5173/api/v1/auth/me', { headers })).status(), 401);
+    console.log(`PASS: ${label} preserves exact password, blocks duplicate submit, and verifies real Spring session/profile/logout revocation.`);
   } finally {
     await browser.close();
   }
