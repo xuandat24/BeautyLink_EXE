@@ -26,6 +26,7 @@ interface HeaderProps {
   onSearch: (query: string, filters?: SearchFilters) => void;
   selectedCity?: string;
   currentUser?: CurrentUser | null;
+  authPending?: boolean;
   onLogout?: () => void;
   unreadNotificationsCount?: number;
   notifications?: PushNotification[];
@@ -57,6 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSearch,
   selectedCity,
   currentUser,
+  authPending = false,
   onLogout,
   unreadNotificationsCount = 0,
   notifications,
@@ -387,7 +389,9 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {/* User Profile / Login & Register */}
-            {currentUser ? (
+            {authPending ? (
+              <span role="status" className="px-3 py-1.5 text-xs font-semibold text-slate-500">Tài khoản…</span>
+            ) : currentUser ? (
               <div className="flex items-center gap-1 sm:gap-1.5">
                 <button
                   type="button"
@@ -656,7 +660,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {!currentUser && (
+          {authPending && <p role="status" className="text-xs text-slate-500">Đang xác minh tài khoản…</p>}
+          {!currentUser && !authPending && (
             <div className="flex gap-2 pt-2 border-t border-pink-50">
               <button
                 onClick={() => {

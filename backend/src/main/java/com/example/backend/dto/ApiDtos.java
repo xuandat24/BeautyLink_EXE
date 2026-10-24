@@ -40,7 +40,8 @@ public final class ApiDtos {
     public record ConfirmPasswordResetResponse(String message) {}
     public record UserResponse(Long id, String fullName, String phone, String email, Gender gender,
                                LocalDate dateOfBirth, Role role, int loyaltyPoints,
-                               boolean bookingContactConfirmed) {}
+                               boolean bookingContactConfirmed, String avatarUrl) {}
+    public record UpdateAvatarRequest(@NotBlank @Size(max = 1_500_000) String image) {}
     public record AdminCustomerResponse(Long id, String fullName, Gender gender, LocalDate dateOfBirth,
                                         String phone, String email, long bookingsPlaced, long paidBookings,
                                         long completedBookings, Instant lastBookingAt,

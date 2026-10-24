@@ -53,7 +53,7 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: mvn --batch-mode --no-transfer-progress -Dtest=BookingReviewReleaseTest,PaymentCancellationSafetyTest,GoogleSigninMigrationTest,WorkforceMigrationTest,AuthenticationSessionMigrationTest verify
+      - run: mvn --batch-mode --no-transfer-progress -Dtest=BookingReviewReleaseTest,PaymentCancellationSafetyTest,GoogleSigninMigrationTest,WorkforceMigrationTest,AuthenticationSessionMigrationTest,CustomerAvatarMigrationTest verify
 
   frontend:
     runs-on: ubuntu-latest

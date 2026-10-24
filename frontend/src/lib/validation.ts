@@ -123,7 +123,8 @@ export const avatarUrlSchema = z
   .trim()
   .max(2048, 'Đường dẫn ảnh tối đa 2048 ký tự')
   .url('Đường dẫn ảnh không hợp lệ')
-  .refine((value) => /^https?:\/\//i.test(value), 'Ảnh phải dùng đường dẫn HTTP hoặc HTTPS');
+  .refine((value) => { try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password; } catch { return false; } },
+    'Ảnh phải dùng đường dẫn HTTPS hợp lệ, không chứa thông tin đăng nhập');
 
 export const communityCommentSchema = z
   .string()

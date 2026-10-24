@@ -101,13 +101,13 @@ public class AuthService {
     public AuthResponse response(UserAccount user) {
         return new AuthResponse(jwt.createToken(user), "Bearer", jwt.getExpirationMs(), toUser(user));
     }
-    private AuthResponse replacementResponse(UserAccount user) {
+    AuthResponse replacementResponse(UserAccount user) {
         String token = jwt.replaceToken(user);
         return new AuthResponse(token, "Bearer", Math.max(0, jwt.extractClaims(token).getExpiration().getTime() - System.currentTimeMillis()), toUser(user));
     }
     public UserResponse toUser(UserAccount user) {
         return new UserResponse(user.getId(), user.getFullName(), user.getPhone(), user.getEmail(), user.getGender(),
-                user.getDateOfBirth(), user.getRole(), user.getLoyaltyPoints(), BookingContactPolicy.isReady(user));
+                user.getDateOfBirth(), user.getRole(), user.getLoyaltyPoints(), BookingContactPolicy.isReady(user), user.getAvatarUrl());
     }
     public static String normalizePhone(String value) { return value == null ? null : value.replaceAll("[\\s.-]", ""); }
     public static boolean hasValidBcryptHash(String value) { return value != null && value.matches("^\\$2[aby]\\$[0-3][0-9]\\$[./A-Za-z0-9]{53}$"); }

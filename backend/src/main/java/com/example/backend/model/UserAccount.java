@@ -19,6 +19,7 @@ public class UserAccount {
     @Enumerated(EnumType.STRING) @Column(length = 20) private Gender gender;
     @Column(name = "date_of_birth") private LocalDate dateOfBirth;
     @Column(name = "password_hash") private String passwordHash;
+    @Lob @Column(name = "avatar_url", columnDefinition = "LONGTEXT") private String avatarUrl;
     @Column(name = "booking_contact_confirmed_phone", length = 20) private String bookingContactConfirmedPhone;
     @Column(name = "booking_contact_confirmed_at") private Instant bookingContactConfirmedAt;
     @Column(name = "booking_contact_confirmation_required", nullable = false) private boolean bookingContactConfirmationRequired = false;
@@ -39,6 +40,7 @@ public class UserAccount {
     public Gender getGender() { return gender; } public void setGender(Gender gender) { this.gender = gender; }
     public LocalDate getDateOfBirth() { return dateOfBirth; } public void setDateOfBirth(LocalDate dateOfBirth) { this.dateOfBirth = dateOfBirth; }
     public String getPasswordHash() { return passwordHash; } public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public String getAvatarUrl() { return avatarUrl; } public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
     public String getBookingContactConfirmedPhone() { return bookingContactConfirmedPhone; } public void setBookingContactConfirmedPhone(String value) { this.bookingContactConfirmedPhone = value; }
     public Instant getBookingContactConfirmedAt() { return bookingContactConfirmedAt; } public void setBookingContactConfirmedAt(Instant value) { this.bookingContactConfirmedAt = value; }
     public boolean isBookingContactConfirmationRequired() { return bookingContactConfirmationRequired; } public void setBookingContactConfirmationRequired(boolean value) { this.bookingContactConfirmationRequired = value; }

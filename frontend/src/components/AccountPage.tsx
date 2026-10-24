@@ -155,10 +155,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         confirmBookingContact: false,
       });
       const savedUser = currentUser
-        ? { ...currentUser, ...mapBackendUser(response.user), avatar: normalizedProfile.avatar }
+        ? { ...currentUser, ...mapBackendUser(response.user) }
         : mapBackendUser(response.user);
       setCurrentUser(savedUser);
-      const savedProfile = { ...normalizedProfile, email: savedUser.email || normalizedProfile.email };
+      const savedProfile = { ...normalizedProfile, email: savedUser.email || normalizedProfile.email, avatar: savedUser.avatar };
       setProfile(savedProfile);
       setProfileForm(savedProfile);
       setIsEditingProfile(false);
@@ -171,16 +171,12 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     }
   };
 
-  const handleUpdateAvatar = (newAvatarUrl: string) => {
-    const updated = { ...profile, avatar: newAvatarUrl };
-    setProfile(updated);
-    setProfileForm({ ...profileForm, avatar: newAvatarUrl });
-    if (currentUser) {
-      setCurrentUser({
-        ...currentUser,
-        avatar: newAvatarUrl,
-      });
-    }
+  const handleUpdateAvatar = async (newAvatarUrl: string) => {
+    const response = await beautyApi.updateCustomerAvatar(newAvatarUrl);
+    const saved = mapBackendUser(response.user);
+    setProfile(value => ({ ...value, avatar: saved.avatar }));
+    setProfileForm(value => ({ ...value, avatar: saved.avatar }));
+    setCurrentUser(saved);
     setProfileSuccessMsg('Cập nhật ảnh đại diện thành công!');
     setTimeout(() => setProfileSuccessMsg(''), 3000);
   };
@@ -282,6 +278,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   onClick={() => setIsAvatarModalOpen(true)}
                   className="absolute inset-0 rounded-3xl bg-black/45 text-white opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center transition cursor-pointer backdrop-blur-[2px]"
                   title="Đổi ảnh đại diện"
+                  disabled={profileSaving}
                 >
                   <Camera className="w-5 h-5 mb-0.5 text-amber-200" />
                   <span className="text-[10px] font-bold">Đổi ảnh</span>
@@ -305,6 +302,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     onClick={() => setIsAvatarModalOpen(true)}
                     className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition cursor-pointer"
                     title="Cập nhật ảnh đại diện"
+                    disabled={profileSaving}
                   >
                     <Camera className="w-3.5 h-3.5" />
                   </button>
