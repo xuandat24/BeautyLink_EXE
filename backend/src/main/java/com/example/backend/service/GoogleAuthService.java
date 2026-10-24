@@ -44,6 +44,13 @@ public class GoogleAuthService {
                     .map(ExternalIdentity::getUserAccount).orElse(null);
             if (winner != null) return auth.response(requireEligible(winner));
             throw emailCollision();
+        } catch (ApiException collision) {
+            if (!"GOOGLE_ACCOUNT_LINK_REQUIRED".equals(collision.getCode())) throw collision;
+            // The same subject may have won between the first lookup and the email check.
+            UserAccount winner = identities.findByProviderAndProviderSubject(ExternalIdentity.Provider.GOOGLE, verified.subject())
+                    .map(ExternalIdentity::getUserAccount).orElse(null);
+            if (winner != null) return auth.response(requireEligible(winner));
+            throw collision;
         }
     }
 
