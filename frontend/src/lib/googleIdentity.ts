@@ -5,7 +5,7 @@ declare global {
     google?: {
       accounts: {
         id: {
-          initialize(options: { client_id: string; callback: (response: CredentialResponse) => void; auto_select?: boolean; cancel_on_tap_outside?: boolean }): void;
+          initialize(options: { client_id: string; callback: (response: CredentialResponse) => void; auto_select?: boolean; button_auto_select?: boolean; cancel_on_tap_outside?: boolean }): void;
           renderButton(element: HTMLElement, options: Record<string, unknown>): void;
           disableAutoSelect(): void;
         };

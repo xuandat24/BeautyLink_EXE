@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { JSDOM } from 'jsdom';
 import { AuthPage } from '../src/components/AuthPage';
+import { googleButtonOptions } from '../src/components/GoogleSignInButton';
 import { beautyApi, getAuthErrorMessage } from '../src/services/beautyApi';
 
 async function environment() {
@@ -71,12 +72,33 @@ test('mobile login preserves the exact controlled password through visibility to
     assert.equal(password.value, exactPassword);
 
     const submit = document.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    const googleFallback = [...document.querySelectorAll('p')].find(element => element.textContent?.includes('Đăng nhập Google chưa được cấu hình'))!;
+    const separator = [...document.querySelectorAll('span')].find(element => element.textContent === 'Hoặc')!;
+    assert.ok(submit.compareDocumentPosition(separator) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(separator.compareDocumentPosition(googleFallback) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.equal(googleButtonOptions.type, 'icon', 'GIS must not show a personalized account button');
     await act(async () => { submit.click(); submit.click(); });
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0], { identifier: '0901234567', password: exactPassword });
     await act(async () => finish({ user: { id: 1, fullName: 'Mobile Test', role: 'CUSTOMER' }, accessToken: 'test-token' }));
   } finally {
     beautyApi.login = originalLogin;
+    await act(async () => root.unmount());
+    dom.window.close();
+  }
+});
+
+test('registration keeps Google sign-in available below its primary action', async () => {
+  const { dom, root } = await environment();
+  try {
+    await act(async () => root.render(React.createElement(AuthPage, {
+      initialMode: 'register', onBackToHome() {}, onSuccess() {},
+    })));
+    const submit = document.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    const separator = [...document.querySelectorAll('span')].find(element => element.textContent === 'Hoặc')!;
+    assert.ok(submit.compareDocumentPosition(separator) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.match(document.body.textContent ?? '', /Đăng nhập Google chưa được cấu hình/);
+  } finally {
     await act(async () => root.unmount());
     dom.window.close();
   }
