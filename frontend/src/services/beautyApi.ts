@@ -129,6 +129,7 @@ apiClient.interceptors.response.use(response => response, error => {
   if (error.response?.status === 401 && typeof authorization === 'string'
     && authorization === `Bearer ${peekAccessToken()}`) clearSession();
   else if (typeof authorization === 'string' && authorization === `Bearer ${peekAccessToken()}`
+    && /\/auth\/(me$|session\/activity$)/.test(error.config?.url ?? '')
     && (!error.response || error.response.status >= 500)) {
     const token = peekAccessToken(); if (token) setSessionPhase('locked', token);
   }
@@ -635,6 +636,14 @@ export const beautyApi = {
 
   async me(): Promise<any> {
     return unwrap(apiClient.get('/v1/auth/me'));
+  },
+
+  async updateCustomerAvatar(image: string): Promise<{ user: any; accessToken: string }> {
+    const originalToken = getAccessToken();
+    const res = await unwrap<{ user: any; accessToken: string }>(apiClient.patch('/v1/auth/me/avatar', { image }, { timeout: 30000 }));
+    if (!originalToken || originalToken !== getAccessToken()) throw new axios.CanceledError('Phiên đã thay đổi. Vui lòng đăng nhập lại.');
+    if (res?.accessToken) setAccessToken(res.accessToken);
+    return res;
   },
 
   async updateCustomerProfile(data: {

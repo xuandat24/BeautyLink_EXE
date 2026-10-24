@@ -1,5 +1,34 @@
 # BeautyLink booking/review integration checkpoint
 
+## Current checkpoint — profile/session stability, 2026-10-25
+
+- Worktree `C:\Temp\beautylink-profile-session-stability`, branch `codex/profile-session-stability`.
+- Base fetched from `origin/main`: `6451d9a82f565bc058c6f6dbace2460c08919a60` (PR #15 merged).
+  Google lazy-account fix `7361578` is already in main; do not reimplement it. The detached-context
+  Google regression continues to pass. Production exception header/SHA were not accessible here.
+- Confirmed causes: focus/visibility unconditionally changed verified phase to checking, unmounting
+  protected pages; header showed login/register for unresolved identity; all authenticated resource
+  network/5xx failures locked the entire session. Avatar picker only called local state, without a save API/DB field.
+  Ordinary avatar buttons already had `type=button`; no submit/reload defect was found there.
+- User explicitly approved preparing nullable `user_accounts.avatar_url` + API/migration. No production
+  writes/migration, deployment, merge, settings or secrets changes are authorized for this task.
+- Implemented: silent/deduplicated resume verification with expiry enforcement, pending header state,
+  resource-local upload errors, validated avatar save with same-session JWT replacement and persistent `/me` field,
+  modal validation/loading/duplicate guard/error retry, preserving other unsaved profile fields.
+- Local evidence: frontend 98/98 tests, TypeScript and build passed; focused Java 21 auth/avatar 36/36 passed.
+  Full Maven verify attempted: 389 tests, 36 failures +16 errors in existing Windows HTTP suites
+  (MissingResendConfigurationTest, PlatformApiIntegrationTest, CloudinaryImageGatewayTest), 4 isolated-MySQL
+  opt-in tests skipped. The cause is JVM `Unable to establish loopback connection` / `Invalid argument: connect`.
+  No test disabled. Logs are ignored in backend/target. Browser/MySQL/Docker local gates need CI Linux:
+  Docker daemon unavailable; a standalone Java probe confirmed the loopback restriction.
+- Browser gate expanded in `authMobileSmoke.mjs`: desktop Chromium, Pixel Chromium, iPhone WebKit;
+  real Spring/JWT/H2, native file chooser, no Profile remount, upload and reload persistence, logout revocation.
+- Vercel projects list readable, but scoped deployment metadata returned 403 for project-personal2.
+  Railway connector requires a link_id not exposed to this task. Current production SHAs NOT VERIFIED.
+- Migration and backend-first rollout/rollback instructions: latest section of DEPLOYMENT.md.
+- NEXT_ACTION: commit/push reviewed scoped files, create/reuse draft PR, require all four CI jobs at final HEAD.
+- DO_NOT_REPEAT: Google fix implementation, OTP/session-policy redesign, production backup/restore, full repository audit.
+
 ## Latest hotfix checkpoint — session-aware CI fixtures, 2026-10-24
 
 - Base: fetched main `d725ef0bcc8e2ba5bf0bbf86719ea97f15ed980c` (PR #11 merged).

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   X,
   Upload,
@@ -10,12 +10,14 @@ import {
 } from 'lucide-react';
 import { avatarUrlSchema } from '../lib/validation';
 import { FieldError } from './FieldError';
+import { prepareImageUpload } from '../lib/imageUpload';
+import { getApiErrorMessage } from '../services/beautyApi';
 
 interface AvatarPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentAvatar?: string;
-  onSaveAvatar: (newAvatarUrl: string) => void;
+  onSaveAvatar: (newAvatarUrl: string) => Promise<void>;
 }
 
 const CURATED_AVATARS = [
@@ -71,14 +73,24 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   const [customUrl, setCustomUrl] = useState<string>('');
   const [tab, setTab] = useState<'upload' | 'curated' | 'link'>('curated');
   const [validationError, setValidationError] = useState('');
+  const [processing, setProcessing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const busy = useRef(false);
+  const selection = useRef(0);
+  useEffect(() => {
+    if (isOpen) { setSelectedAvatar(currentAvatar || ''); setValidationError(''); }
+    return () => { selection.current++; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
-      setValidationError('Chỉ chấp nhận ảnh JPG, PNG, WEBP hoặc GIF.');
+    e.target.value = '';
+    if (busy.current) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setValidationError('Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP.');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
@@ -87,16 +99,18 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
     }
     setValidationError('');
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result && typeof reader.result === 'string') {
-        setSelectedAvatar(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    const request = ++selection.current;
+    setProcessing(true);
+    try {
+      const image = await prepareImageUpload(file, { maxEdge: 700, maxStoredCharacters: 1_500_000 });
+      if (request === selection.current) setSelectedAvatar(image);
+    } catch (error) {
+      if (request === selection.current) setValidationError(error instanceof Error ? error.message : 'Không thể đọc ảnh.');
+    } finally { if (request === selection.current) setProcessing(false); }
   };
 
   const handleApplyLink = () => {
+    if (busy.current || processing) return;
     const validation = avatarUrlSchema.safeParse(customUrl);
     if (!validation.success) {
       setValidationError(validation.error.issues[0].message);
@@ -107,20 +121,29 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
     setCustomUrl('');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (busy.current || processing) return;
     if (!selectedAvatar) {
       setValidationError('Vui lòng chọn hoặc tải lên một ảnh đại diện.');
       return;
     }
     setValidationError('');
-    onSaveAvatar(selectedAvatar);
-    onClose();
+    busy.current = true; setSaving(true);
+    try {
+      await onSaveAvatar(selectedAvatar);
+      onClose();
+    } catch (error) {
+      setValidationError(getApiErrorMessage(error, 'Không thể lưu ảnh. Ảnh cũ vẫn được giữ; vui lòng thử lại.'));
+    } finally { busy.current = false; setSaving(false); }
   };
+
+  const close = () => { if (!busy.current && !processing) onClose(); };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200"
-      onClick={onClose}
+      role="dialog" aria-modal="true" aria-label="Thay đổi ảnh đại diện"
+      onClick={close}
     >
       <div
         className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
@@ -141,7 +164,8 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
+            disabled={saving || processing}
             className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -167,7 +191,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
               {selectedAvatar && (
                 <button
                   type="button"
-                  onClick={() => setSelectedAvatar('')}
+                  onClick={() => { if (!busy.current && !processing) setSelectedAvatar(''); }}
                   className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center text-xs shadow cursor-pointer transition"
                   title="Xóa avatar"
                 >
@@ -230,7 +254,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => { setSelectedAvatar(item.url); setValidationError(''); }}
+                      onClick={() => { if (!busy.current && !processing) { setSelectedAvatar(item.url); setValidationError(''); } }}
                       className={`relative aspect-square rounded-2xl overflow-hidden border-2 transition hover:scale-105 cursor-pointer ${
                         isSelected
                           ? 'border-[#be185d] ring-2 ring-pink-400'
@@ -263,12 +287,14 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
                     Bấm để chọn ảnh từ máy tính hoặc điện thoại
                   </span>
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    Hỗ trợ định dạng JPG, PNG, WEBP, GIF
+                    JPG, PNG, WEBP tối đa 5 MB. Ảnh được tải lên khi bạn lưu.
                   </span>
                 </div>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
+                  aria-label="Chọn ảnh đại diện"
+                  disabled={saving || processing}
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -308,12 +334,14 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
           )}
 
           <FieldError id="avatar-error" message={validationError} />
+          {(saving || processing) && <p role="status" className="text-xs text-pink-700">{saving ? 'Đang lưu ảnh…' : 'Đang xử lý ảnh…'}</p>}
 
           {/* Action buttons */}
           <div className="pt-3 border-t border-pink-100 flex items-center justify-end gap-2.5">
             <button
               type="button"
-              onClick={onClose}
+              onClick={close}
+              disabled={saving || processing}
               className="px-4 py-2.5 rounded-xl border border-pink-200 text-slate-600 hover:bg-pink-50 text-xs font-bold transition cursor-pointer"
             >
               Hủy
@@ -321,6 +349,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
             <button
               type="button"
               onClick={handleSave}
+              disabled={saving || processing}
               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 via-[#db2777] to-[#be185d] text-white text-xs font-black shadow-md hover:opacity-95 transition flex items-center gap-1.5 cursor-pointer"
             >
               <span>Lưu ảnh đại diện</span>

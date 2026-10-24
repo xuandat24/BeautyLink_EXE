@@ -228,7 +228,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   // /me is the only authority for restored account data. Keep public pages
   // visible while the verification request runs, without mounting private UI.
   const currentUser = sessionPhase === 'verified' ? storedCurrentUser : null;
-  const hideAccountState = sessionPhase === 'checking' || sessionPhase === 'locked'
+  const awaitingIdentity = sessionPhase === 'checking' || (sessionPhase === 'verified' && !storedCurrentUser);
+  const hideAccountState = awaitingIdentity || sessionPhase === 'locked'
     || (sessionPhase !== 'verified' && storedCurrentUser !== null);
   const cartItems = hideAccountState ? [] : storedCartItems;
   const notifications = sessionPhase === 'verified' ? storedNotifications : [];
@@ -827,9 +828,9 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   // =========================================================================
   const adminPages: AppView[] = ['admin-dashboard', 'admin-bookings', 'admin-customers', 'admin-payments'];
   const protectedPages: AppView[] = [...adminPages, 'supplier-dashboard', 'reports', 'account', 'bookings', 'checkout'];
-  if (protectedPages.includes(currentPage) && (sessionPhase === 'checking' || sessionPhase === 'locked')) {
+  if (protectedPages.includes(currentPage) && (awaitingIdentity || sessionPhase === 'locked')) {
     return <section role="status" aria-live="polite" className="mx-auto max-w-md px-5 py-12 text-center text-sm text-slate-600">
-      {sessionPhase === 'checking' ? 'Đang kiểm tra quyền truy cập…' : 'Chưa thể xác minh phiên đăng nhập. Dữ liệu tài khoản đang được khóa.'}
+      {awaitingIdentity ? 'Đang kiểm tra quyền truy cập…' : 'Chưa thể xác minh phiên đăng nhập. Dữ liệu tài khoản đang được khóa.'}
       {sessionPhase === 'locked' && <div className="mt-4 flex justify-center gap-4">
         <button type="button" className="font-semibold text-pink-700 underline" onClick={retrySession}>Thử lại</button>
         <button type="button" className="font-semibold text-slate-600 underline" onClick={logoutSession}>Đăng xuất</button>
@@ -926,6 +927,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     return (
       <div className="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased selection:bg-[#fce7f3] selection:text-[#B42D58]">
         <AccountPage
+          key={currentUser?.id}
           currentUser={currentUser}
           onBackToHome={handleBackToHome}
           onLogoutConfirm={handleLogout}
@@ -1030,6 +1032,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       <div className="min-h-screen bg-[#FFF9FA] font-sans text-slate-800 antialiased selection:bg-[#fce7f3] selection:text-[#B42D58] flex flex-col justify-between">
         {/* Unified Platform Header */}
         <Header
+          authPending={hideAccountState}
           cartCount={cartItems.length}
           onOpenCart={() => setIsCartOpen(true)}
           onOpenPartnerModal={() => navigateTo('supplier-register')}
@@ -1148,6 +1151,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
 
       {/* Main Header */}
       <Header
+        authPending={hideAccountState}
         cartCount={cartItems.length}
         onOpenCart={() => setIsCartOpen(true)}
         onOpenPartnerModal={() => navigateTo('supplier-register')}

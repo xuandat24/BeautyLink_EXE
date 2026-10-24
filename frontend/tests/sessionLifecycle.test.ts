@@ -53,6 +53,7 @@ test('restored UI waits for /me; network/500/403 lock without logout; explicit r
     const lastActivity = JSON.parse(sessionStorage.getItem(SESSION_META_KEY)!).lastActivityAt;
     await act(async () => document.dispatchEvent(new dom.window.Event('pointerdown', { bubbles: true })));
     assert.equal(JSON.parse(sessionStorage.getItem(SESSION_META_KEY)!).lastActivityAt, lastActivity, 'synthetic/passive events do not keep alive');
+    now += 60_000; // Focus revalidation is deduplicated for one minute after a successful check.
     status = 401; await act(async () => window.dispatchEvent(new dom.window.Event('focus')));
     assert.equal(sessionSnapshot().phase, 'anonymous'); assert.equal(getSessionToken(), null);
     assert.equal(store.currentUser, null); assert.match(window.location.search, /bookingPayment=42/, 'server booking hint is preserved');

@@ -120,9 +120,12 @@ test('late profile and sign-in responses cannot resurrect logout or overwrite ac
   apiClient.defaults.adapter = config => new Promise(resolve => { finish = () => resolve({
     data: { user: { id: 1, role: 'CUSTOMER' }, accessToken: sessionToken(sidA) }, status: 200, statusText: 'OK', headers: {}, config }); });
   try {
-    for (const switchAccount of [false, true]) {
+    for (const switchAccount of [false, true]) for (const update of [
+      () => beautyApi.updateCustomerProfile({ fullName: 'Update' }),
+      () => beautyApi.updateCustomerAvatar('https://example.com/avatar.png'),
+    ]) {
       installToken(sessionToken(sidA));
-      const response = beautyApi.updateCustomerProfile({ fullName: 'Update' });
+      const response = update();
       await new Promise(resolve => setImmediate(resolve));
       if (switchAccount) installToken(sessionToken(sidB)); else clearSession();
       finish(); await assert.rejects(response, /Phiên đã thay đổi/);
@@ -144,4 +147,20 @@ test('logout fails closed even if storage removal throws while reads still work'
     clearSession(); assert.equal(getSessionToken(), null); assert.equal(sessionSnapshot().phase, 'anonymous');
     t.mock.method(dom.window.Storage.prototype, 'removeItem', original);
   } finally { dom.window.close(); }
+});
+
+test('resource upload network/503 errors do not invalidate a verified session; avatar 401 does', async () => {
+  const dom = env(); const previous = apiClient.defaults.adapter;
+  try {
+    for (const status of [0, 503, 403, 401]) {
+      const token = sessionToken(); installToken(token);
+      apiClient.defaults.adapter = async config => {
+        throw new axios.AxiosError('upload failed', status ? 'ERR_BAD_RESPONSE' : 'ERR_NETWORK', config, undefined,
+          status ? { data: {}, status, statusText: 'failed', headers: {}, config } : undefined);
+      };
+      await assert.rejects(beautyApi.updateCustomerAvatar('https://example.com/avatar.png'));
+      assert.equal(getSessionToken(), status === 401 ? null : token);
+      assert.equal(sessionSnapshot().phase, status === 401 ? 'anonymous' : 'verified');
+    }
+  } finally { apiClient.defaults.adapter = previous; dom.window.close(); }
 });

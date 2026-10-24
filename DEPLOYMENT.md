@@ -431,3 +431,40 @@ No application source was changed to conceal this machine restriction and no tes
    Expired session-row retention/cleanup is an operator maintenance decision, not a deletion in this patch.
 
 No merge, deployment, production configuration mutation or production migration was performed for this task.
+
+### Profile/session stability and customer avatar — 2026-10-25
+
+This patch keeps previously verified pages mounted during background `/auth/me` checks.
+Focus/visibility events share one request and recheck at most once per minute after successful
+verification. Idle/absolute deadlines are checked on every resume/request; the backend remains
+the authority. A definitive authenticated 401 clears the session. Auth verification failures lock
+private UI; ordinary upload/other resource 5xx or network failures stay local to that operation.
+
+Customer avatar persistence adds nullable `user_accounts.avatar_url` and authenticated,
+customer-only `PATCH /api/v1/auth/me/avatar`. No account ID is accepted from the client. A successful
+update returns a replacement JWT with the same session ID and absolute deadline, since saving the
+account changes its identity timestamp. Public-image validation/storage/rate limits are reused;
+old assets are retained, and failed transactions use the existing new-asset rollback cleanup.
+Cloudinary's existing enabled/configured mode is unchanged. When disabled, its existing legacy
+mode stores the validated data image; do not label that mode a Cloudinary upload.
+
+Release order (approval required; not executed here):
+
+1. Require all four CI jobs on the exact proposed HEAD, including the additive MySQL avatar
+   migration test and the expanded desktop/mobile browser smoke. Browser fixtures use isolated
+   H2 and synthetic accounts; image storage runs in legacy mode with no external upload.
+2. Confirm backup/restore and apply `backend/src/main/resources/db/migration/mysql/V20261025_01__customer_avatar.sql`
+   once in staging, then in production only with separate approval. Verify the nullable LONGTEXT
+   column and unchanged account/booking/payment counts. Flyway is not installed. Hibernate's current
+   `ddl-auto=update` is not a substitute for an approved, reviewed migration step.
+3. Deploy approved backend first. Old frontend consumers remain compatible with the extra nullable
+   `avatarUrl` response field. Confirm existing Google/password sign-in, `/me`, idle expiry and logout
+   on an authorized test account without logging credentials. The new frontend needs the avatar endpoint.
+4. Deploy/promote frontend after backend checks. Check Profile navigation, native file picker,
+   validation, one upload per save, visible operation errors, persistence after reload, and unchanged
+   account/cart/booking ownership. Do not test using another customer's profile or real money.
+5. On regression, stop promotion. Roll frontend/code images back to a reviewed session-enforcing
+   version. **Keep the nullable avatar column and data**; old code ignores it. Do not roll back to a
+   pre-session JWT policy, drop the column, restore DB, or remove manual payment blockers.
+
+No new environment variables, OAuth settings or production secrets are required by this patch.

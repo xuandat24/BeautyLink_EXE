@@ -18,14 +18,22 @@ export function useSessionLifecycle() {
     return unsubscribe;
   }, [logout]);
   useEffect(() => {
-    let stopped = false, verifying = false, lastHeartbeat = 0;
+    let stopped = false, verifying = false, lastHeartbeat = 0, lastVerifiedAt = 0;
+    let lastVerifiedToken: string | null = null;
     const verify = async () => {
       const token = getAccessToken();
       if (!token || verifying) return;
-      verifying = true; setSessionPhase('checking', token);
+      verifying = true;
+      // A verified session stays mounted during background revalidation. Native file
+      // pickers also fire focus: they must not turn ordinary UI actions into logout/loading.
+      if (sessionSnapshot().phase !== 'verified') setSessionPhase('checking', token);
       try {
         const user = await beautyApi.me();
-        if (!stopped && token === getAccessToken()) { setCurrentUser(mapBackendUser(user)); setSessionPhase('verified', token); }
+        if (!stopped && token === getAccessToken()) {
+          lastVerifiedAt = Date.now();
+          lastVerifiedToken = token;
+          setCurrentUser(mapBackendUser(user)); setSessionPhase('verified', token);
+        }
       } catch {
         // Definitive 401 is handled centrally. Network, 403 and 5xx never prove revocation.
         if (!stopped && token === getAccessToken()) setSessionPhase('locked', token);
@@ -45,7 +53,16 @@ export function useSessionLifecycle() {
         if (!stopped && token === getAccessToken()) setSessionPhase('locked', token);
       });
     };
-    const resume = () => { if (document.visibilityState === 'visible' && getAccessToken()) void verify(); };
+    const resume = () => {
+      // Always check wall-clock idle/absolute expiry, even if the tab was asleep.
+      if (document.visibilityState !== 'visible') return;
+      const token = getAccessToken(); if (!token) return;
+      if (sessionSnapshot().phase === 'verified' && token !== lastVerifiedToken) {
+        // Login/profile token installation already follows a successful server response.
+        lastVerifiedToken = token; lastVerifiedAt = Date.now(); return;
+      }
+      if (sessionSnapshot().phase !== 'verified' || Date.now() - lastVerifiedAt >= 60_000) void verify();
+    };
     const storage = (event: StorageEvent) => { receiveSessionStorage(event); };
     const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
     events.forEach(name => document.addEventListener(name, activity, { capture: true, passive: true }));

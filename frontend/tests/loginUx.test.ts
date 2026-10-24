@@ -37,6 +37,8 @@ test('public home renders during silent session verification; protected route st
     assert.match(document.body.textContent ?? '', /BeautyLink/, 'public home appears before /me resolves');
     assert.doesNotMatch(document.body.textContent ?? '', /Đang xác minh phiên đăng nhập/);
     assert.equal(getSessionToken(), token);
+    assert.equal([...document.querySelectorAll('button')].some(button => /^(Đăng nhập|Đăng ký)$/.test(button.textContent?.trim() ?? '')), false,
+      'unresolved session never flashes Login/Register controls');
 
     await act(async () => { window.location.hash = 'account'; window.dispatchEvent(new dom.window.Event('hashchange')); });
     assert.match(document.body.textContent ?? '', /Đang kiểm tra quyền truy cập/);
