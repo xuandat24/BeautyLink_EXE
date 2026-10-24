@@ -181,11 +181,14 @@ export function getAuthErrorMessage(err: unknown): string {
       || data?.code === 'ACCOUNT_INACTIVE') {
     return data.message || 'Không thể đăng nhập bằng Google. Vui lòng dùng phương thức đăng nhập hiện có.';
   }
-  if (err.response?.status === 401 || data?.code === 'INVALID_CREDENTIALS') {
+  if (err.response?.status === 401) {
     return 'Thông tin đăng nhập không chính xác';
   }
-  if (err.response?.status === 429 || data?.code === 'RATE_LIMITED') {
+  if (err.response?.status === 429) {
     return data?.message || 'Bạn đã thử quá nhiều lần. Vui lòng đợi rồi thử lại.';
+  }
+  if (err.response?.status === 403) {
+    return data?.message || 'Yêu cầu đăng nhập bị từ chối (403). Vui lòng tải lại trang hoặc liên hệ hỗ trợ.';
   }
   if (!err.response || err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED') {
     return 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng và thử lại.';
