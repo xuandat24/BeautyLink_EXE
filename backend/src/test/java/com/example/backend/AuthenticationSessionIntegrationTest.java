@@ -84,6 +84,22 @@ class AuthenticationSessionIntegrationTest {
         assertTrue(rows.findById(sid).orElseThrow().isRevoked());
         mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + token)).andExpect(status().isUnauthorized());
     }
+    @Test void browserLoginUsesTheConfiguredLocalOriginAndRealSession() throws Exception {
+        var user = account(Role.CUSTOMER);
+        String body = "{\"identifier\":\"session-test@example.com\",\"password\":\"Password123!\"}";
+        var rejected = mvc.perform(post("/api/v1/auth/login").header("Origin", "http://127.0.0.1:5173")
+                .contentType("application/json").content(body))
+                .andExpect(status().isForbidden()).andReturn().getResponse();
+        assertEquals("Invalid CORS request", rejected.getContentAsString());
+        var accepted = mvc.perform(post("/api/v1/auth/login").header("Origin", "http://localhost:5173")
+                .contentType("application/json").content(body))
+                .andExpect(status().isOk()).andReturn().getResponse();
+        String token = json.readTree(accepted.getContentAsString()).path("accessToken").asText();
+        assertEquals(user.getId(), json.readTree(mvc.perform(get("/api/v1/auth/me")
+                .header("Origin", "http://localhost:5173")
+                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("id").asLong());
+    }
     @Test void missingUnknownAndWrongOwnerSidFailEvenForSignedTokens() throws Exception {
         var first = account(Role.CUSTOMER); String issued = jwt.createToken(first);
         var claims = jwt.extractClaims(issued);

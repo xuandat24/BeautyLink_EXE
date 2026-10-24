@@ -104,10 +104,15 @@ test('registration keeps Google sign-in available below its primary action', asy
   }
 });
 
-test('authentication errors distinguish credentials, throttling, network and server failures', () => {
-  const axiosError = (status?: number, code?: string) => ({ isAxiosError: true, code, message: code, response: status ? { status, data: {} } : undefined });
+test('authentication errors distinguish credentials, forbidden, throttling, network and server failures', () => {
+  const axiosError = (status?: number, code?: string, data: unknown = {}) => ({
+    isAxiosError: true, code, message: code, response: status ? { status, data } : undefined,
+  });
   assert.match(getAuthErrorMessage(axiosError(401)), /không chính xác/);
+  assert.match(getAuthErrorMessage(axiosError(403, undefined, 'Invalid CORS request')), /từ chối \(403\)/);
+  assert.match(getAuthErrorMessage(axiosError(403, undefined, { code: 'INVALID_CREDENTIALS' })), /từ chối \(403\)/);
   assert.match(getAuthErrorMessage(axiosError(429)), /quá nhiều lần/);
   assert.match(getAuthErrorMessage(axiosError(undefined, 'ERR_NETWORK')), /kết nối/);
   assert.match(getAuthErrorMessage(axiosError(503)), /tạm gián đoạn/);
+  assert.match(getAuthErrorMessage(axiosError(503, undefined, { code: 'INVALID_CREDENTIALS' })), /tạm gián đoạn/);
 });

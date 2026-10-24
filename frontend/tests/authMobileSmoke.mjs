@@ -3,6 +3,8 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { chromium, webkit, devices } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
+// Match the isolated Spring test profile's allowed origin; Vite proxies /api to H2.
+const baseURL = 'http://localhost:5173';
 const targets = [
   ['mobile Chromium', chromium, devices['Pixel 7']],
   ['mobile WebKit', webkit, devices['iPhone 13']],
@@ -34,7 +36,7 @@ for (const [label, browserType, device] of targets) {
       assert.equal(signedInUser.role, 'CUSTOMER');
       await route.fulfill({ response });
     });
-    await page.goto('http://127.0.0.1:5173/#login');
+    await page.goto(`${baseURL}/#login`);
     const identifier = page.locator('#customer-identifier');
     const password = page.locator('#customer-password');
     await identifier.fill('0901234567');
@@ -52,11 +54,11 @@ for (const [label, browserType, device] of targets) {
     await page.waitForFunction(() => location.hash !== '#login');
     assert.equal(loginRequests, 1);
     const headers = { Authorization: `Bearer ${issuedToken}` };
-    const me = await context.request.get('http://127.0.0.1:5173/api/v1/auth/me', { headers });
+    const me = await context.request.get(`${baseURL}/api/v1/auth/me`, { headers });
     assert.equal(me.status(), 200);
     assert.equal((await me.json()).id, signedInUser.id);
-    assert.equal((await context.request.post('http://127.0.0.1:5173/api/v1/auth/session/logout', { headers })).status(), 204);
-    assert.equal((await context.request.get('http://127.0.0.1:5173/api/v1/auth/me', { headers })).status(), 401);
+    assert.equal((await context.request.post(`${baseURL}/api/v1/auth/session/logout`, { headers })).status(), 204);
+    assert.equal((await context.request.get(`${baseURL}/api/v1/auth/me`, { headers })).status(), 401);
     console.log(`PASS: ${label} preserves exact password, blocks duplicate submit, and verifies real Spring session/profile/logout revocation.`);
   } finally {
     await browser.close();
