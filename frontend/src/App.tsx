@@ -197,7 +197,9 @@ type AppView =
   | 'filter-explore'
   | 'partner-detail';
 
-function BeautyLinkApp({ sessionPhase }: { sessionPhase: SessionPhase }) {
+function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
+  sessionPhase: SessionPhase; retrySession: () => void; logoutSession: () => void;
+}) {
   const {
     selectedCity,
     selectedLocationId,
@@ -208,22 +210,29 @@ function BeautyLinkApp({ sessionPhase }: { sessionPhase: SessionPhase }) {
     validateOnboardingOptions,
     completeOnboarding,
     setSelectedLocation,
-    cartItems,
+    cartItems: storedCartItems,
     addToCart,
     removeFromCart,
     clearCart,
-    currentUser,
+    currentUser: storedCurrentUser,
     setCurrentUser,
-    logout,
-    notifications,
+    notifications: storedNotifications,
     markNotificationRead,
     markAllNotificationsRead,
     clearAllNotifications,
     soundEnabled,
     setSoundEnabled,
-    favorites,
+    favorites: storedFavorites,
     toggleFavorite,
   } = useBeautyStore();
+  // /me is the only authority for restored account data. Keep public pages
+  // visible while the verification request runs, without mounting private UI.
+  const currentUser = sessionPhase === 'verified' ? storedCurrentUser : null;
+  const hideAccountState = sessionPhase === 'checking' || sessionPhase === 'locked'
+    || (sessionPhase !== 'verified' && storedCurrentUser !== null);
+  const cartItems = hideAccountState ? [] : storedCartItems;
+  const notifications = sessionPhase === 'verified' ? storedNotifications : [];
+  const favorites = hideAccountState ? [] : storedFavorites;
 
 
   // Favorite Toast System
@@ -266,7 +275,17 @@ function BeautyLinkApp({ sessionPhase }: { sessionPhase: SessionPhase }) {
 
 
   // Page Routing & Hash Navigation
-  const [currentPage, setCurrentPage] = useState<AppView>('home');
+  const [currentPage, setCurrentPage] = useState<AppView>(() => {
+    // Resolve the URL before the first paint; hashchange runs only after effects.
+    if (continuationDestination()) return 'bookings';
+    const hash = window.location.hash.slice(1).toLowerCase();
+    const aliases: Record<string, AppView> = { logout: 'account', schedule: 'supplier-dashboard',
+      admin: 'admin-dashboard', filter: 'filter-explore', explore: 'filter-explore' };
+    const direct: AppView[] = ['login', 'register', 'account', 'bookings', 'checkout', 'supplier-register',
+      'supplier-dashboard', 'reports', 'admin-dashboard', 'admin-bookings', 'admin-customers',
+      'admin-payments', 'filter-explore', 'partner-detail'];
+    return aliases[hash] ?? (direct.includes(hash as AppView) ? hash as AppView : 'home');
+  });
   const continuationAccount = useRef(currentUser?.id);
   useEffect(() => {
     if (continuationAccount.current != null && currentUser?.id != null && String(continuationAccount.current) !== String(currentUser.id)) setPaymentBookingId(null);
@@ -564,8 +583,7 @@ function BeautyLinkApp({ sessionPhase }: { sessionPhase: SessionPhase }) {
   };
 
   const handleLogout = () => {
-    disableGoogleAutoSelect();
-    logout();
+    logoutSession();
     handleBackToHome();
     showToast('Đã đăng xuất tài khoản.');
   };
@@ -809,6 +827,15 @@ function BeautyLinkApp({ sessionPhase }: { sessionPhase: SessionPhase }) {
   // =========================================================================
   const adminPages: AppView[] = ['admin-dashboard', 'admin-bookings', 'admin-customers', 'admin-payments'];
   const protectedPages: AppView[] = [...adminPages, 'supplier-dashboard', 'reports', 'account', 'bookings', 'checkout'];
+  if (protectedPages.includes(currentPage) && (sessionPhase === 'checking' || sessionPhase === 'locked')) {
+    return <section role="status" aria-live="polite" className="mx-auto max-w-md px-5 py-12 text-center text-sm text-slate-600">
+      {sessionPhase === 'checking' ? 'Đang kiểm tra quyền truy cập…' : 'Chưa thể xác minh phiên đăng nhập. Dữ liệu tài khoản đang được khóa.'}
+      {sessionPhase === 'locked' && <div className="mt-4 flex justify-center gap-4">
+        <button type="button" className="font-semibold text-pink-700 underline" onClick={retrySession}>Thử lại</button>
+        <button type="button" className="font-semibold text-slate-600 underline" onClick={logoutSession}>Đăng xuất</button>
+      </div>}
+    </section>;
+  }
   if (protectedPages.includes(currentPage) && !currentUser) {
     return <AuthPage initialMode="login" onBackToHome={handleBackToHome}
       onSuccess={user => {
@@ -1270,7 +1297,7 @@ function BeautyLinkApp({ sessionPhase }: { sessionPhase: SessionPhase }) {
               onViewAll={() => openViewAll('new-partners')}
             />
 
-            {import.meta.env.DEV && <CustomerReviewsSection />}
+            {import.meta.env?.DEV && <CustomerReviewsSection />}
 
             <WhyChooseUs onBookService={handleBookDeal} />
           </>
@@ -1376,15 +1403,12 @@ function BeautyLinkApp({ sessionPhase }: { sessionPhase: SessionPhase }) {
 
 export default function App() {
   const session = useSessionLifecycle();
-  const locked = session.phase === 'checking' || session.phase === 'locked';
+  const logoutSession = () => { disableGoogleAutoSelect(); session.logout(); };
   return <PageLoadBoundary>
-    <div hidden={locked} inert={locked}><BeautyLinkApp sessionPhase={session.phase} /></div>
-    {locked && <div className="grid min-h-screen place-items-center bg-pink-50 p-6 text-center" role="status">
-      <div><h1 className="font-bold">{session.phase === 'checking' ? 'Đang xác minh phiên đăng nhập...' : 'Chưa thể xác minh phiên đăng nhập'}</h1>
-        <p className="mt-2 text-sm">Thông tin tài khoản được khóa cho đến khi máy chủ xác nhận.</p>
-        {session.phase === 'locked' && <button className="mt-4 rounded-xl bg-pink-600 px-4 py-2 text-white" onClick={session.retry}>Thử lại</button>}
-        {session.phase === 'locked' && <button className="ml-3 mt-4 underline" onClick={session.logout}>Đăng xuất</button>}
-      </div>
-    </div>}
+    <BeautyLinkApp sessionPhase={session.phase} retrySession={session.retry} logoutSession={logoutSession} />
+    {session.phase === 'locked' && <aside role="alert" className="fixed bottom-4 right-4 z-50 max-w-72 rounded-xl border border-pink-200 bg-white p-3 text-xs text-slate-700 shadow-lg">
+      Chưa thể xác minh phiên đăng nhập.
+      <button type="button" className="ml-2 font-bold text-pink-700 underline" onClick={session.retry}>Thử lại</button>
+    </aside>}
   </PageLoadBoundary>;
 }

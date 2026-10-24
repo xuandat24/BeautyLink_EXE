@@ -423,21 +423,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 </div>
               )}
 
-              {!showPasswordReset && (
-                <div className="mb-5 space-y-3">
-                  <GoogleSignInButton
-                    busy={googleLoading}
-                    onCredential={handleGoogleCredential}
-                    onUnavailable={(message) => setError(message)}
-                  />
-                  <div className="flex items-center gap-3" aria-hidden="true">
-                    <span className="h-px flex-1 bg-slate-200" />
-                    <span className="text-[11px] font-bold text-slate-400">Hoặc tiếp tục với</span>
-                    <span className="h-px flex-1 bg-slate-200" />
-                  </div>
-                </div>
-              )}
-
               {/* Form */}
               {showPasswordReset ? (
                 <PasswordResetPanel
@@ -713,6 +698,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   )}
                 </button>
                 </form>
+              )}
+              {!showPasswordReset && (
+                <div className="mt-4 space-y-2">
+                  <div className="mx-auto flex max-w-56 items-center gap-3" aria-hidden="true">
+                    <span className="h-px flex-1 bg-slate-200" />
+                    <span className="text-[11px] font-semibold text-slate-400">Hoặc</span>
+                    <span className="h-px flex-1 bg-slate-200" />
+                  </div>
+                  <GoogleSignInButton
+                    busy={googleLoading || loading}
+                    onCredential={handleGoogleCredential}
+                    onUnavailable={(message) => setError(message)}
+                  />
+                </div>
               )}
 
             </div>
