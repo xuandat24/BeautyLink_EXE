@@ -53,7 +53,7 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     Optional<PaymentTransaction> findCanonicalPaidByBookingId(@Param("bookingId") Long bookingId,
             @Param("paidStatus") PaymentTransactionStatus paidStatus);
 
-    @Query("select p from PaymentTransaction p join fetch p.booking where p.booking.id in :bookingIds and p.status = :paidStatus " +
+    @Query("select p from PaymentTransaction p join fetch p.booking where p.booking.id in :bookingIds and p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null " +
             "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = p.booking and p2.status = :paidStatus)")
     List<PaymentTransaction> findCanonicalPaidByBookingIds(@Param("bookingIds") Collection<Long> bookingIds,
             @Param("paidStatus") PaymentTransactionStatus paidStatus);
@@ -63,7 +63,7 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     List<Long> findReviewBookingIds(@Param("bookingIds") Collection<Long> bookingIds,
             @Param("reviewStatus") PaymentTransactionStatus reviewStatus);
 
-    @Query("select coalesce(sum(p.amount), 0) from PaymentTransaction p where p.status = :paidStatus " +
+    @Query("select coalesce(sum(p.amount), 0) from PaymentTransaction p where p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null " +
             "and p.paidAt >= :from and p.paidAt < :to and p.booking.customer.role = :customerRole " +
             "and (:includeDemo = true or p.booking.supplier.demoData = false) " +
             "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = p.booking and p2.status = :paidStatus)")
@@ -71,7 +71,7 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
             @Param("paidStatus") PaymentTransactionStatus paidStatus, @Param("customerRole") Role customerRole,
             @Param("includeDemo") boolean includeDemo);
 
-    @Query("select coalesce(sum(p.amount), 0) from PaymentTransaction p where p.status = :paidStatus " +
+    @Query("select coalesce(sum(p.amount), 0) from PaymentTransaction p where p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null " +
             "and p.paidAt >= :from and p.paidAt < :to and p.paymentOption in :options " +
             "and p.booking.customer.role = :customerRole and (:includeDemo = true or p.booking.supplier.demoData = false) " +
             "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = p.booking and p2.status = :paidStatus)")
@@ -79,7 +79,7 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
             @Param("options") Collection<PaymentOption> options, @Param("paidStatus") PaymentTransactionStatus paidStatus,
             @Param("customerRole") Role customerRole, @Param("includeDemo") boolean includeDemo);
 
-    @Query("select coalesce(sum(p.remainingAmount), 0) from PaymentTransaction p where p.status = :paidStatus " +
+    @Query("select coalesce(sum(p.remainingAmount), 0) from PaymentTransaction p where p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null " +
             "and p.paidAt >= :from and p.paidAt < :to and p.paymentOption in :options " +
             "and p.booking.customer.role = :customerRole and (:includeDemo = true or p.booking.supplier.demoData = false) " +
             "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = p.booking and p2.status = :paidStatus)")
@@ -87,7 +87,7 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
             @Param("options") Collection<PaymentOption> options, @Param("paidStatus") PaymentTransactionStatus paidStatus,
             @Param("customerRole") Role customerRole, @Param("includeDemo") boolean includeDemo);
 
-    @Query("select count(p) from PaymentTransaction p where p.status = :paidStatus and p.paidAt >= :from and p.paidAt < :to " +
+    @Query("select count(p) from PaymentTransaction p where p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null and p.paidAt >= :from and p.paidAt < :to " +
             "and p.booking.customer.role = :customerRole and (:includeDemo = true or p.booking.supplier.demoData = false) " +
             "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = p.booking and p2.status = :paidStatus)")
     long countAdminCanonicalPaid(@Param("from") Instant from, @Param("to") Instant to,
@@ -95,10 +95,10 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
             @Param("includeDemo") boolean includeDemo);
 
     @Query(value = "select p from PaymentTransaction p join fetch p.booking b join fetch b.supplier " +
-            "join fetch b.service where p.status = :paidStatus and p.paidAt >= :from and p.paidAt < :to " +
+            "join fetch b.service where p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null and p.paidAt >= :from and p.paidAt < :to " +
             "and b.customer.role = :customerRole and (:includeDemo = true or b.supplier.demoData = false) " +
             "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = b and p2.status = :paidStatus)",
-            countQuery = "select count(p) from PaymentTransaction p where p.status = :paidStatus " +
+            countQuery = "select count(p) from PaymentTransaction p where p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null " +
                     "and p.paidAt >= :from and p.paidAt < :to and p.booking.customer.role = :customerRole " +
                     "and (:includeDemo = true or p.booking.supplier.demoData = false) " +
                     "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = p.booking and p2.status = :paidStatus)")
@@ -106,7 +106,7 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
             @Param("paidStatus") PaymentTransactionStatus paidStatus, @Param("customerRole") Role customerRole,
             @Param("includeDemo") boolean includeDemo, Pageable pageable);
 
-    @Query("select count(p) from PaymentTransaction p where p.status = :paidStatus and p.paidAt >= :from and p.paidAt < :to " +
+    @Query("select count(p) from PaymentTransaction p where p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null and p.paidAt >= :from and p.paidAt < :to " +
             "and p.paymentOption in :options and p.booking.customer.role = :customerRole " +
             "and (:includeDemo = true or p.booking.supplier.demoData = false) " +
             "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = p.booking and p2.status = :paidStatus)")
@@ -122,7 +122,7 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
             @Param("includeDemo") boolean includeDemo);
 
     @Query("select p.booking.customer.id, coalesce(sum(p.amount), 0) from PaymentTransaction p " +
-            "where p.status = :paidStatus and p.booking.customer.role = :customerRole " +
+            "where p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null and p.booking.customer.role = :customerRole " +
             "and (:includeDemo = true or p.booking.supplier.demoData = false) " +
             "and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = p.booking and p2.status = :paidStatus) " +
             "group by p.booking.customer.id")

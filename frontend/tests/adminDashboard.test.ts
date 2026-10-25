@@ -6,13 +6,15 @@ import { JSDOM } from 'jsdom';
 import { AdminDashboardPage } from '../src/components/admin/AdminDashboardPage';
 import { beautyApi } from '../src/services/beautyApi';
 import type { AdminDashboardSummary, AdminPaymentSummary } from '../src/types';
+import { adminV2Api } from '../src/services/adminApi';
+import { insightsFixture, paymentFixture } from './adminV2Fixtures';
 
 test('admin overview renders authoritative booking people separately from bookings and drills down with the same range', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/#admin-dashboard' });
   Object.assign(globalThis, { window: dom.window, document: dom.window.document });
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
   const root = createRoot(document.getElementById('root')!);
-  const original = beautyApi.adminDashboardSummary;
+  const original = { insights: adminV2Api.insights, payments: beautyApi.adminPaymentSummary, bookings: beautyApi.adminBookings };
   const requests: Array<{ from: string; to: string; includeDemo: boolean }> = [];
   let bookedRange: { from: string; to: string } | null = null;
   let navigated = '';
@@ -23,7 +25,9 @@ test('admin overview renders authoritative booking people separately from bookin
     cancelledBookings: 1, repeatCustomers: 2, bookingToPaymentConversion: 20, generatedAt: '2026-10-15T00:00:00Z',
     bookingTrends: [], recentBookings: [],
   };
-  beautyApi.adminDashboardSummary = async (params) => { requests.push(params); return summary; };
+  adminV2Api.insights = async params => { requests.push(params); return insightsFixture(); };
+  beautyApi.adminPaymentSummary = async () => paymentFixture();
+  beautyApi.adminBookings = async () => ({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 5 });
   try {
     await act(async () => root.render(React.createElement(AdminDashboardPage, {
       mode: 'overview', adminName: 'Admin', onNavigate: (section: string) => { navigated = section; },
@@ -34,17 +38,20 @@ test('admin overview renders authoritative booking people separately from bookin
     const customerCard = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Khách đã đặt lịch'));
     assert.ok(customerCard);
     assert.match(customerCard.textContent || '', /2/);
-    assert.match(document.body.textContent || '', /Tổng lịch đã đặt5/);
-    assert.doesNotMatch(document.body.textContent || '', /Lịch hoàn thành|Cần đối soát/);
+    assert.match(document.body.textContent || '', /Tổng đơn đặt lịch5/);
+    assert.match(document.body.textContent || '', /Lịch hẹn hoàn thành1/);
+    assert.equal(document.querySelector('[aria-label="Chỉ số kinh doanh"]')?.querySelectorAll('article').length, 6);
     await act(async () => customerCard.click());
     assert.deepEqual(bookedRange, { from: requests[0].from, to: requests[0].to });
+    await act(async () => [...document.querySelectorAll('button')].find(button => button.textContent === 'Hôm nay')!.click());
+    assert.notEqual(requests.at(-1)?.from, requests[0].from, 'date preset forwards a different range to the backend');
     const paymentNav = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Thanh toán'));
     assert.ok(paymentNav);
     await act(async () => paymentNav.click());
     assert.equal(navigated, 'payments');
   } finally {
     await act(async () => root.unmount());
-    beautyApi.adminDashboardSummary = original;
+    adminV2Api.insights = original.insights; beautyApi.adminPaymentSummary = original.payments; beautyApi.adminBookings = original.bookings;
     dom.window.close();
   }
 });

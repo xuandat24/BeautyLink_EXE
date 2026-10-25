@@ -53,6 +53,10 @@ public class BookingReviewSmokeServer {
             mobile.setPasswordHash(context.getBean(org.springframework.security.crypto.password.PasswordEncoder.class)
                     .encode("Synthetic Mobile 123! "));
             users.saveAndFlush(mobile);
+            var adminBrowser = new UserAccount(); adminBrowser.setFullName("Admin Browser Test");
+            adminBrowser.setPhone("0901234599"); adminBrowser.setEmail("admin-browser@example.com"); adminBrowser.setRole(Role.ADMIN);
+            adminBrowser.setPasswordHash(context.getBean(org.springframework.security.crypto.password.PasswordEncoder.class).encode("Synthetic Admin123!"));
+            users.saveAndFlush(adminBrowser);
             var offering = services.findAll().stream().filter(s -> !people.findBySupplierIdAndActiveTrue(s.getSupplier().getId()).isEmpty()).findFirst().orElseThrow();
             String[] codes = {"SMOKE-UNPAID", "SMOKE-FUTURE-DEPOSIT", "SMOKE-FUTURE-FULL", "SMOKE-PAST-DEPOSIT", "SMOKE-PAST-FULL", "SMOKE-CANCELLED", "SMOKE-REFUNDED"};
             for (int i = 0; i < codes.length; i++) {
@@ -62,6 +66,7 @@ public class BookingReviewSmokeServer {
                 b.setStartTime(LocalTime.of(10, 0)); b.setEndTime(LocalTime.of(11, 0)); b.setTotalAmount(offering.getPrice());
                 b.setStatus(i == 0 ? BookingStatus.PENDING : i == 5 ? BookingStatus.CANCELLED : i == 6 ? BookingStatus.COMPLETED : BookingStatus.CONFIRMED);
                 b.setPaymentStatus(i == 0 ? PaymentStatus.UNPAID : i == 6 ? PaymentStatus.REFUNDED : i == 1 || i == 3 ? PaymentStatus.PARTIALLY_PAID : PaymentStatus.PAID);
+                if (i == 5) org.springframework.test.util.ReflectionTestUtils.setField(b, "createdAt", Instant.now().minusSeconds(10 * 86400));
                 bookings.save(b);
             }
             for (int i = 0; i < 5; i++) {

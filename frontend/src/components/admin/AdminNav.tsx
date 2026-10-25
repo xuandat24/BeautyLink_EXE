@@ -1,50 +1,31 @@
-import React from 'react';
-import { BarChart3, CalendarDays, CreditCard, FileText, Home, LogOut, Users } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { BarChart3, CalendarDays, CreditCard, FileText, Home, LogOut, Users, Store, Star, Tag, Settings, Menu, X, Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-
-export type AdminSection = 'overview' | 'bookings' | 'customers' | 'payments' | 'reports';
-
-interface AdminNavProps {
-  active: AdminSection;
-  adminName: string;
-  onNavigate: (section: AdminSection) => void;
-  onHome: () => void;
-  onLogout: () => void;
-}
-
-const items: Array<{ id: AdminSection; label: string; icon: LucideIcon }> = [
-  { id: 'overview', label: 'Tổng quan', icon: BarChart3 },
-  { id: 'bookings', label: 'Lịch hẹn', icon: CalendarDays },
-  { id: 'customers', label: 'Khách hàng', icon: Users },
-  { id: 'payments', label: 'Thanh toán', icon: CreditCard },
-  { id: 'reports', label: 'Phản hồi', icon: FileText },
+export type AdminSection = 'overview' | 'customers' | 'salons' | 'bookings' | 'payments' | 'reviews' | 'promotions' | 'reports' | 'settings';
+export interface AdminNavProps { active: AdminSection; adminName: string; onNavigate: (section: AdminSection, query?: string) => void; onHome: () => void; onLogout: () => void; controls?: React.ReactNode }
+export const adminItems: Array<{ id: AdminSection; label: string; icon: LucideIcon }> = [
+  { id: 'overview', label: 'Tổng quan', icon: BarChart3 }, { id: 'customers', label: 'Người dùng', icon: Users },
+  { id: 'salons', label: 'Đối tác/Salon', icon: Store }, { id: 'bookings', label: 'Lịch đặt', icon: CalendarDays },
+  { id: 'payments', label: 'Thanh toán', icon: CreditCard }, { id: 'reviews', label: 'Đánh giá', icon: Star },
+  { id: 'promotions', label: 'Khuyến mãi', icon: Tag }, { id: 'reports', label: 'Báo cáo', icon: FileText }, { id: 'settings', label: 'Cài đặt', icon: Settings },
 ];
-
-export const AdminNav: React.FC<AdminNavProps> = ({ active, adminName, onNavigate, onHome, onLogout }) => (
-  <header className="border-b border-slate-200 bg-white">
-    <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
-        <button type="button" onClick={onHome} className="inline-flex items-center gap-2 text-lg font-black tracking-tight">
-          <span>Beauty<span className="text-pink-600">Link</span> Admin</span>
-        </button>
-        <div className="flex items-center gap-2">
-          <span className="hidden text-xs font-bold text-slate-500 sm:inline">{adminName}</span>
-          <button type="button" onClick={onHome} aria-label="Về trang chủ" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:text-pink-700">
-            <Home className="h-4 w-4" />
-          </button>
-          <button type="button" onClick={onLogout} aria-label="Đăng xuất" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:text-rose-700">
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-      <nav aria-label="Điều hướng quản trị" className="flex gap-1 overflow-x-auto pb-3">
-        {items.map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" onClick={() => onNavigate(id)} aria-current={active === id ? 'page' : undefined}
-            className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${active === id ? 'bg-pink-600 text-white' : 'text-slate-600 hover:bg-pink-50 hover:text-pink-700'}`}>
-            <Icon className="h-4 w-4" /> {label}
-          </button>
-        ))}
-      </nav>
-    </div>
-  </header>
-);
+export const AdminNav: React.FC<AdminNavProps> = ({ active, adminName, onNavigate, onHome, onLogout, controls }) => {
+  const [open, setOpen] = useState(false); const [query, setQuery] = useState(''); const toggle = useRef<HTMLButtonElement>(null); const close = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (!open) return; close.current?.focus(); const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); toggle.current?.focus(); } }; document.addEventListener('keydown', escape); return () => document.removeEventListener('keydown', escape); }, [open]);
+  const navigate = (section: AdminSection, value?: string) => { setOpen(false); onNavigate(section, value); };
+  return <>
+    {open && <button type="button" aria-label="Đóng menu quản trị" className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden" onClick={() => setOpen(false)} />}
+    <aside aria-label="Thanh quản trị" className={`${open ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-50 w-60 flex-col border-r border-slate-200 bg-white px-4 py-5 shadow-xl lg:flex lg:shadow-none`}>
+      <div className="mb-8 flex items-center justify-between px-3"><button type="button" onClick={onHome} className="text-2xl font-black tracking-tight">Beauty<span className="text-pink-600">Link</span><span className="mt-1 block text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">Quản trị hệ thống</span></button><button ref={close} type="button" aria-label="Đóng menu" onClick={() => setOpen(false)} className="rounded-lg p-2 lg:hidden"><X className="h-5 w-5" /></button></div>
+      <nav aria-label="Điều hướng quản trị" className="min-h-0 flex-1 space-y-1 overflow-y-auto">{adminItems.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => navigate(id)} aria-current={active === id ? 'page' : undefined} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ${active === id ? 'bg-pink-600 text-white shadow-sm shadow-pink-200' : 'text-slate-600 hover:bg-pink-50 hover:text-pink-700'}`}><Icon className="h-4 w-4 shrink-0" />{label}</button>)}</nav>
+      <button type="button" onClick={onHome} className="mt-5 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-500 hover:bg-slate-50"><Home className="h-4 w-4" />Về website</button>
+    </aside>
+    <header className="sticky top-0 z-30 flex min-h-20 min-w-0 flex-wrap items-center gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:ml-60 lg:px-7">
+      <button ref={toggle} type="button" aria-label="Mở menu quản trị" aria-expanded={open} onClick={() => setOpen(true)} className="rounded-xl border border-slate-200 p-2.5 lg:hidden"><Menu className="h-5 w-5" /></button>
+      <div className="mr-auto"><p className="text-xs text-slate-400">BeautyLink / Quản trị</p><p className="font-bold text-slate-800">{adminItems.find(i => i.id === active)?.label}</p></div>
+      <form onSubmit={e => { e.preventDefault(); navigate('bookings', query.trim()); }} className="relative order-last w-full md:order-none md:w-60"><label className="sr-only" htmlFor="admin-global-search">Tìm lịch đặt</label><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" /><input id="admin-global-search" value={query} onChange={e => setQuery(e.target.value)} maxLength={120} placeholder="Tìm mã lịch, khách, salon…" className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm" /></form>
+      <div className="flex min-w-0 items-center gap-2 border-l border-slate-200 pl-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-pink-100 font-bold text-pink-700">{adminName.charAt(0)}</span><span className="max-w-28 truncate text-sm font-semibold">{adminName}</span><button type="button" onClick={onLogout} aria-label="Đăng xuất" className="rounded-xl p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-700"><LogOut className="h-4 w-4" /></button></div>
+      {controls && <div className="order-last w-full">{controls}</div>}
+    </header>
+  </>;
+};

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Download,
   Eye,
@@ -9,7 +9,7 @@ import {
   X,
 } from 'lucide-react';
 import { AdminBooking, AdminCustomer } from '../types';
-import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
+import { beautyApi, getAccessToken, getApiErrorMessage } from '../services/beautyApi';
 import { AdminNav, type AdminSection } from './admin/AdminNav';
 
 interface AdminCustomersPageProps {
@@ -18,9 +18,10 @@ interface AdminCustomersPageProps {
   onLogout: () => void;
   adminName: string;
   bookedRange?: { from: string; to: string } | null;
+  embedded?: boolean;
 }
 
-export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, onNavigate, onLogout, adminName, bookedRange }) => {
+export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, onNavigate, onLogout, adminName, bookedRange, embedded = false }) => {
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -29,28 +30,33 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
   const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomer | null>(null);
   const [history, setHistory] = useState<AdminBooking[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const requestSequence = useRef(0); const historySequence = useRef(0);
 
   const loadCustomers = async () => {
+    const request = ++requestSequence.current; const token = getAccessToken();
     setLoading(true);
     setError('');
     try {
-      setCustomers(await beautyApi.adminCustomers(bookedRange ? { ...bookedRange, bookedOnly: true } : undefined));
+      const rows = await beautyApi.adminCustomers(bookedRange ? { ...bookedRange, bookedOnly: true } : undefined);
+      if (request === requestSequence.current && token === getAccessToken()) setCustomers(rows);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể tải danh sách tài khoản khách hàng.'));
+      if (request === requestSequence.current && token === getAccessToken()) setError(getApiErrorMessage(err, 'Không thể tải danh sách tài khoản khách hàng.'));
     } finally {
-      setLoading(false);
+      if (request === requestSequence.current && token === getAccessToken()) setLoading(false);
     }
   };
 
   useEffect(() => {
     void loadCustomers();
+    return () => { requestSequence.current++; historySequence.current++; };
   }, [bookedRange]);
 
   const openHistory = async (customer: AdminCustomer) => {
+    const request = ++historySequence.current; const token = getAccessToken();
     setSelectedCustomer(customer); setHistoryLoading(true); setHistory([]);
-    try { setHistory((await beautyApi.adminCustomerBookings(customer.id)).content); }
-    catch (err) { setError(getApiErrorMessage(err, 'Không thể tải lịch sử đặt lịch.')); }
-    finally { setHistoryLoading(false); }
+    try { const rows = (await beautyApi.adminCustomerBookings(customer.id)).content; if (request === historySequence.current && token === getAccessToken()) setHistory(rows); }
+    catch (err) { if (request === historySequence.current && token === getAccessToken()) setError(getApiErrorMessage(err, 'Không thể tải lịch sử đặt lịch.')); }
+    finally { if (request === historySequence.current && token === getAccessToken()) setHistoryLoading(false); }
   };
 
   const visibleCustomers = useMemo(() => {
@@ -65,10 +71,12 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
   }, [customers, query]);
 
   const handleExport = async () => {
+    const token = getAccessToken();
     setExporting(true);
     setError('');
     try {
       const blob = await beautyApi.exportAdminCustomers();
+      if (token !== getAccessToken()) return;
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -86,9 +94,9 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <AdminNav active="customers" adminName={adminName} onNavigate={onNavigate} onHome={onBack} onLogout={onLogout} />
+      {!embedded && <AdminNav active="customers" adminName={adminName} onNavigate={onNavigate} onHome={onBack} onLogout={onLogout} />}
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
+      <main className={embedded ? 'min-w-0 py-5' : 'min-w-0 px-4 py-6 lg:ml-60 lg:px-7'}>
         <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-pink-600">Quản trị hệ thống</p>

@@ -15,6 +15,8 @@ import jakarta.persistence.LockModeType;
 import java.time.*;
 import java.util.*;
 public interface BookingRepository extends JpaRepository<Booking, Long> {
+    @Query("select b from Booking b join fetch b.customer join fetch b.supplier join fetch b.service join fetch b.practitioner where b.supplier.id = :supplierId and b.customer.role = :role order by b.createdAt desc, b.id desc")
+    List<Booking> findAdminSalonRecent(@Param("supplierId") Long supplierId, @Param("role") Role role, Pageable pageable);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select b from Booking b where b.id = :id")
     Optional<Booking> findByIdForUpdate(@Param("id") Long id);
@@ -55,14 +57,14 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     @Query("select count(b) from Booking b where b.createdAt >= :from and b.createdAt < :to " +
             "and b.customer.role = :customerRole and (:includeDemo = true or b.supplier.demoData = false) " +
-            "and exists (select p.id from PaymentTransaction p where p.booking = b and p.status = :paidStatus)")
+            "and exists (select p.id from PaymentTransaction p where p.booking = b and p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = b and p2.status = :paidStatus))")
     long countAdminVerifiedPaidBookings(@Param("from") Instant from, @Param("to") Instant to,
             @Param("paidStatus") PaymentTransactionStatus paidStatus, @Param("customerRole") Role customerRole,
             @Param("includeDemo") boolean includeDemo);
 
     @Query("select count(distinct b.customer.id) from Booking b where b.createdAt >= :from and b.createdAt < :to " +
             "and b.customer.role = :customerRole and (:includeDemo = true or b.supplier.demoData = false) " +
-            "and exists (select p.id from PaymentTransaction p where p.booking = b and p.status = :paidStatus)")
+            "and exists (select p.id from PaymentTransaction p where p.booking = b and p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = b and p2.status = :paidStatus))")
     long countAdminVerifiedPaidCustomers(@Param("from") Instant from, @Param("to") Instant to,
             @Param("paidStatus") PaymentTransactionStatus paidStatus, @Param("customerRole") Role customerRole,
             @Param("includeDemo") boolean includeDemo);
@@ -115,7 +117,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     @Query("select b.customer.id, count(distinct b.id) from Booking b where b.customer.role = :customerRole " +
             "and (:includeDemo = true or b.supplier.demoData = false) " +
-            "and exists (select p.id from PaymentTransaction p where p.booking = b and p.status = :paidStatus) group by b.customer.id")
+            "and exists (select p.id from PaymentTransaction p where p.booking = b and p.status = :paidStatus and p.requiresManualReview = false and p.paidAt is not null and p.id = (select min(p2.id) from PaymentTransaction p2 where p2.booking = b and p2.status = :paidStatus)) group by b.customer.id")
     List<Object[]> findAdminCustomerPaidBookingStats(@Param("paidStatus") PaymentTransactionStatus paidStatus,
             @Param("customerRole") Role customerRole, @Param("includeDemo") boolean includeDemo);
 

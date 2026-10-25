@@ -183,7 +183,7 @@ public class AdminDashboardService {
                 toDate.plusDays(1).atStartOfDay(BUSINESS_ZONE).toInstant(), includeDemo);
     }
 
-    private List<AdminBookingResponse> mapBookings(List<Booking> source) {
+    List<AdminBookingResponse> mapBookings(List<Booking> source) {
         if (source.isEmpty()) return List.of();
         List<Long> ids = source.stream().map(Booking::getId).toList();
         Map<Long, PaymentTransaction> canonical = new HashMap<>();
