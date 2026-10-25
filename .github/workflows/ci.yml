@@ -53,7 +53,7 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: mvn --batch-mode --no-transfer-progress -Dtest=BookingReviewReleaseTest,PaymentCancellationSafetyTest,GoogleSigninMigrationTest,WorkforceMigrationTest,AuthenticationSessionMigrationTest,CustomerAvatarMigrationTest verify
+      - run: mvn --batch-mode --no-transfer-progress -Dtest=BookingReviewReleaseTest,PaymentCancellationSafetyTest,GoogleSigninMigrationTest,WorkforceMigrationTest,AuthenticationSessionMigrationTest,CustomerAvatarMigrationTest,AdminDashboardV2IntegrationTest verify
 
   frontend:
     runs-on: ubuntu-latest
@@ -111,3 +111,13 @@ jobs:
           grep -q BOOKING_REVIEW_SMOKE_READY backend/target/browser-server.log
           node frontend/tests/bookingReviewSmoke.mjs
           node frontend/tests/authMobileSmoke.mjs
+          node frontend/tests/adminDashboardSmoke.mjs
+      - name: Admin V2 screenshots and isolated browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-v2-browser
+          path: |
+            backend/target/admin-v2-*.png
+            backend/target/browser-server.log
+            backend/target/browser-vite.log

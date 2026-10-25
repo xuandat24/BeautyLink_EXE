@@ -1,0 +1,15 @@
+import type { AdminBooking, AdminDateRange } from '../types';
+export type Metric = { value: number; previous: number | null; changePercent: number | null; basis: string };
+export type AdminInsights = {
+  range: AdminDateRange; granularity: 'DAY' | 'WEEK' | 'MONTH';
+  totalBookings: Metric; users: Metric; revenue: Metric; activePartners: Metric; onlinePaymentRate: Metric; completedBookings: Metric;
+  bookingCustomers: number; paymentAttempts: number; successfulAttempts: number; paymentAttemptSuccessRate: number | null;
+  trends: Array<{ date: string; bookings: number; verifiedOnlineAmount: number }>;
+  statuses: Array<{ status: AdminBooking['status']; count: number }>;
+  topSalons: Array<{ id: number; name: string; location: string | null; bookings: number; verifiedOnlineAmount: number }>;
+  popularServices: Array<{ id: number; name: string; supplierName: string; bookings: number; percentage: number }>;
+};
+export type AdminUserRow = { id: number; fullName: string; email: string | null; role: 'CUSTOMER' | 'SUPPLIER' | 'STAFF' | 'ADMIN'; status: string; createdAt: string };
+export type AdminSalonRow = { id: number; name: string; ownerName: string; ownerEmail: string; businessType: string; location: string | null; address: string; approvalStatus: string; active: boolean; serviceCount: number; practitionerCount: number; bookingCount: number };
+export type AdminSalonDetail = { salon: AdminSalonRow; services: Array<{ id: number; name: string; price: number; durationMinutes: number; active: boolean }>; practitioners: Array<{ id: number; name: string; specialty: string | null; active: boolean }>; schedules: Array<{ practitionerId: number; day: string; start: string; end: string; breakStart: string | null; breakEnd: string | null; active: boolean }>; recentBookings: AdminBooking[] };
+export type AdminReviewRow = { id: number; targetType: string; supplierName: string; serviceName: string; rating: number; comment: string | null; createdAt: string };

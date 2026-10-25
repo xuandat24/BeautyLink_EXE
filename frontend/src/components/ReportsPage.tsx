@@ -114,7 +114,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomer
         </div>
       </header>}
 
-      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
+      <main className={adminName ? 'min-w-0 px-4 py-6 lg:ml-60 lg:px-7' : 'mx-auto max-w-7xl px-4 py-10 sm:px-6'}>
         <div className="mb-8">
           <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-pink-600">
             Nhân viên & quản trị

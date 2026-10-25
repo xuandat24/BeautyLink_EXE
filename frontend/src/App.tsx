@@ -31,11 +31,11 @@ import { ViewAllServicesModal, ViewAllContext } from './components/ViewAllServic
 import { FavoriteToast, FavoriteToastInfo } from './components/FavoriteToast';
 
 const AdminDashboardPage = React.lazy(() => import('./components/admin/AdminDashboardPage').then((module) => ({ default: module.AdminDashboardPage })));
+const AdminModulesPage = React.lazy(() => import('./components/admin/AdminModulesPage').then(module => ({ default: module.AdminModulesPage })));
 const SupplierDashboard = React.lazy(() => import('./components/SupplierDashboard').then(module => ({ default: module.SupplierDashboard })));
 const SupplierRegisterPage = React.lazy(() => import('./components/SupplierRegisterPage').then(module => ({ default: module.SupplierRegisterPage })));
 const BookingsPage = React.lazy(() => import('./components/BookingsPage').then(module => ({ default: module.BookingsPage })));
 const ReportsPage = React.lazy(() => import('./components/ReportsPage').then(module => ({ default: module.ReportsPage })));
-const AdminCustomersPage = React.lazy(() => import('./components/AdminCustomersPage').then(module => ({ default: module.AdminCustomersPage })));
 const AccountPage = React.lazy(() => import('./components/AccountPage').then(module => ({ default: module.AccountPage })));
 const CheckoutPage = React.lazy(() => import('./components/CheckoutPage').then(module => ({ default: module.CheckoutPage })));
 const FilterExplorePage = React.lazy(() => import('./components/FilterExplorePage').then(module => ({ default: module.FilterExplorePage })));
@@ -190,6 +190,7 @@ type AppView =
   | 'admin-dashboard'
   | 'admin-bookings'
   | 'admin-payments'
+  | 'admin-salons' | 'admin-reviews' | 'admin-promotions' | 'admin-settings'
   | 'login'
   | 'register'
   | 'account'
@@ -284,7 +285,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       admin: 'admin-dashboard', filter: 'filter-explore', explore: 'filter-explore' };
     const direct: AppView[] = ['login', 'register', 'account', 'bookings', 'checkout', 'supplier-register',
       'supplier-dashboard', 'reports', 'admin-dashboard', 'admin-bookings', 'admin-customers',
-      'admin-payments', 'filter-explore', 'partner-detail'];
+      'admin-payments', 'admin-salons', 'admin-reviews', 'admin-promotions', 'admin-settings', 'filter-explore', 'partner-detail'];
     return aliases[hash] ?? (direct.includes(hash as AppView) ? hash as AppView : 'home');
   });
   const continuationAccount = useRef(currentUser?.id);
@@ -306,6 +307,9 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     practitionerId?: number;
   } | null>(null);
   const [adminBookedCustomerRange, setAdminBookedCustomerRange] = useState<{ from: string; to: string } | null>(null);
+  const [adminSearch, setAdminSearch] = useState('');
+  const [adminSalonId, setAdminSalonId] = useState<number | null>(null);
+  const [adminSalonDemo, setAdminSalonDemo] = useState(false);
 
   // Load categories
   useEffect(() => {
@@ -345,6 +349,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
         setCurrentPage('admin-bookings');
       } else if (hash === '#admin-payments') {
         setCurrentPage('admin-payments');
+      } else if (['#admin-salons', '#admin-reviews', '#admin-promotions', '#admin-settings'].includes(hash)) {
+        setCurrentPage(hash.slice(1) as AppView);
       } else if (hash === '#checkout') {
         setCurrentPage('checkout');
       } else if (hash === '#filter-explore' || hash === '#filter' || hash === '#explore') {
@@ -404,6 +410,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       '#admin',
       '#admin-bookings',
       '#admin-payments',
+      '#admin-salons', '#admin-reviews', '#admin-promotions', '#admin-settings',
       '#checkout',
       '#filter-explore',
       '#filter',
@@ -699,15 +706,18 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     [navigateTo, showToast]
   );
 
-  const handleAdminNavigate = useCallback((section: AdminSection) => {
+  const handleAdminNavigate = useCallback((section: AdminSection, query?: string) => {
     const destinations: Record<AdminSection, AppView> = {
       overview: 'admin-dashboard',
       bookings: 'admin-bookings',
       customers: 'admin-customers',
       payments: 'admin-payments',
       reports: 'reports',
+      salons: 'admin-salons', reviews: 'admin-reviews', promotions: 'admin-promotions', settings: 'admin-settings',
     };
     if (section !== 'customers') setAdminBookedCustomerRange(null);
+    setAdminSalonId(null); setAdminSalonDemo(false);
+    setAdminSearch(query ?? '');
     navigateTo(destinations[section]);
   }, [navigateTo]);
 
@@ -826,7 +836,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   // =========================================================================
   // STANDALONE ROUTING SCREENS (No background overlay)
   // =========================================================================
-  const adminPages: AppView[] = ['admin-dashboard', 'admin-bookings', 'admin-customers', 'admin-payments'];
+  const adminPages: AppView[] = ['admin-dashboard', 'admin-bookings', 'admin-customers', 'admin-payments', 'admin-salons', 'admin-reviews', 'admin-promotions', 'admin-settings'];
   const protectedPages: AppView[] = [...adminPages, 'supplier-dashboard', 'reports', 'account', 'bookings', 'checkout'];
   if (protectedPages.includes(currentPage) && (awaitingIdentity || sessionPhase === 'locked')) {
     return <section role="status" aria-live="polite" className="mx-auto max-w-md px-5 py-12 text-center text-sm text-slate-600">
@@ -855,6 +865,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   if (currentPage === 'admin-dashboard' || currentPage === 'admin-bookings' || currentPage === 'admin-payments') {
     const mode = currentPage === 'admin-bookings' ? 'bookings' : currentPage === 'admin-payments' ? 'payments' : 'overview';
     return <React.Suspense fallback={<div className="grid min-h-screen place-items-center bg-slate-50 text-sm font-bold text-slate-500">Đang tải trang quản trị...</div>}><AdminDashboardPage mode={mode} adminName={currentUser?.name || 'Quản trị viên'}
+      key={currentUser?.id}
+      initialSearch={adminSearch} onOpenSalon={(id, demo) => { setAdminSalonId(id); setAdminSalonDemo(demo); navigateTo('admin-salons'); }}
       onNavigate={handleAdminNavigate} onHome={handleBackToHome} onLogout={handleLogout}
       onOpenBookedCustomers={(from, to) => { setAdminBookedCustomerRange({ from, to }); navigateTo('admin-customers'); }} /></React.Suspense>;
   }
@@ -892,10 +904,14 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     );
   }
 
-  if (currentPage === 'admin-customers') {
+  if (['admin-customers', 'admin-salons', 'admin-reviews', 'admin-promotions', 'admin-settings'].includes(currentPage)) {
     return (
-      <AdminCustomersPage
-        onBack={handleBackToHome}
+      <AdminModulesPage
+        key={`${currentPage}:${currentUser?.id}`}
+        section={currentPage.replace('admin-', '') as 'customers' | 'salons' | 'reviews' | 'promotions' | 'settings'}
+        salonId={adminSalonId}
+        initialDemo={adminSalonDemo}
+        onHome={handleBackToHome}
         onNavigate={handleAdminNavigate}
         onLogout={handleLogout}
         adminName={currentUser?.name || 'Quản trị viên'}

@@ -18,6 +18,9 @@ public interface BookingReviewRepository extends JpaRepository<BookingReview, Lo
             + "(p.requiresManualReview = true or p.status in (:#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).PENDING}, "
             + ":#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).REVIEW_REQUIRED})))";
     Optional<BookingReview> findByBookingIdAndTargetType(Long bookingId, ReviewTargetType targetType);
+    @Query(value = "select r from BookingReview r join fetch r.supplier join fetch r.service where (:demo = true or r.supplier.demoData = false) and " + VALID_BOOKING + " order by r.createdAt desc, r.id desc",
+            countQuery = "select count(r) from BookingReview r where (:demo = true or r.supplier.demoData = false) and " + VALID_BOOKING)
+    Page<BookingReview> findAdminValid(@Param("demo") boolean demo, Pageable pageable);
     @Query("select r from BookingReview r where r.supplier.id = :supplierId and r.targetType = :#{T(com.example.backend.model.DomainEnums.ReviewTargetType).SUPPLIER} and " + VALID_BOOKING + " order by r.createdAt desc, r.id desc")
     List<BookingReview> findBySupplierIdOrderByCreatedAtDesc(@Param("supplierId") Long supplierId, Pageable pageable);
 
