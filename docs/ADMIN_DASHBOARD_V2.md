@@ -99,3 +99,40 @@ The full local run is NOT PASS: 36 failures/16 errors are confined to the same t
 Windows HTTP suites (MissingResendConfigurationTest, PlatformApiIntegrationTest, CloudinaryImageGatewayTest)
 with JVM `Unable to establish loopback connection`; 4 opt-in MySQL cases skipped. No tests disabled.
 Require Linux CI at the final HEAD, including Docker, isolated MySQL and the browser screenshots.
+
+## Targeted UI refinement (base cdf95fb, 26 October 2026)
+
+This follow-up preserves the merged V2 architecture and all reporting contracts above.
+
+| Requirement | Classification at base | Targeted change |
+|---|---|---|
+| Nine sidebar destinations, responsive menu, existing hashes | Already implemented | Preserve; add explicit keyboard focus and return focus when closing mobile overlay |
+| Six real KPI definitions, demo exclusion, filters/refresh | Already implemented | Preserve data; stronger values/accent icons and comparison explanation |
+| KPI destinations | Needs refinement | Explicit detail buttons; completed uses existing status filter, no guessed routes |
+| DAY/WEEK/MONTH, two actual reporting series | Needs refinement | Pressed buttons, dashed indigo revenue, keyboard/hover points for both series |
+| Chart zero data | Missing explicit chart message | Show empty state without fabricated trend values |
+| Status donut and table/drawer colors | Needs refinement | Shared amber pending, blue confirmed, green completed, rose cancelled; violet refunded |
+| Recent booking details, CSV and pagination | Already implemented | Preserve; clearer detail button and view-all action |
+| Top salons and service-ID ranking | Already implemented | Preserve; visible salon action/focus and long-name titles/truncation |
+| Gross receipts, deposits, attempts, payment caveats | Already implemented | Preserve; no fake payment-method categories |
+| Backend/security/schema/payment/auth/seed changes | Out of scope | None; no demonstrated backend defect |
+| Campaign mutation, editable settings | Out of scope | Preserve explicit unavailable/read-only pages |
+
+Interaction mapping uses the existing onNavigate callbacks: total bookings and recent view-all -> bookings
+(clear local status/payment/search filters); completed -> bookings with status=COMPLETED; users -> all-role
+user directory; partners -> salon directory; revenue and payment rate -> payment reporting. Booking/payment
+drilldowns retain the selected date/demo range while mounted. User/salon directories retain their existing
+scope (not a new KPI-specific filter). Top salon passes its actual ID and demo scope to the existing detail.
+The existing booked-customer cohort action remains separate. Cards have explicit buttons, not nested links
+or whole-card click handlers; opening a metric definition does not navigate.
+
+Focused tests cover KPI mapping, completion/filter reuse, chart requests and keyboard revenue inspection,
+zero data and all badge colors. Existing tests retain stale response, authorization, session-expiry, error,
+CSV, login/checkout and logout coverage. The existing browser smoke is extended for real grain requests,
+KPI completion filter, search, back/forward, mobile Escape/overlay/focus and actual server-side revocation
+or logout at the four existing viewports. Browser fixtures remain isolated and production files untouched.
+Final run links and screenshots belong in the refinement PR; no production rollout is authorized here.
+
+Deployment/rollback: frontend-only bundle change; existing backend/API/schema remains compatible.
+After review and separate deployment approval, roll back only the frontend build if necessary; no database
+restore or backend/session/payment-policy rollback is needed.
