@@ -240,3 +240,17 @@ Release: backend first (additive APIs and immutable audit reservation), then fro
 changes. Roll back frontend to the previous compatible bundle if necessary, retain backend audit guards
 for records already written. Do not restore DB or roll back session/payment safety. No merge/deploy or
 production writes authorized/performed by this task.
+
+
+### Manual profile-edit directory (follow-up to PR21)
+
+The manually entered URL is `https://beautylink.cloud/#admin-users/edit` (after this frontend change is released).
+It reuses the normal all-role user directory, search, role filter, paging and customer history/CSV.
+Only this opt-in directory shows a `Sửa hồ sơ` action for CUSTOMER rows; it opens the existing
+`#admin-users/123/edit` form with the real numeric ID, and its back action returns to the edit directory.
+`{id}` in documentation is a placeholder, never a literal ID to type into the browser.
+No normal sidebar/list/detail advertises this mode. All routes remain behind App's verified ADMIN gate;
+URL secrecy is not authorization. Existing server validation/ACTIVE ADMIN/CUSTOMER-only fields,
+concurrency checks, immutable audit and JWT policy are unchanged. No new backend/API/schema changes.
+Browser regression adds direct entry, refresh, real all-role data, customer-only edit buttons,
+form/save/reload/back to the directory and responsive screenshots at all seven existing viewports.

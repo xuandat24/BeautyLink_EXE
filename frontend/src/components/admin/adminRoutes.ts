@@ -1,5 +1,6 @@
-export type AdminDetailRoute = { kind: 'salon' | 'account'; id: number | null; tab: string; edit: boolean };
+export type AdminDetailRoute = { kind: 'salon' | 'account'; id: number | null; tab: string; edit: boolean; list?: boolean };
 export function parseAdminDetailHash(hash: string): AdminDetailRoute | null {
+  if (/^#admin-users\/edit\/?$/i.test(hash)) return { kind: 'account', id: null, tab: '', edit: true, list: true };
   const match = /^#admin-(salons|users)\/(.*)$/i.exec(hash);
   if (!match) return null;
   const [rawId, rawTab = '', ...extra] = match[2].split('/');
