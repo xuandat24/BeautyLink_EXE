@@ -178,3 +178,5 @@ real Spring/JWT/H2 browser gate can exercise normal reporting without a toggle. 
 remain excluded. This test class is absent from production JARs. Production backend, schema, seeds,
 dependencies, auth, PayOS and reporting formulas are unchanged. Final CI/screenshots recorded in PR.
 Rollback: previous frontend bundle only; no migration, production data write or backend rollout needed.
+
+Visual QA caught mixed-unit Tailwind ordering: min-[1800px] was emitted before xl (rem) and got overridden at 1920px. The 1800px-equivalent breakpoint now uses 112.5rem, matching default units. Browser asserts the expected 6/3/2/1 columns at each width, rather than inferring responsive success solely from overflow.

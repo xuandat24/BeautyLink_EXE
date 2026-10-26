@@ -46,6 +46,8 @@ try {
       const cards = page.getByRole('region', { name: 'Chỉ số kinh doanh' });
       // Named section is exposed as a region by its aria-label.
       assert.equal(await cards.locator('article').count(), 6);
+      const expectedColumns = width >= 1800 ? 6 : width >= 1280 ? 3 : width >= 640 ? 2 : 1;
+      assert.equal(await cards.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length), expectedColumns, `${width}: responsive KPI columns`);
       assert.ok((await cards.locator('article').first().textContent()).includes(String(data.totalBookings.value)));
       const todayResponse = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?') && r.url().includes('includeDemo=false'));
       await page.getByRole('button', { name: 'Hôm nay', exact: true }).click();

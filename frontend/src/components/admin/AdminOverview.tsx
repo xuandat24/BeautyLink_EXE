@@ -37,7 +37,7 @@ export function AdminOverview({ params, renderBookings, onSalon, onBookedCustome
   const selected = data.trends[point]; const total = data.statuses.reduce((sum, row) => sum + row.count, 0);
   let offset = 0;
   return <div data-testid="admin-overview" className="space-y-4">
-    <section aria-label="Chỉ số kinh doanh" className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 min-[1800px]:grid-cols-6">{cards.map(({ label, note, metric, icon: Icon, format, section, status, accent }) => {
+    <section aria-label="Chỉ số kinh doanh" className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 min-[112.5rem]:grid-cols-6">{cards.map(({ label, note, metric, icon: Icon, format, section, status, accent }) => {
       const value = format ? format(metric.value) : metric.value.toLocaleString('vi-VN');
       return <article key={label} className="@container flex min-w-0 flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md focus-within:border-pink-300">
         <div className="flex items-center gap-2"><span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${accent}`}><Icon aria-hidden="true" className="h-4 w-4" /></span><h2 className="text-sm font-semibold leading-5 text-slate-700">{label}</h2></div>
