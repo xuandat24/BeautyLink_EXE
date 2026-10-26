@@ -95,8 +95,8 @@ test('booking/payment pills distinguish pending, confirmed, completed, cancelled
   try {
     await act(async () => env.root.render(React.createElement(BookingTable, { title: 'Bookings', bookings: rows, onSelect() {} })));
     const cells = [...document.querySelectorAll('tbody tr')].map(tr => tr.querySelectorAll('td'));
-    for (const [i, color] of ['amber', 'blue', 'emerald', 'rose'].entries()) assert.match(cells[i][4].querySelector('span')!.className, new RegExp(`bg-${color}-100`));
-    for (const [i, color] of ['slate', 'amber', 'emerald', 'violet'].entries()) assert.match(cells[i][5].querySelector('span')!.className, new RegExp(`bg-${color}-100`));
+    for (const [i, color] of ['amber', 'blue', 'emerald', 'rose'].entries()) assert.match(cells[i][[...document.querySelectorAll('th')].findIndex(th => th.textContent === 'Trạng thái lịch')].querySelector('span')!.className, new RegExp(`bg-${color}-100`));
+    for (const [i, color] of ['slate', 'amber', 'emerald', 'violet'].entries()) assert.match(cells[i][[...document.querySelectorAll('th')].findIndex(th => th.textContent === 'Thanh toán')].querySelector('span')!.className, new RegExp(`bg-${color}-100`));
     assert.equal(document.querySelectorAll('button[aria-label^="Chi tiết "]').length, 4);
   } finally { await env.close(); }
 });

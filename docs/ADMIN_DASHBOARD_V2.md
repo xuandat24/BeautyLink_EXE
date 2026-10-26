@@ -180,3 +180,63 @@ dependencies, auth, PayOS and reporting formulas are unchanged. Final CI/screens
 Rollback: previous frontend bundle only; no migration, production data write or backend rollout needed.
 
 Visual QA caught mixed-unit Tailwind ordering: min-[1800px] was emitted before xl (rem) and got overridden at 1920px. The 1800px-equivalent breakpoint now uses 112.5rem, matching default units. Browser asserts the expected 6/3/2/1 columns at each width, rather than inferring responsive success solely from overflow.
+
+## Tables, details and SPA follow-up (base 0c2150a)
+
+| Module | Confirmed baseline defect | Narrow change |
+|---|---|---|
+| Overview | One Promise.all depended on grain and globally replaced content with loading | Separate insights/payment/recent request lifetimes; grain only refetches existing insights, keeps nodes/data and handles local error/retry/races |
+| Tables | Salon, booking and revenue cells stacked unrelated attributes | Dedicated columns, scoped admin-table CSS, existing badges/drawers/CSV/paging preserved |
+| Salon | ID in component state, oversized drawer, eager capped collections | Hash detail page; headerOnly option on existing API, lazy paginated tab reads and expanded schedule reads |
+| Account | No detail or authorized cross-account profile update contract | Explicit ADMIN detail DTO; owner approved only CUSTOMER name/gender/birth edits, manual route, optimistic timestamp under row lock and immutable audit |
+| Other modules | Existing read-only reviews, campaign/settings states and reports workflow | Preserve; review columns separated; no speculative campaign data or financial mutations |
+
+Routes: `#admin-salons/{id}` with `/services`, `/practitioners`, `/bookings`, `/payments` tabs;
+`#admin-users/{id}` and `/bookings`; manual-only `#admin-users/{id}/edit`. Existing list hashes and aliases
+remain. Invalid/unsafe IDs fail closed. Hash changes keep the admin shell and relevant detail header mounted;
+only changing the entity/account ID intentionally resets page-local caches. Refresh and browser history
+resolve the ID from the URL. No normal UI link/button/search suggestion exposes the edit URL.
+
+Reused: booking list/detail, customer history, canonical receipt policy, status badges, revenue/CSV and
+existing session guards. Additive ADMIN APIs:
+- GET `/admin/users/{id}`: safe profile projection and up to 100 non-demo linked salons; no secrets or sessions.
+- PATCH `/admin/users/{id}/profile`: fullName plus optional gender/dateOfBirth and expectedUpdatedAt.
+- Existing GET `/admin/salons/{id}?headerOnly=true`: existing shape with header/counts and empty collections;
+  old default still returns the legacy shape/collections unchanged.
+- GET `/admin/salons/{id}/services`, `/practitioners`: database paging (size 1..100).
+- GET `/admin/salons/{id}/practitioners/{personId}/schedule`: verifies both IDs, at most seven weekly rules.
+- GET `/admin/salons/{id}/bookings`: CUSTOMER cohort, createdAt date/status filters, database paging.
+- GET `/admin/payments?salonId&from&to&page&size`: bounded attempt ledger and canonical receipt summary.
+All above retain `/api/v1` server and relative `/v1` client prefixes. Demo exclusion and 366-day Vietnam
+date policy stay unchanged. Read-only queries bind values and use repeatable-read snapshots.
+
+Money: attempts are listed by createdAt, ordered createdAt DESC/id DESC; canonical verified receipts use
+paidAt and the same first-PAID/manual guard as existing reporting. Duplicate/manual attempts do not inflate
+receipts. Deposits 5%/historical 50%, full payment, requested amount and remaining-at-salon snapshot are
+separate. A PAID label is not a claim that every attempt is canonical. No cash/refund/commission/payout
+calculation is invented. Header booking/service/practitioner counts retain their existing all-time definitions;
+booking tab date filters and CUSTOMER cohort can have a different count.
+
+Owner explicitly approved the narrow update contract in this session. Only ACTIVE ADMIN actors may edit
+CUSTOMER name/gender/birth. Unknown JSON fields, role/status/email/phone/password/authVersion edits are
+rejected. Optional null fields preserve existing values, including null Google-account profiles; no invented
+birth dates/genders. Target row is re-read under a pessimistic lock and expectedUpdatedAt must match.
+Only one concurrent update wins; stale submissions return 409. Changes and SupportReport audit commit
+atomically. Reserved `ADMIN-PROFILE-AUDIT:` records contain actor/target IDs, changed field names and
+timestamps, no profile values/secrets; public creation and report mutation of that audit are forbidden.
+Existing JWT accountUpdatedAt policy is preserved: an edited customer's old JWT returns 401 and the
+customer signs in again. No token is issued to the admin for that customer and no session policy is relaxed.
+
+Verification: real Spring/JWT/Hibernate tests cover salon/payment isolation, canonical amounts, paging,
+role denial, strict payload validation, stale writes, audit persistence/immutability and concurrent HTTP
+updates. Frontend tests cover local chart races/error/retry without unmount/refetching unrelated widgets,
+tab caching, route parsing, hidden edit discovery and duplicate-submit prevention. Browser uses the existing
+isolated Spring/H2/fake gateway gate at seven viewports, never production. Full local Java verify was
+executed: 400 cases, 0 failures/211 context/HTTP errors/4 skips due to Windows JVM loopback failure in
+RestClient initialization; the focused Admin tests with mocked outbound image gateway pass. Require full
+Linux CI at final HEAD; final counts/run/screenshots recorded in PR instead of documentary CI reruns.
+
+Release: backend first (additive APIs and immutable audit reservation), then frontend; no schema/env/secret
+changes. Roll back frontend to the previous compatible bundle if necessary, retain backend audit guards
+for records already written. Do not restore DB or roll back session/payment safety. No merge/deploy or
+production writes authorized/performed by this task.
