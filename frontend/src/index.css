@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "./components/admin/adminTable.css";
 
+/* Keep the vendor's floating widget below site dialogs (z-50 and above). */
+body > div:has(> iframe[title="TopAiChat Widget"]) {
+  z-index: 40 !important;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

@@ -109,6 +109,7 @@ jobs:
             sleep 1
           done
           grep -q BOOKING_REVIEW_SMOKE_READY backend/target/browser-server.log
+          node frontend/tests/chatWidgetSmoke.mjs
           node frontend/tests/bookingReviewSmoke.mjs
           node frontend/tests/authMobileSmoke.mjs
           node frontend/tests/adminDashboardSmoke.mjs
