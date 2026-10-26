@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AdminNav, type AdminNavProps } from './AdminNav';
+import { AdminModulesPage } from './AdminModulesPage';
 import { adminDetailHash, type AdminDetailRoute } from './adminRoutes';
 import { adminV2Api, adminRangeError, type AdminRange } from '../../services/adminApi';
 import { beautyApi, getAccessToken, getApiErrorMessage } from '../../services/beautyApi';
@@ -17,6 +18,7 @@ const date = (value: string) => new Date(value).toLocaleString('vi-VN', { timeZo
 function Info({ rows }: { rows: Array<[string, React.ReactNode]> }) { return <dl className="mt-4 grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-2">{rows.map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 break-words text-sm font-semibold">{value || '—'}</dd></div>)}</dl>; }
 function Dates({ range, onChange }: { range: AdminRange; onChange: (range: AdminRange) => void }) { return <div className="my-4 flex flex-wrap gap-3"><label className="text-xs font-semibold text-slate-600">Từ ngày<input type="date" value={range.from} max={range.to} onChange={e => onChange({ ...range, from: e.target.value })} className="mt-1 block min-h-10 rounded-lg border border-slate-200 px-3 text-sm" /></label><label className="text-xs font-semibold text-slate-600">Đến ngày<input type="date" value={range.to} min={range.from} onChange={e => onChange({ ...range, to: e.target.value })} className="mt-1 block min-h-10 rounded-lg border border-slate-200 px-3 text-sm" /></label></div>; }
 export function AdminDetailPage({ route, ...nav }: Omit<AdminNavProps, 'active'> & { route: AdminDetailRoute }) {
+  if (route.kind === 'account' && route.list) return <AdminModulesPage {...nav} section="customers" editProfiles />;
   return <div className="min-h-screen min-w-0 bg-slate-50 text-slate-900"><AdminNav {...nav} active={route.kind === 'salon' ? 'salons' : 'customers'} /><main className="min-w-0 px-4 py-5 lg:ml-60 lg:px-6">{route.id == null ? <p role="alert">Đường dẫn chi tiết không hợp lệ.</p> : route.kind === 'salon' ? <SalonPage key={`salon:${route.id}`} id={route.id} tab={route.tab} /> : <AccountPage key={`account:${route.id}`} id={route.id} tab={route.tab} edit={route.edit} />}</main></div>;
 }
 function SalonPage({ id, tab }: { id: number; tab: string }) {
@@ -56,7 +58,7 @@ function AccountPage({ id, tab, edit }: { id: number; tab: string; edit: boolean
   const resource = useAdminResource(`account:${id}`, () => adminV2Api.account(id)); const account = resource.data; const [historyPage, setHistoryPage] = useState(0);
   const history = useAdminResource(`account-bookings:${id}:${account?.updatedAt}:${historyPage}`, () => beautyApi.adminCustomerBookings(id, historyPage), tab === 'bookings' && account?.role === 'CUSTOMER');
   const [booking, setBooking] = useState<AdminBooking | null>(null);
-  return <><button type="button" className="admin-action mb-4" onClick={() => { window.location.hash = '#admin-customers'; }}>← Danh sách người dùng</button><AdminRegion {...resource} retry={resource.reload}>{account && <>
+  return <><button type="button" className="admin-action mb-4" onClick={() => { window.location.hash = edit ? '#admin-users/edit' : '#admin-customers'; }}>← Danh sách người dùng</button><AdminRegion {...resource} retry={resource.reload}>{account && <>
     <header className="rounded-2xl border bg-white p-4"><h1 className="text-2xl font-extrabold">{account.fullName}</h1><div className="mt-3 flex gap-2"><AdminStatusBadge kind="role" value={account.role} /><AdminStatusBadge kind="account" value={account.status} /></div></header>
     {edit ? account.role !== 'CUSTOMER' ? <p role="alert" className="mt-4 text-rose-700">Chỉ được chỉnh sửa hồ sơ CUSTOMER. Không có quyền đổi role, status hoặc thông tin xác thực.</p> : <AccountEditor account={account} onSaved={resource.reload} refreshing={resource.loading} /> : <>
       <nav aria-label="Nội dung tài khoản" className="my-4 flex flex-wrap gap-2"><button type="button" className="admin-action" aria-current={tab === '' ? 'page' : undefined} onClick={() => { window.location.hash = adminDetailHash('account', id); }}>Thông tin tài khoản</button>{account.role === 'CUSTOMER' && <button type="button" className="admin-action" aria-current={tab === 'bookings' ? 'page' : undefined} onClick={() => { window.location.hash = adminDetailHash('account', id, 'bookings'); }}>Lịch sử đặt lịch</button>}</nav>

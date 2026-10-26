@@ -22,6 +22,9 @@ test('detail hash routes preserve IDs/tabs and fail closed on malformed and unsa
   assert.deepEqual(parseAdminDetailHash('#admin-users/3/edit'), { kind: 'account', id: 3, tab: 'edit', edit: true });
   for (const hash of ['#admin-users/0/edit', '#admin-salons/../payments', '#admin-users/9007199254740992', '#admin-users/2/edit/extra']) assert.equal(parseAdminDetailHash(hash)?.id, null);
   assert.equal(parseAdminDetailHash('#admin-customers'), null);
+  assert.deepEqual(parseAdminDetailHash('#admin-users/edit'), { kind: 'account', id: null, tab: '', edit: true, list: true });
+  assert.equal(parseAdminDetailHash('#admin-users/{id}/edit')?.id, null);
+  assert.equal(parseAdminDetailHash('#admin-users/edit/extra')?.list, undefined);
 });
 test('grain switching keeps dashboard nodes/data mounted, fetches only insights, and ignores stale response', async () => {
   const env = environment(); const original = { insights: adminV2Api.insights, payments: beautyApi.adminPaymentSummary, bookings: beautyApi.adminBookings };
@@ -76,4 +79,30 @@ test('account view has no edit discovery; direct edit sends only approved fields
     await act(async () => { form.dispatchEvent(new env.dom.window.Event('submit', { bubbles: true, cancelable: true })); form.dispatchEvent(new env.dom.window.Event('submit', { bubbles: true, cancelable: true })); }); assert.equal(calls, 1);
     account = { ...account, updatedAt: '2026-10-02T00:00:00Z' }; await act(async () => finish(account)); assert.match(document.body.textContent ?? '', /Đã lưu hồ sơ khách hàng/);
   } finally { adminV2Api.account = original.account; adminV2Api.updateAccount = original.update; await env.close(); }
+});
+
+
+test('manual edit directory reuses all-role list, allows CUSTOMER edit only and normal list has no edit discovery', async () => {
+  const env = environment(); const original = adminV2Api.users;
+  const requests: unknown[] = [];
+  adminV2Api.users = async params => { requests.push(params); return { content: [
+    { id: 7, fullName: 'Khách Demo', email: 'customer@example.com', role: 'CUSTOMER', status: 'ACTIVE', createdAt: '2026-10-01T00:00:00Z' },
+    { id: 8, fullName: 'Đối Tác Demo', email: 'supplier@example.com', role: 'SUPPLIER', status: 'ACTIVE', createdAt: '2026-10-01T00:00:00Z' },
+    { id: 9, fullName: 'Admin Demo', email: 'admin@example.com', role: 'ADMIN', status: 'ACTIVE', createdAt: '2026-10-01T00:00:00Z' },
+  ], totalPages: 1, totalElements: 3, page: 0, size: 20 }; };
+  try {
+    const route = parseAdminDetailHash('#admin-users/edit')!;
+    await act(async () => env.root.render(React.createElement(AdminDetailPage, { ...nav, route })));
+    assert.equal(document.querySelectorAll('tbody tr').length, 3);
+    assert.equal(document.querySelector('[aria-label="Lọc vai trò"]')?.querySelectorAll('option').length, 5);
+    assert.deepEqual(requests[0], { query: undefined, role: undefined, page: 0, size: 20 });
+    const edits = [...document.querySelectorAll('button')].filter(b => b.textContent === 'Sửa hồ sơ');
+    assert.equal(edits.length, 1); assert.match(edits[0].getAttribute('aria-label')!, /Khách Demo/);
+    await act(async () => edits[0].click()); assert.equal(window.location.hash, '#admin-users/7/edit');
+    assert.equal(document.querySelectorAll('a[href="#admin-users/edit"]').length, 0);
+    const { AdminModulesPage } = await import('../src/components/admin/AdminModulesPage');
+    await act(async () => env.root.render(React.createElement(AdminModulesPage, { ...nav, section: 'customers' })));
+    assert.equal(document.querySelectorAll('tbody tr').length, 3);
+    assert.doesNotMatch([...document.querySelectorAll('button,a')].map(n => n.textContent).join(' '), /Sửa hồ sơ|Chế độ chỉnh sửa/);
+  } finally { adminV2Api.users = original; await env.close(); }
 });

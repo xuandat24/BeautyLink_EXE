@@ -125,18 +125,25 @@ try {
       await page.getByRole('navigation', { name: 'Nội dung tài khoản' }).waitFor(); assert.ok(page.url().includes('#admin-users/'));
       assert.equal(await page.locator('main a[href*="/edit"]').count(), 0); assert.equal(await page.getByRole('button', { name: /chỉnh sửa|edit/i }).count(), 0); await capture('account-detail');
       await page.getByRole('button', { name: '← Danh sách người dùng', exact: true }).click(); await page.getByLabel('Lọc vai trò').waitFor();
+      assert.equal(await page.getByRole('button', { name: /^Sửa hồ sơ/ }).count(), 0, 'normal directory never advertises edit');
+      await page.goto(`${base}/#admin-users/edit`);
+      await page.getByText(/^Chế độ chỉnh sửa hồ sơ:/).waitFor(); await page.locator('tbody tr').first().waitFor();
+      assert.equal(await page.locator('tbody tr').filter({ hasText: 'admin-browser@example.com' }).getByRole('button', { name: /^Sửa hồ sơ/ }).count(), 0);
+      await capture('user-edit-directory');
+      await page.reload(); await page.getByText(/^Chế độ chỉnh sửa hồ sơ:/).waitFor(); await page.getByLabel('Lọc vai trò').waitFor();
+      await page.getByLabel('Lọc vai trò').selectOption('CUSTOMER'); await page.getByRole('textbox', { name: 'Tìm người dùng', exact: true }).fill('mobile-browser@example.com');
+      await page.locator('tbody tr').filter({ hasText: 'mobile-browser@example.com' }).getByRole('button', { name: /^Sửa hồ sơ/ }).click();
+      await page.getByRole('heading', { name: 'Chỉnh sửa hồ sơ khách hàng', exact: true }).waitFor();
+      assert.match(page.url(), /#admin-users\/[1-9]\d*\/edit$/); await capture('user-edit-form');
       if (width === 1366) {
-        await page.getByLabel('Lọc vai trò').selectOption('CUSTOMER'); await page.getByRole('textbox', { name: 'Tìm người dùng', exact: true }).fill('mobile-browser@example.com');
-        await page.locator('tbody tr').filter({ hasText: 'mobile-browser@example.com' }).getByRole('button', { name: 'Xem chi tiết', exact: true }).click();
-        await page.getByRole('navigation', { name: 'Nội dung tài khoản' }).waitFor();
-        await page.evaluate(() => { location.hash += '/edit'; });
-        await page.getByRole('heading', { name: 'Chỉnh sửa hồ sơ khách hàng', exact: true }).waitFor();
         await page.getByLabel('Họ tên', { exact: true }).fill('Mobile Browser Test Updated'); await page.getByLabel('Giới tính', { exact: true }).selectOption('FEMALE'); await page.getByLabel('Ngày sinh', { exact: true }).fill('1995-01-01');
         await page.getByRole('button', { name: 'Lưu hồ sơ', exact: true }).click(); await page.getByText('Đã lưu hồ sơ khách hàng.', { exact: true }).waitFor();
         await page.getByRole('heading', { name: 'Mobile Browser Test Updated', exact: true }).waitFor();
-        const detailUrl = page.url().replace('/edit', ''); await page.goto(detailUrl); await page.getByRole('heading', { name: 'Mobile Browser Test Updated', exact: true }).waitFor();
-        await page.getByRole('button', { name: '← Danh sách người dùng', exact: true }).click(); await page.getByLabel('Lọc vai trò').waitFor();
+        await page.reload(); await page.getByRole('heading', { name: 'Mobile Browser Test Updated', exact: true }).waitFor();
+        assert.equal(await page.getByLabel('Giới tính', { exact: true }).inputValue(), 'FEMALE'); assert.equal(await page.getByLabel('Ngày sinh', { exact: true }).inputValue(), '1995-01-01');
       }
+      await page.getByRole('button', { name: '← Danh sách người dùng', exact: true }).click(); await page.getByText(/^Chế độ chỉnh sửa hồ sơ:/).waitFor();
+      assert.ok(page.url().endsWith('#admin-users/edit')); await page.getByLabel('Lọc vai trò').waitFor();
       await page.getByRole('button', { name: 'Khách hàng & lịch sử / CSV', exact: true }).click();
       await page.getByRole('heading', { name: 'Tài khoản khách hàng', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Xem', exact: true }).first().waitFor(); await checkLayout();
