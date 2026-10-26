@@ -288,3 +288,9 @@ persisted reload, logo exit+reload on desktop/mobile. Not a production write or 
 Rollout after review: backend then frontend; preserve the new recovery-proof check if reverting UI. A backend
 rollback after contact edits must not re-enable pre-change recovery proofs; wait for all outstanding reset
 codes to expire and review operator changes first. Never restore production DB to undo this code.
+
+
+Integration with concurrently merged main PR23 (42c2527): preserve presentation-only reporting and the
+five-column user table. Manual editor directory/account reads explicitly request unformatted backend
+contacts; write responses remain raw. Read/edit caches have separate keys so a presentation Gmail alias
+cannot appear in an editor and be saved accidentally. No presentation setting or production variable changed.

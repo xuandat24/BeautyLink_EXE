@@ -13,6 +13,18 @@ npm run dev
 
 Open <http://localhost:5173>.
 
+For the classroom presentation deployment, set `VITE_PRESENTATION_DATA=true`
+before building. This supplies stable sample rating summaries only where there
+are no reviews, displays the group report of 90 bookings from 78 customers,
+59 completed appointments and 1,906,000 VNĐ in commission revenue, and
+replaces `@seed.beautylink.test` emails in admin account views and customer CSV
+exports. Actual review contents, booking records, login emails and notification
+recipients stay in the backend. Disable the flag and rebuild to show only live
+values again. The overview status counts, trend totals and partner/service
+rankings reconcile to the report. Commission is a separate field from actual
+gross online receipts. Sample rating totals and report summaries do not create matching
+review or booking records in the detail lists.
+
 Useful checks:
 
 ```powershell

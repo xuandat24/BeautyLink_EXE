@@ -31,6 +31,7 @@ import { serviceReviewSummary, validDatabaseId } from '../lib/reviewScope';
 import { BackendService, CurrentUser } from '../types';
 import { ReviewListStatus } from './ReviewListStatus';
 import { useBookingReviews } from '../hooks/useBookingReviews';
+import { presentationEnabled } from '../lib/presentationData';
 import { ServiceReviewModal } from './ServiceReviewModal';
 import { FavoriteToast, FavoriteToastInfo } from './FavoriteToast';
 
@@ -174,7 +175,8 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
 
   const reviewState = useBookingReviews(partner.supplierId, undefined, reviewsUpdateTrigger);
   const { reviews } = reviewState;
-  const reviewRating = reviewState.total ? reviewState.rating.toFixed(1) : "—";
+  const headerReviewCount = reviewState.total || (presentationEnabled ? partnerProfile.reviewsCount : 0);
+  const reviewRating = reviewState.total ? reviewState.rating.toFixed(1) : headerReviewCount ? partnerProfile.rating.toFixed(1) : "—";
 
   return (
     <div className="min-h-screen bg-[#FFF9FA] text-slate-900 pb-16">
@@ -227,7 +229,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    <span>{reviewRating} ({reviewState.total} đánh giá)</span>
+                    <span>{reviewRating} ({headerReviewCount} đánh giá)</span>
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                     <Users className="w-3.5 h-3.5 text-emerald-600" />

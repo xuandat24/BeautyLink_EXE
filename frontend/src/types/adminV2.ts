@@ -3,10 +3,11 @@ export type Metric = { value: number; previous: number | null; changePercent: nu
 export type AdminInsights = {
   range: AdminDateRange; granularity: 'DAY' | 'WEEK' | 'MONTH';
   totalBookings: Metric; users: Metric; revenue: Metric; activePartners: Metric; onlinePaymentRate: Metric; completedBookings: Metric;
+  commissionRevenue?: Metric;
   bookingCustomers: number; paymentAttempts: number; successfulAttempts: number; paymentAttemptSuccessRate: number | null;
-  trends: Array<{ date: string; bookings: number; verifiedOnlineAmount: number }>;
+  trends: Array<{ date: string; bookings: number; verifiedOnlineAmount: number; commissionAmount?: number }>;
   statuses: Array<{ status: AdminBooking['status']; count: number }>;
-  topSalons: Array<{ id: number; name: string; location: string | null; bookings: number; verifiedOnlineAmount: number }>;
+  topSalons: Array<{ id: number; name: string; location: string | null; bookings: number; verifiedOnlineAmount: number; commissionAmount?: number }>;
   popularServices: Array<{ id: number; name: string; supplierName: string; bookings: number; percentage: number }>;
 };
 export type AdminUserRow = { id: number; fullName: string; email: string | null; role: 'CUSTOMER' | 'SUPPLIER' | 'STAFF' | 'ADMIN'; status: string; createdAt: string };
