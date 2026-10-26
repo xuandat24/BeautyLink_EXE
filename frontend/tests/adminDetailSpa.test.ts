@@ -70,19 +70,19 @@ test('account view has no edit discovery; direct edit sends only approved fields
   let account: AdminAccountDetail = { id: 7, fullName: 'Nguyễn Test', email: 'test@example.com', phone: '0391111111', gender: 'FEMALE', dateOfBirth: '1995-01-01', role: 'CUSTOMER', status: 'ACTIVE', createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z', salons: [] };
   let calls = 0; let finish!: (value: AdminAccountDetail) => void;
   adminV2Api.account = async () => account;
-  adminV2Api.updateAccount = async (id, data) => { calls++; assert.equal(id, 7); assert.deepEqual(Object.keys(data).sort(), ['dateOfBirth', 'expectedUpdatedAt', 'fullName', 'gender']); return new Promise(resolve => { finish = resolve; }); };
+  adminV2Api.updateAccount = async (id, data) => { calls++; assert.equal(id, 7); assert.deepEqual(Object.keys(data).sort(), ['confirmContactChange', 'dateOfBirth', 'email', 'expectedUpdatedAt', 'fullName', 'gender', 'phone']); return new Promise(resolve => { finish = resolve; }); };
   const render = (edit: boolean) => act(async () => env.root.render(React.createElement(AdminDetailPage, { ...nav, route: { kind: 'account', id: 7, tab: edit ? 'edit' : '', edit } })));
   try {
     await render(false); assert.doesNotMatch([...document.querySelectorAll('button,a')].map(n => n.textContent).join(' '), /chỉnh sửa|edit/i); assert.equal(document.querySelector('form:not(header form)'), null);
     await render(true); const form = document.querySelector('main form')!;
-    assert.equal(form.querySelectorAll('input').length, 2); assert.equal(form.querySelectorAll('select').length, 1); assert.equal(form.querySelector('select')?.getAttribute('aria-label'), 'Giới tính');
+    assert.equal(form.querySelectorAll('input').length, 4); assert.equal(form.querySelectorAll('select').length, 1); assert.equal(form.querySelector('select')?.getAttribute('aria-label'), 'Giới tính');
     await act(async () => { form.dispatchEvent(new env.dom.window.Event('submit', { bubbles: true, cancelable: true })); form.dispatchEvent(new env.dom.window.Event('submit', { bubbles: true, cancelable: true })); }); assert.equal(calls, 1);
     account = { ...account, updatedAt: '2026-10-02T00:00:00Z' }; await act(async () => finish(account)); assert.match(document.body.textContent ?? '', /Đã lưu hồ sơ khách hàng/);
   } finally { adminV2Api.account = original.account; adminV2Api.updateAccount = original.update; await env.close(); }
 });
 
 
-test('manual edit directory reuses all-role list, allows CUSTOMER edit only and normal list has no edit discovery', async () => {
+test('manual edit directory reuses all-role list, allows CUSTOMER and SUPPLIER edit only and normal list has no edit discovery', async () => {
   const env = environment(); const original = adminV2Api.users;
   const requests: unknown[] = [];
   adminV2Api.users = async params => { requests.push(params); return { content: [
@@ -97,7 +97,7 @@ test('manual edit directory reuses all-role list, allows CUSTOMER edit only and 
     assert.equal(document.querySelector('[aria-label="Lọc vai trò"]')?.querySelectorAll('option').length, 5);
     assert.deepEqual(requests[0], { query: undefined, role: undefined, page: 0, size: 20 });
     const edits = [...document.querySelectorAll('button')].filter(b => b.textContent === 'Sửa hồ sơ');
-    assert.equal(edits.length, 1); assert.match(edits[0].getAttribute('aria-label')!, /Khách Demo/);
+    assert.equal(edits.length, 2); assert.match(edits[0].getAttribute('aria-label')!, /Khách Demo/);
     await act(async () => edits[0].click()); assert.equal(window.location.hash, '#admin-users/7/edit');
     assert.equal(document.querySelectorAll('a[href="#admin-users/edit"]').length, 0);
     const { AdminModulesPage } = await import('../src/components/admin/AdminModulesPage');
@@ -105,4 +105,22 @@ test('manual edit directory reuses all-role list, allows CUSTOMER edit only and 
     assert.equal(document.querySelectorAll('tbody tr').length, 3);
     assert.doesNotMatch([...document.querySelectorAll('button,a')].map(n => n.textContent).join(' '), /Sửa hồ sơ|Chế độ chỉnh sửa/);
   } finally { adminV2Api.users = original; await env.close(); }
+});
+
+
+test('partner editor saves scoped profile, retains form on conflict and blocks duplicate submits', async () => {
+  const env=environment(); const original={ profile:adminV2Api.partnerProfile, update:adminV2Api.updatePartnerProfile, locations:beautyApi.locations, categories:beautyApi.categories };
+  const initial={ data:{ name:'Salon Example',businessType:'SPA',description:'Profile',addressLine:'Test address',imageUrl:null,locationId:null,latitude:null,longitude:null },revision:'original' };
+  adminV2Api.partnerProfile=async id=>{assert.equal(id,4);return initial;};beautyApi.locations=async()=>[];beautyApi.categories=async()=>[];
+  let count=0;let finish!: (value: typeof initial)=>void;
+  adminV2Api.updatePartnerProfile=async(id,data,revision)=>{assert.equal(id,4);assert.equal(revision,'original');assert.equal(data.name,'Salon Example');count++;if(count===1)throw new Error('Dữ liệu đã thay đổi');return new Promise(resolve=>{finish=resolve;});};
+  try {
+    const { AdminPartnerEditor }=await import('../src/components/admin/AdminPartnerEditor');
+    await act(async()=>env.root.render(React.createElement(AdminPartnerEditor,{salonId:4,name:'Salon Example'})));
+    const form=document.querySelector('form')!;assert.ok(form);assert.equal(form.querySelector('input')?.value,'Salon Example');
+    await act(async()=>form.dispatchEvent(new env.dom.window.Event('submit',{bubbles:true,cancelable:true})));assert.match(document.body.textContent??'',/Dữ liệu đã thay đổi/);assert.equal(document.querySelector('form'),form);assert.equal(form.querySelector('input')?.value,'Salon Example');
+    await act(async()=>{form.dispatchEvent(new env.dom.window.Event('submit',{bubbles:true,cancelable:true}));form.dispatchEvent(new env.dom.window.Event('submit',{bubbles:true,cancelable:true}));});assert.equal(count,2);
+    await act(async()=>finish(initial));assert.match(document.body.textContent??'',/Đã lưu thay đổi đối tác/);
+    assert.equal(form.querySelector('[name="role"]'),null);assert.equal(form.querySelector('[name="verificationStatus"]'),null);
+  } finally {adminV2Api.partnerProfile=original.profile;adminV2Api.updatePartnerProfile=original.update;beautyApi.locations=original.locations;beautyApi.categories=original.categories;await env.close();}
 });

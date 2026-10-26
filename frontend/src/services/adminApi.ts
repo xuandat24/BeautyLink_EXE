@@ -1,3 +1,4 @@
+import type { EditSnapshot, PartnerProfileEdit, PartnerServiceEdit, PartnerPersonEdit, PartnerScheduleEdit } from '../types/adminV2';
 import { apiClient } from './beautyApi';
 import type { AdminPage } from '../types';
 import type { AdminInsights, AdminUserRow, AdminSalonRow, AdminSalonDetail, AdminReviewRow } from '../types/adminV2';
@@ -12,6 +13,14 @@ export function adminRangeError({ from, to }: Pick<AdminRange, 'from' | 'to'>): 
   return null;
 }
 export const adminV2Api = {
+  partnerProfile: async (id: number): Promise<EditSnapshot<PartnerProfileEdit>> => (await apiClient.get(`/v1/admin/salons/${id}/edit`)).data,
+  updatePartnerProfile: async (id: number, data: PartnerProfileEdit, expectedRevision: string): Promise<EditSnapshot<PartnerProfileEdit>> => (await apiClient.put(`/v1/admin/salons/${id}/edit`, { data: { name: data.name, businessType: data.businessType, description: data.description, addressLine: data.addressLine, imageUrl: data.imageUrl, locationId: data.locationId, latitude: data.latitude, longitude: data.longitude }, expectedRevision })).data,
+  partnerService: async (sid: number, id: number): Promise<EditSnapshot<PartnerServiceEdit>> => (await apiClient.get(`/v1/admin/salons/${sid}/services/${id}/edit`)).data,
+  updatePartnerService: async (sid: number, id: number, data: PartnerServiceEdit, expectedRevision: string): Promise<EditSnapshot<PartnerServiceEdit>> => (await apiClient.put(`/v1/admin/salons/${sid}/services/${id}/edit`, { data: { categoryId: data.categoryId, name: data.name, description: data.description, price: data.price, originalPrice: data.originalPrice, durationMinutes: data.durationMinutes, imageUrl: data.imageUrl, active: data.active }, expectedRevision })).data,
+  partnerPerson: async (sid: number, id: number): Promise<EditSnapshot<PartnerPersonEdit>> => (await apiClient.get(`/v1/admin/salons/${sid}/practitioners/${id}/edit`)).data,
+  updatePartnerPerson: async (sid: number, id: number, data: PartnerPersonEdit, serviceIds: number[] | null, expectedRevision: string): Promise<EditSnapshot<PartnerPersonEdit>> => (await apiClient.put(`/v1/admin/salons/${sid}/practitioners/${id}/edit`, { data: { displayName: data.displayName, specialty: data.specialty, bio: data.bio, avatarUrl: data.avatarUrl }, active: data.active, serviceIds, expectedRevision })).data,
+  partnerSchedule: async (sid: number, id: number): Promise<EditSnapshot<PartnerScheduleEdit[]>> => (await apiClient.get(`/v1/admin/salons/${sid}/practitioners/${id}/schedule/edit`)).data,
+  updatePartnerSchedule: async (sid: number, id: number, rules: PartnerScheduleEdit[], expectedRevision: string): Promise<EditSnapshot<PartnerScheduleEdit[]>> => (await apiClient.put(`/v1/admin/salons/${sid}/practitioners/${id}/schedule/edit`, { data: { rules: rules.map(({ dayOfWeek, startTime, endTime, breakStart, breakEnd, slotMinutes, active }) => ({ dayOfWeek, startTime, endTime, breakStart, breakEnd, slotMinutes, active })) }, expectedRevision })).data,
   account: async (id: number): Promise<AdminAccountDetail> => (await apiClient.get(`/v1/admin/users/${id}`)).data,
   updateAccount: async (id: number, data: AdminProfilePatch): Promise<AdminAccountDetail> => (await apiClient.patch(`/v1/admin/users/${id}/profile`, data)).data,
   salonHeader: async (id: number): Promise<AdminSalonDetail> => (await apiClient.get(`/v1/admin/salons/${id}`, { params: { includeDemo: false, headerOnly: true } })).data,

@@ -4,6 +4,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
 const base = 'http://localhost:5173';
 const browser = await chromium.launch({ headless: true });
+let customerLookupEmail = 'mobile-browser@example.com';
 try {
   for (const [width, height] of [[1920, 1080], [1440, 900], [1366, 768], [1024, 768], [768, 1024], [390, 844], [360, 800]]) {
     const context = await browser.newContext({ viewport: { width, height } }); const page = await context.newPage(); const errors = [];
@@ -131,19 +132,46 @@ try {
       assert.equal(await page.locator('tbody tr').filter({ hasText: 'admin-browser@example.com' }).getByRole('button', { name: /^Sửa hồ sơ/ }).count(), 0);
       await capture('user-edit-directory');
       await page.reload(); await page.getByText(/^Chế độ chỉnh sửa hồ sơ:/).waitFor(); await page.getByLabel('Lọc vai trò').waitFor();
-      await page.getByLabel('Lọc vai trò').selectOption('CUSTOMER'); await page.getByRole('textbox', { name: 'Tìm người dùng', exact: true }).fill('mobile-browser@example.com');
-      await page.locator('tbody tr').filter({ hasText: 'mobile-browser@example.com' }).getByRole('button', { name: /^Sửa hồ sơ/ }).click();
+      await page.getByLabel('Lọc vai trò').selectOption('CUSTOMER'); await page.getByRole('textbox', { name: 'Tìm người dùng', exact: true }).fill(customerLookupEmail);
+      await page.locator('tbody tr').filter({ hasText: customerLookupEmail }).getByRole('button', { name: /^Sửa hồ sơ/ }).click();
       await page.getByRole('heading', { name: 'Chỉnh sửa hồ sơ khách hàng', exact: true }).waitFor();
       assert.match(page.url(), /#admin-users\/[1-9]\d*\/edit$/); await capture('user-edit-form');
       if (width === 1366) {
         await page.getByLabel('Họ tên', { exact: true }).fill('Mobile Browser Test Updated'); await page.getByLabel('Giới tính', { exact: true }).selectOption('FEMALE'); await page.getByLabel('Ngày sinh', { exact: true }).fill('1995-01-01');
+        await page.getByLabel('Email', { exact: true }).fill('admin-edited-customer@example.com'); await page.getByLabel('Số điện thoại', { exact: true }).fill('0938787878');
+        await page.getByRole('checkbox', { name: 'Tôi xác nhận đã kiểm tra email và số điện thoại mới với chủ tài khoản.', exact: true }).check();
         await page.getByRole('button', { name: 'Lưu hồ sơ', exact: true }).click(); await page.getByText('Đã lưu hồ sơ khách hàng.', { exact: true }).waitFor();
         await page.getByRole('heading', { name: 'Mobile Browser Test Updated', exact: true }).waitFor();
         await page.reload(); await page.getByRole('heading', { name: 'Mobile Browser Test Updated', exact: true }).waitFor();
         assert.equal(await page.getByLabel('Giới tính', { exact: true }).inputValue(), 'FEMALE'); assert.equal(await page.getByLabel('Ngày sinh', { exact: true }).inputValue(), '1995-01-01');
+        customerLookupEmail = 'admin-edited-customer@example.com'; assert.equal(await page.getByLabel('Email', { exact: true }).inputValue(), customerLookupEmail); assert.equal(await page.getByLabel('Số điện thoại', { exact: true }).inputValue(), '0938787878');
+        const customerLogin = await context.request.post(`${base}/api/v1/auth/login`, { data: { identifier: customerLookupEmail, password: 'Synthetic Mobile 123! ' } }); assert.equal(customerLogin.status(), 200); const auth = await customerLogin.json();
+        const me = await context.request.get(`${base}/api/v1/auth/me`, { headers: { Authorization: `Bearer ${auth.accessToken}` } }); assert.equal(me.status(), 200); assert.equal((await me.json()).phone, '0938787878');
+        assert.equal((await context.request.post(`${base}/api/v1/auth/session/logout`, { headers: { Authorization: `Bearer ${auth.accessToken}` } })).status(), 204);
+
       }
       await page.getByRole('button', { name: '← Danh sách người dùng', exact: true }).click(); await page.getByText(/^Chế độ chỉnh sửa hồ sơ:/).waitFor();
       assert.ok(page.url().endsWith('#admin-users/edit')); await page.getByLabel('Lọc vai trò').waitFor();
+      if (width === 1366 || width === 390) {
+        await page.getByRole('textbox', { name: 'Tìm người dùng', exact: true }).fill('supplier@beautylink.vn');
+        await page.locator('tbody tr').filter({ hasText: 'supplier@beautylink.vn' }).getByRole('button', { name: /^Sửa hồ sơ/ }).click();
+        await page.getByRole('heading', { name: 'Chỉnh sửa hồ sơ đối tác', exact: true }).waitFor();
+        const partner = page.locator('section').filter({ has: page.getByRole('navigation', { name: 'Chỉnh sửa đối tác', exact: true }) }).last();
+        await page.getByLabel('Tên salon', { exact: true }).waitFor(); await page.getByLabel('Tên salon', { exact: true }).fill('Lumière Beauty House Updated');
+        await page.getByRole('button', { name: 'Lưu thay đổi đối tác', exact: true }).click(); await page.getByText('Đã lưu thay đổi đối tác.', { exact: true }).waitFor();
+        await partner.getByRole('button', { name: 'Sửa dịch vụ', exact: true }).click(); await page.getByLabel('Chọn dịch vụ để sửa', { exact: true }).selectOption({ label: 'Makeup trong trẻo cá nhân' });
+        await page.getByLabel('Giá bán (VND)', { exact: true }).fill('350000'); await page.getByRole('button', { name: 'Lưu thay đổi đối tác', exact: true }).click(); await page.getByText('Đã lưu thay đổi đối tác.', { exact: true }).waitFor();
+        await capture('partner-service-edit');
+        await partner.getByRole('button', { name: 'Sửa chuyên viên', exact: true }).click(); await page.getByLabel('Chọn chuyên viên để sửa', { exact: true }).selectOption({ index: 1 }); await page.getByLabel('Chuyên môn', { exact: true }).fill('Makeup & skincare');
+        await page.getByRole('button', { name: 'Lưu thay đổi đối tác', exact: true }).click(); await page.getByText('Đã lưu thay đổi đối tác.', { exact: true }).waitFor();
+        await partner.getByRole('button', { name: 'Sửa lịch làm việc', exact: true }).click(); await page.getByLabel('Thứ Hai bắt đầu', { exact: true }).waitFor(); await page.getByRole('button', { name: 'Lưu thay đổi đối tác', exact: true }).click(); await page.getByText('Đã lưu thay đổi đối tác.', { exact: true }).waitFor(); await capture('partner-schedule-edit');
+        const editUrl = page.url(); await page.reload(); await page.getByLabel('Tên salon', { exact: true }).waitFor(); assert.equal(await page.getByLabel('Tên salon', { exact: true }).inputValue(), 'Lumière Beauty House Updated');
+        if (width < 1024) await page.getByRole('button', { name: 'Mở menu quản trị', exact: true }).click();
+        await page.getByRole('button', { name: 'BeautyLink — về trang chủ', exact: true }).click(); await page.waitForURL(url => !url.hash.includes('admin'));
+        assert.equal(await page.getByRole('navigation', { name: 'Điều hướng quản trị' }).count(), 0); await page.reload(); assert.equal(await page.getByRole('navigation', { name: 'Điều hướng quản trị' }).count(), 0); assert.equal(await page.getByRole('heading', { name: /Chỉnh sửa hồ sơ/ }).count(), 0);
+        await page.goto(editUrl); await page.getByLabel('Tên salon', { exact: true }).waitFor(); await page.getByRole('button', { name: '← Danh sách người dùng', exact: true }).click(); await page.getByLabel('Lọc vai trò').waitFor();
+      }
+
       await page.getByRole('button', { name: 'Khách hàng & lịch sử / CSV', exact: true }).click();
       await page.getByRole('heading', { name: 'Tài khoản khách hàng', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Xem', exact: true }).first().waitFor(); await checkLayout();

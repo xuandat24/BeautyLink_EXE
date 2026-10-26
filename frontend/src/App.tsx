@@ -409,7 +409,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       '#service',
       '#bookings',
       '#reports',
-      '#admin-customers',
+      '#admin-customers', '#admin-users',
       '#admin-dashboard',
       '#admin',
       '#admin-bookings',
@@ -421,7 +421,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       '#explore',
       '#partner-detail',
     ];
-    if (hashes.includes(window.location.hash)) {
+    setAdminDetail(null);
+    if (hashes.includes(window.location.hash) || parseAdminDetailHash(window.location.hash)) {
       window.history.replaceState(null, '', window.location.pathname);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
