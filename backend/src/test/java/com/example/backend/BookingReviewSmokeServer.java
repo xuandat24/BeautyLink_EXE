@@ -58,6 +58,9 @@ public class BookingReviewSmokeServer {
             adminBrowser.setPasswordHash(context.getBean(org.springframework.security.crypto.password.PasswordEncoder.class).encode("Synthetic Admin123!"));
             users.saveAndFlush(adminBrowser);
             var offering = services.findAll().stream().filter(s -> !people.findBySupplierIdAndActiveTrue(s.getSupplier().getId()).isEmpty()).findFirst().orElseThrow();
+            // Exercise normal Admin reporting after removing demo inclusion controls.
+            // Other demo suppliers remain marked demo; this in-memory fixture is not production data.
+            offering.getSupplier().setDemoData(false);
             String[] codes = {"SMOKE-UNPAID", "SMOKE-FUTURE-DEPOSIT", "SMOKE-FUTURE-FULL", "SMOKE-PAST-DEPOSIT", "SMOKE-PAST-FULL", "SMOKE-CANCELLED", "SMOKE-REFUNDED"};
             for (int i = 0; i < codes.length; i++) {
                 Booking b = new Booking(); b.setBookingCode(codes[i]); b.setCustomer(users.findByPhone("0900000001").orElseThrow());

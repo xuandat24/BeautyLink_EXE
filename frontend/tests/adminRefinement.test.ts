@@ -9,6 +9,9 @@ import { adminV2Api } from '../src/services/adminApi';
 import { beautyApi } from '../src/services/beautyApi';
 import { insightsFixture, paymentFixture } from './adminV2Fixtures';
 import type { AdminBooking } from '../src/types';
+import { AdminModulesPage } from '../src/components/admin/AdminModulesPage';
+import { AdminStatusBadge } from '../src/components/admin/AdminStatusBadge';
+import { adminStatusGroups, adminStatusPresentation } from '../src/components/admin/adminStatus';
 
 async function setup() {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/#admin-dashboard' });
@@ -50,9 +53,9 @@ test('completed KPI and view-all preserve date/demo cohort and send supported bo
   try {
     await act(async () => env.root.render(React.createElement(Harness)));
     await click('7 ngày'); assert.equal([...document.querySelectorAll('button')].find(b => b.textContent === '7 ngày')?.getAttribute('aria-pressed'), 'true');
-    await act(async () => document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click()); const range = env.requests.at(-1)!;
+    assert.equal(document.querySelector('input[type="checkbox"]'), null); const range = env.requests.at(-1)!;
     await click('Xem chi tiết Lịch hẹn hoàn thành');
-    assert.equal(env.requests.at(-1)?.status, 'COMPLETED'); assert.equal(env.requests.at(-1)?.includeDemo, true);
+    assert.equal(env.requests.at(-1)?.status, 'COMPLETED'); assert.equal(env.requests.at(-1)?.includeDemo, false);
     assert.equal(env.requests.at(-1)?.from, range.from); assert.equal(env.requests.at(-1)?.to, range.to);
     assert.equal(document.querySelector<HTMLSelectElement>('[aria-label="Trạng thái lịch"]')?.value, 'COMPLETED');
     await click('Tổng quan'); await click('Xem tất cả lịch đặt →');
@@ -95,5 +98,65 @@ test('booking/payment pills distinguish pending, confirmed, completed, cancelled
     for (const [i, color] of ['amber', 'blue', 'emerald', 'rose'].entries()) assert.match(cells[i][4].querySelector('span')!.className, new RegExp(`bg-${color}-100`));
     for (const [i, color] of ['slate', 'amber', 'emerald', 'violet'].entries()) assert.match(cells[i][5].querySelector('span')!.className, new RegExp(`bg-${color}-100`));
     assert.equal(document.querySelectorAll('button[aria-label^="Chi tiết "]').length, 4);
+  } finally { await env.close(); }
+});
+
+test('shared Admin badges localize actual enums with backgrounds and safely handle unknown values', async () => {
+  const env = await setup();
+  try {
+    for (const kind of Object.keys(adminStatusGroups) as Array<keyof typeof adminStatusGroups>) {
+      for (const value of Object.keys(adminStatusGroups[kind])) {
+        await act(async () => env.root.render(React.createElement(AdminStatusBadge, { kind, value })));
+        const badge = document.querySelector('[data-admin-status]')!;
+        assert.equal(badge.textContent, adminStatusPresentation(kind, value).label);
+        assert.match(badge.className, /bg-\w+-100/); assert.match(badge.className, /text-\w+-[79]00/);
+      }
+    }
+    for (const value of ['UNKNOWN', '__proto__', '', null]) {
+      await act(async () => env.root.render(React.createElement(AdminStatusBadge, { kind: 'account', value })));
+      assert.equal(document.querySelector('[data-admin-status]')?.textContent, 'Không xác định');
+      assert.match(document.querySelector('[data-admin-status]')!.className, /bg-slate-100/);
+    }
+    assert.equal(adminStatusPresentation('role', 'CUSTOMER').label, 'Khách hàng');
+    assert.equal(adminStatusPresentation('account', 'SUSPENDED').label, 'Đã khóa');
+    assert.equal(adminStatusPresentation('approval', 'VERIFIED').label, 'Đã duyệt');
+  } finally { await env.close(); }
+});
+
+test('directories use normal scope even with a legacy demo flag and preserve role/paging contracts', async () => {
+  const env = await setup(); const original = { users: adminV2Api.users, salons: adminV2Api.salons, reviews: adminV2Api.reviews };
+  const scopes: boolean[] = []; const userRequests: Parameters<typeof adminV2Api.users>[0][] = [];
+  const empty = { content: [], totalElements: 0, totalPages: 0, page: 0, size: 20 };
+  adminV2Api.users = async p => { userRequests.push(p); return { ...empty, totalElements: 21, totalPages: 2, content: [{ id: 1, fullName: 'Nguyễn An', email: 'test@example.com', role: 'CUSTOMER', status: 'ACTIVE', createdAt: '2026-10-26T00:00:00Z' }] }; };
+  adminV2Api.salons = async p => { scopes.push(p.includeDemo); return empty; };
+  adminV2Api.reviews = async p => { scopes.push(p.includeDemo); return empty; };
+  const props = { adminName: 'Admin', onNavigate() {}, onHome() {}, onLogout() {}, initialDemo: true };
+  try {
+    await act(async () => env.root.render(React.createElement(AdminModulesPage, { ...props, section: 'customers' })));
+    assert.match(document.querySelector('tbody')?.textContent ?? '', /Nguyễn An.*Khách hàng.*Hoạt động/);
+    await click('Trang sau'); assert.equal(userRequests.at(-1)?.page, 1);
+    await act(async () => { const select = document.querySelector<HTMLSelectElement>('[aria-label="Lọc vai trò"]')!; select.value = 'SUPPLIER'; select.dispatchEvent(new env.dom.window.Event('change', { bubbles: true })); });
+    assert.equal(userRequests.at(-1)?.role, 'SUPPLIER'); assert.equal(userRequests.at(-1)?.page, 0);
+    for (const section of ['salons', 'reviews', 'promotions', 'settings'] as const) {
+      await act(async () => env.root.render(React.createElement(AdminModulesPage, { ...props, section })));
+      assert.equal(document.querySelector('input[type="checkbox"]'), null);
+      assert.doesNotMatch(document.body.textContent ?? '', /Bao gồm.*demo|Dữ liệu chỉ đọc; quyền thay đổi/);
+    }
+    assert.ok(scopes.length >= 2); assert.ok(scopes.every(scope => scope === false));
+  } finally { Object.assign(adminV2Api, original); await env.close(); }
+});
+
+test('compact KPI keeps full definitions in closed disclosures, real currency and all drilldowns', async () => {
+  const env = await setup(); env.data.revenue.value = 1234567890123;
+  try {
+    await act(async () => env.root.render(React.createElement(AdminOverview, { ...overviewProps, onNavigate() {} })));
+    const cards = [...document.querySelectorAll('[aria-label="Chỉ số kinh doanh"] article')];
+    assert.equal(cards.length, 6); assert.equal(document.querySelectorAll('details:not([open])').length, 6);
+    const revenue = cards.find(card => card.querySelector('h2')?.textContent === 'Doanh thu')!;
+    assert.equal(revenue.querySelector('[data-admin-value]')?.textContent, new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(1234567890123));
+    assert.match(revenue.querySelector('details')?.textContent ?? '', /Test metric from backend/);
+    assert.equal(revenue.querySelectorAll('button').length, 1);
+    assert.match(revenue.textContent ?? '', /Chưa có so sánh/);
+    assert.ok([...document.querySelectorAll('button')].some(b => b.textContent?.includes('Khách đã đặt lịch')));
   } finally { await env.close(); }
 });

@@ -56,7 +56,7 @@ test('overview shows loading/error/retry and truthful zero/N-A without fake data
     await act(async () => reject(new Error('Service unavailable'))); assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /Service unavailable/);
     await act(async () => document.querySelector<HTMLButtonElement>('[role="alert"] button')!.click());
     assert.equal(calls, 2); assert.equal(document.querySelectorAll('[aria-label="Chỉ số kinh doanh"] article').length, 6);
-    assert.match(document.body.textContent ?? '', /N\/A/); assert.match(document.body.textContent ?? '', /Chưa có booking/);
+    assert.match(document.body.textContent ?? '', /Chưa có so sánh/); assert.match(document.body.textContent ?? '', /Chưa có booking/);
     assert.doesNotMatch(document.body.textContent ?? '', /NaN|Infinity|Thao tác nhanh|Thông báo & Cảnh báo|Chuyên viên bận nhất/);
   } finally { await act(async () => root.unmount()); adminV2Api.insights = original.insights; beautyApi.adminPaymentSummary = original.payments; beautyApi.adminBookings = original.bookings; dom.window.close(); }
 });
