@@ -43,6 +43,7 @@ export const adminStatusGroups = {
     RESOLVED: { label: 'Đã giải quyết', tone: 'green' },
     REJECTED: { label: 'Từ chối', tone: 'rose' },
   },
+  transaction: { PENDING: { label: 'Chờ thanh toán', tone: 'amber' }, PAID: { label: 'Đã thanh toán', tone: 'green' }, CANCELLED: { label: 'Đã hủy', tone: 'rose' }, EXPIRED: { label: 'Hết hạn', tone: 'slate' }, FAILED: { label: 'Thất bại', tone: 'rose' }, REVIEW_REQUIRED: { label: 'Cần đối soát', tone: 'rose' } },
   paymentReview: { REVIEW_REQUIRED: { label: 'Cần đối soát', tone: 'rose' } },
 } as const;
 

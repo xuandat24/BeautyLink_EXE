@@ -62,6 +62,11 @@ public class AdminDirectoryService {
         List<ScheduleRow> schedules=people.isEmpty()?List.of():em.createQuery("select new com.example.backend.dto.AdminV2Dtos$ScheduleRow(a.practitioner.id,a.dayOfWeek,a.startTime,a.endTime,a.breakStart,a.breakEnd,a.active) from AvailabilityRule a where a.practitioner.id in :ids order by a.practitioner.id,a.dayOfWeek",ScheduleRow.class).setParameter("ids",people.stream().map(PractitionerRow::id).toList()).setMaxResults(700).getResultList();
         return new SalonDetail(salon(result.getFirst()),services,people,schedules,dashboard.mapBookings(bookings.findAdminSalonRecent(id,Role.CUSTOMER,PageRequest.of(0,10))));
     }
+    public SalonRow salonsById(Long id) {
+        @SuppressWarnings("unchecked") List<Object[]> rows=em.createQuery(SALON+" where s.id=:id and s.demoData=false").setParameter("id",id).getResultList();
+        if(rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND,"SALON_NOT_FOUND","Không tìm thấy salon.");
+        return salon(rows.getFirst());
+    }
     public AdminPageResponse<ReviewRow> reviews(boolean demo,int page,int size) {
         page(page,size); var data=reviews.findAdminValid(demo,PageRequest.of(page,size));
         return paged(data.getContent().stream().map(r->new ReviewRow(r.getId(),r.getTargetType(),r.getSupplier().getName(),r.getService().getName(),r.getRating(),r.getComment(),r.getCreatedAt())).toList(),data.getTotalElements(),page,size);

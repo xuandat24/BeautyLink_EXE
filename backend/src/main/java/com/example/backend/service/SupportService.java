@@ -15,8 +15,8 @@ public class SupportService {
     private final SupportReportRepository reports;
     public SupportService(SupportReportRepository reports) { this.reports = reports; }
     @Transactional public ReportResponse create(UserAccount reporter, CreateReportRequest request) {
-        if (request.reason().trim().toUpperCase(Locale.ROOT).startsWith("PMT-AUDIT:"))
-            throw new ApiException(HttpStatus.BAD_REQUEST, "RESERVED_REPORT_REASON", "Tiêu đề này dành cho nhật ký đối soát nội bộ.");
+        if ((request.reason().trim().toUpperCase(Locale.ROOT).startsWith("PMT-AUDIT:") || request.reason().trim().toUpperCase(Locale.ROOT).startsWith("ADMIN-PROFILE-AUDIT:")))
+            throw new ApiException(HttpStatus.BAD_REQUEST, "RESERVED_REPORT_REASON", "Tiêu đề này dành cho nhật ký nội bộ.");
         SupportReport report = new SupportReport(); report.setReporter(reporter); report.setTargetType(request.targetType()); report.setTargetId(request.targetId()); report.setReason(request.reason()); report.setDetails(request.details()); return response(reports.save(report));
     }
     @Transactional(readOnly = true) public List<ReportResponse> list() { return reports.findAllByOrderByCreatedAtDesc().stream().map(this::response).toList(); }
@@ -24,6 +24,7 @@ public class SupportService {
         SupportReport report = reports.findById(id).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "REPORT_NOT_FOUND", "Không tìm thấy báo cáo"));
         if (report.getReason().startsWith("PMT-AUDIT:"))
             throw new ApiException(HttpStatus.CONFLICT, "PAYMENT_AUDIT_IMMUTABLE", "Nhật ký đối soát không được sửa qua API báo cáo.");
+        if (report.getReason().startsWith("ADMIN-PROFILE-AUDIT:")) throw new ApiException(HttpStatus.CONFLICT, "PROFILE_AUDIT_IMMUTABLE", "Nhật ký sửa hồ sơ không được sửa qua API báo cáo.");
         report.setStatus(request.status()); report.setAssignedStaff(staff); report.setResolutionNote(request.resolutionNote());
         if (request.status() == com.example.backend.model.DomainEnums.ReportStatus.RESOLVED || request.status() == com.example.backend.model.DomainEnums.ReportStatus.REJECTED) report.setResolvedAt(Instant.now());
         return response(report);

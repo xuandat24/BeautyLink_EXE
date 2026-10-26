@@ -8,6 +8,7 @@ import { AdminNav, type AdminSection } from './AdminNav';
 import { AdminOverview } from './AdminOverview';
 import { adminRangeError } from '../../services/adminApi';
 import { AdminStatusBadge } from './AdminStatusBadge';
+import { AdminPaymentLedgerPanel } from './AdminPaymentLedgerPanel';
 import { adminStatusGroups } from './adminStatus';
 
 type DashboardMode = 'overview' | 'bookings' | 'payments';
@@ -23,7 +24,7 @@ interface AdminDashboardPageProps {
   initialSearch?: string;
 }
 
-const daysAgo = (days: number) => {
+export const daysAgo = (days: number) => {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
   const value = (type: string) => Number(parts.find(p => p.type === type)?.value);
   const date = new Date(Date.UTC(value('year'), value('month') - 1, value('day') - days));
@@ -80,28 +81,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
   const [selected, setSelected] = useState<AdminBooking | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const requestSequence = useRef(0);
+  const requestSequence = useRef(0); const summaryCache = useRef<{ key: string; value: AdminPaymentSummary } | null>(null);
   const deferredQuery = useDeferredValue(query);
 
   const requestParams = useMemo(() => ({ from, to, includeDemo: false }), [from, to]);
   const load = useCallback(async () => {
-    const requestId = ++requestSequence.current;
+    const requestId = ++requestSequence.current; const token = getAccessToken();
     setLoading(true); setError('');
     try {
-      if (mode === 'payments') { setPayments(null); setRevenuePage(null); }
-      if (mode === 'bookings') setBookingPage(null);
+
       const invalid = adminRangeError(requestParams); if (invalid) throw new Error(invalid);
       if (mode === 'payments') {
         const [data, rows] = await Promise.all([
-          beautyApi.adminPaymentSummary(requestParams),
+          summaryCache.current?.key === JSON.stringify(requestParams) ? Promise.resolve(summaryCache.current.value) : beautyApi.adminPaymentSummary(requestParams),
           beautyApi.adminRevenue({ ...requestParams, page: revenuePageIndex, size: 20 }),
         ]);
-        if (requestId === requestSequence.current) { setPayments(data); setRevenuePage(rows); }
+        if (requestId === requestSequence.current && token === getAccessToken()) { summaryCache.current = { key: JSON.stringify(requestParams), value: data }; setPayments(data); setRevenuePage(rows); }
       }
-      if (mode === 'bookings') { const data = await beautyApi.adminBookings({ ...requestParams, query: deferredQuery.trim() || undefined, status: status || undefined, paymentStatus: paymentStatus || undefined, page, size: 20 }); if (requestId === requestSequence.current) setBookingPage(data); }
+      if (mode === 'bookings') { const data = await beautyApi.adminBookings({ ...requestParams, query: deferredQuery.trim() || undefined, status: status || undefined, paymentStatus: paymentStatus || undefined, page, size: 20 }); if (requestId === requestSequence.current && token === getAccessToken()) setBookingPage(data); }
     } catch (err) {
-      if (requestId === requestSequence.current) setError(getApiErrorMessage(err, 'Không thể tải dữ liệu quản trị.'));
-    } finally { if (requestId === requestSequence.current) setLoading(false); }
+      if (requestId === requestSequence.current && token === getAccessToken()) setError(getApiErrorMessage(err, 'Không thể tải dữ liệu quản trị.'));
+    } finally { if (requestId === requestSequence.current && token === getAccessToken()) setLoading(false); }
   }, [mode, requestParams, deferredQuery, status, paymentStatus, page, revenuePageIndex]);
 
   useEffect(() => { void load(); return () => { requestSequence.current++; }; }, [load]);
@@ -150,26 +150,26 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
     <main className="min-w-0 px-4 py-5 lg:ml-60 lg:px-6">
       <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div><h1 className="text-2xl font-extrabold">{mode === 'overview' ? 'Tổng quan kinh doanh' : mode === 'bookings' ? 'Lịch hẹn toàn hệ thống' : 'Thanh toán đã xác minh'}</h1></div>
-        <button type="button" onClick={() => mode === 'overview' ? setOverviewRefresh(v => v + 1) : void load()} disabled={loading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black hover:border-pink-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-600 focus-visible:ring-offset-2"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Làm mới</button>
+        <button type="button" onClick={() => mode === 'overview' ? setOverviewRefresh(v => v + 1) : (summaryCache.current = null, void load())} disabled={loading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black hover:border-pink-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-600 focus-visible:ring-offset-2"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Làm mới</button>
       </div>
 
 
 
       {error && <div role="alert" className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700"><span>{error}</span><button onClick={() => void load()} className="underline">Thử lại</button></div>}
-      {loading && !error ? <div className="grid min-h-80 place-items-center"><div className="text-center text-sm font-bold text-slate-500"><Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-pink-600" />Đang tổng hợp dữ liệu...</div></div> : null}
+      {loading && !error && mode !== 'overview' && !bookingPage && !payments ? <div className="grid min-h-80 place-items-center"><div className="text-center text-sm font-bold text-slate-500"><Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-pink-600" />Đang tổng hợp dữ liệu...</div></div> : null}
 
-      {!loading && !error && mode === 'overview' && <AdminOverview params={requestParams} refreshKey={overviewRefresh} onNavigate={(section, bookingStatus) => { if (section === 'bookings') { setStatus(bookingStatus ?? ''); setPaymentStatus(''); setQuery(''); setPage(0); } onNavigate(section); }} renderBookings={rows => <BookingTable title="Đơn đặt lịch gần đây" bookings={rows} onSelect={setSelected} onViewAll={() => { setStatus(''); setPaymentStatus(''); setPage(0); setQuery(''); onNavigate('bookings'); }} />} onSalon={id => onOpenSalon?.(id, false)} onBookedCustomers={() => onOpenBookedCustomers(from, to)} />}
-      {!loading && mode === 'bookings' && bookingPage && <>
+      {!error && mode === 'overview' && <AdminOverview params={requestParams} refreshKey={overviewRefresh} onNavigate={(section, bookingStatus) => { if (section === 'bookings') { setStatus(bookingStatus ?? ''); setPaymentStatus(''); setQuery(''); setPage(0); } onNavigate(section); }} renderBookings={rows => <BookingTable title="Đơn đặt lịch gần đây" bookings={rows} onSelect={setSelected} onViewAll={() => { setStatus(''); setPaymentStatus(''); setPage(0); setQuery(''); onNavigate('bookings'); }} />} onSalon={id => onOpenSalon?.(id, false)} onBookedCustomers={() => onOpenBookedCustomers(from, to)} />}
+      {mode === 'bookings' && <>
         <section className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-3">
           <label className="relative md:col-span-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Mã lịch, khách, salon, dịch vụ" className="min-h-10 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm" /></label>
           <select aria-label="Trạng thái lịch" value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm font-bold"><option value="">Mọi trạng thái lịch</option>{Object.entries(bookingLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <select aria-label="Trạng thái thanh toán" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm font-bold"><option value="">Mọi trạng thái thanh toán</option>{Object.entries(paymentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         </section>
-        <BookingTable title={`${bookingPage.totalElements.toLocaleString('vi-VN')} lịch phù hợp`} bookings={bookingPage.content} onSelect={setSelected} />
-        <div className="mt-4 flex justify-end gap-2"><button disabled={page === 0} onClick={() => setPage((v) => Math.max(0, v - 1))} className="rounded-xl border bg-white px-4 py-2 text-xs font-black disabled:opacity-40">Trang trước</button><span className="px-3 py-2 text-xs font-bold">{page + 1}/{Math.max(bookingPage.totalPages, 1)}</span><button disabled={page + 1 >= bookingPage.totalPages} onClick={() => setPage((v) => v + 1)} className="rounded-xl border bg-white px-4 py-2 text-xs font-black disabled:opacity-40">Trang sau</button></div>
+        {loading && <p role="status" className="mt-3 text-xs text-slate-500">Đang cập nhật danh sách lịch…</p>}{bookingPage && <><BookingTable title={`${bookingPage.totalElements.toLocaleString('vi-VN')} lịch phù hợp`} bookings={bookingPage.content} onSelect={setSelected} />
+        <div className="mt-4 flex justify-end gap-2"><button disabled={page === 0} onClick={() => setPage((v) => Math.max(0, v - 1))} className="rounded-xl border bg-white px-4 py-2 text-xs font-black disabled:opacity-40">Trang trước</button><span className="px-3 py-2 text-xs font-bold">{page + 1}/{Math.max(bookingPage.totalPages, 1)}</span><button disabled={page + 1 >= bookingPage.totalPages} onClick={() => setPage((v) => v + 1)} className="rounded-xl border bg-white px-4 py-2 text-xs font-black disabled:opacity-40">Trang sau</button></div></>}
       </>}
 
-      {!loading && mode === 'payments' && payments && <>
+      {mode === 'payments' && <>{loading && <p role="status" className="mt-3 text-xs text-slate-500">Đang cập nhật báo cáo thanh toán…</p>}{payments && <>
         <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
             ['Đã thu online xác minh', money(payments.verifiedOnlineCollected), `${payments.verifiedPaymentBookings} lịch`],
@@ -184,13 +184,18 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
             <div><h2 className="font-black">Bảng doanh thu online đã xác minh</h2><p className="mt-1 text-xs text-slate-500">{(revenuePage?.totalElements || 0).toLocaleString('vi-VN')} giao dịch · theo ngày thanh toán · chưa trừ hoàn tiền · không bao gồm tiền trả tại salon</p></div>
             <button type="button" onClick={() => void downloadRevenue()} disabled={exportingRevenue} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-pink-600 px-4 text-sm font-black text-white hover:bg-pink-700 disabled:opacity-50"><Download className="h-4 w-4" />{exportingRevenue ? 'Đang xuất CSV...' : 'Tải CSV'}</button>
           </div>
-          {revenuePage?.content.length ? <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-slate-50 text-xs font-black text-slate-600"><tr><th className="px-4 py-3">Ngày thanh toán</th><th className="px-4 py-3">Mã lịch</th><th className="px-4 py-3">Đối tác / dịch vụ</th><th className="px-4 py-3">Hình thức</th><th className="px-4 py-3 text-right">Đã thu online</th><th className="px-4 py-3 text-right">Còn lại tại salon</th></tr></thead><tbody className="divide-y divide-slate-100">{revenuePage.content.map((row) => <tr key={row.paymentId}><td className="whitespace-nowrap px-4 py-3">{dateTime(row.paidAt)}</td><td className="px-4 py-3 font-bold">{row.bookingCode}</td><td className="px-4 py-3"><strong>{row.supplierName}</strong><span className="block text-xs text-slate-500">{row.serviceName}</span></td><td className="px-4 py-3">{row.paymentOption === 'FULL_100' ? 'Thanh toán 100%' : row.paymentOption === 'DEPOSIT_05' ? 'Đặt cọc 5%' : 'Đặt cọc 50%'}</td><td className="px-4 py-3 text-right whitespace-nowrap tabular-nums font-black text-pink-700">{money(row.amount)}</td><td className="px-4 py-3 text-right">{money(row.remainingAtSalon)}</td></tr>)}</tbody></table></div> : <p className="p-8 text-center text-sm text-slate-500">Chưa có giao dịch đã xác minh trong khoảng ngày này.</p>}
+          {revenuePage?.content.length ? <div className="overflow-x-auto"><table className="admin-table min-w-[1100px]"><thead className="bg-slate-50 text-xs font-black text-slate-600"><tr><th scope="col">Mã thanh toán</th><th scope="col" className="px-4 py-3">Ngày thanh toán</th><th scope="col" className="px-4 py-3">Mã lịch</th><th scope="col">Salon</th><th scope="col">Dịch vụ</th><th scope="col">Trạng thái</th><th scope="col" className="px-4 py-3">Hình thức</th><th scope="col" className="px-4 py-3 text-right">Đã thu online</th><th scope="col" className="px-4 py-3 text-right">Còn lại tại salon</th></tr></thead><tbody className="divide-y divide-slate-100">{revenuePage.content.map((row) => <tr key={row.paymentId}><td>#{row.paymentId}</td><td className="whitespace-nowrap px-4 py-3">{dateTime(row.paidAt)}</td><td className="px-4 py-3 font-bold">{row.bookingCode}</td><td className="px-4 py-3"><strong className="cell-label" title={row.supplierName}>{row.supplierName}</strong></td><td><span className="cell-label" title={row.serviceName}>{row.serviceName}</span></td><td><AdminStatusBadge kind="payment" value="PAID" /></td><td className="px-4 py-3">{row.paymentOption === 'FULL_100' ? 'Thanh toán 100%' : row.paymentOption === 'DEPOSIT_05' ? 'Đặt cọc 5%' : 'Đặt cọc 50%'}</td><td className="px-4 py-3 text-right whitespace-nowrap tabular-nums font-black text-pink-700">{money(row.amount)}</td><td className="px-4 py-3 text-right">{money(row.remainingAtSalon)}</td></tr>)}</tbody></table></div> : <p className="p-8 text-center text-sm text-slate-500">Chưa có giao dịch đã xác minh trong khoảng ngày này.</p>}
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 p-4"><button type="button" disabled={revenuePageIndex === 0} onClick={() => setRevenuePageIndex((value) => Math.max(0, value - 1))} className="rounded-xl border px-4 py-2 text-xs font-black disabled:opacity-40">Trang trước</button><span className="px-2 text-xs font-bold">{revenuePageIndex + 1}/{Math.max(revenuePage?.totalPages || 0, 1)}</span><button type="button" disabled={revenuePageIndex + 1 >= (revenuePage?.totalPages || 0)} onClick={() => setRevenuePageIndex((value) => value + 1)} className="rounded-xl border px-4 py-2 text-xs font-black disabled:opacity-40">Trang sau</button></div>
         </section>
-      </>}
+      </>}<AdminPaymentLedgerPanel range={requestParams} /></>}
     </main>
     {selected && <BookingDetail booking={selected} onClose={() => setSelected(null)} />}
   </div>;
 };
 
-export const BookingTable = ({ title, bookings, onSelect, onViewAll }: { title: string; bookings: AdminBooking[]; onSelect: (booking: AdminBooking) => void; onViewAll?: () => void }) => <section className="mt-6 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4"><h2 className="font-bold">{title}</h2>{onViewAll && <button type="button" onClick={onViewAll} className="cursor-pointer rounded-lg px-3 py-2 text-sm font-bold text-pink-700 transition-colors hover:bg-pink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-600">Xem tất cả lịch đặt →</button>}</div>{bookings.length === 0 ? <div className="grid min-h-48 place-items-center text-sm text-slate-400">Không có lịch hẹn trong khoảng này.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left text-sm"><thead className="bg-slate-50 text-xs font-bold text-slate-600"><tr><th className="px-4 py-3">Mã / ngày tạo</th><th className="px-4 py-3">Khách hàng</th><th className="px-4 py-3">Salon / dịch vụ</th><th className="px-4 py-3">Lịch hẹn</th><th className="px-4 py-3">Trạng thái lịch</th><th className="px-4 py-3">Thanh toán</th><th className="px-4 py-3">Chi tiết</th></tr></thead><tbody className="divide-y divide-slate-100">{bookings.map((booking) => <tr key={booking.id} className="transition-colors hover:bg-pink-50/50 focus-within:bg-pink-50/50"><td className="px-4 py-3"><strong>{booking.bookingCode}</strong><span className="mt-1 block text-xs text-slate-400">{dateTime(booking.createdAt)}</span></td><td className="px-4 py-3">{booking.customerName}</td><td className="px-4 py-3"><strong>{booking.supplierName}</strong><span className="block text-xs text-slate-400">{booking.serviceName}</span></td><td className="whitespace-nowrap px-4 py-3">{booking.appointmentDate} · {booking.startTime.slice(0, 5)}</td><td className="px-4 py-3"><AdminStatusBadge kind="booking" value={booking.status} /></td><td className="px-4 py-3"><AdminStatusBadge kind="payment" value={booking.paymentStatus} />{booking.paymentReviewRequired && <AdminStatusBadge kind="paymentReview" value="REVIEW_REQUIRED" />}</td><td className="px-4 py-3"><button type="button" onClick={() => onSelect(booking)} className="cursor-pointer rounded-lg border border-pink-300 bg-pink-50 px-3 py-2 text-sm font-bold text-pink-800 transition-colors hover:bg-pink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-600 focus-visible:ring-offset-2" aria-label={`Chi tiết ${booking.bookingCode}`}>Xem</button></td></tr>)}</tbody></table></div>}</section>;
+export const BookingTable = ({ title, bookings, onSelect, onViewAll }: { title: string; bookings: AdminBooking[]; onSelect: (booking: AdminBooking) => void; onViewAll?: () => void }) => <section className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4"><h2 className="font-bold">{title}</h2>{onViewAll && <button type="button" onClick={onViewAll} className="admin-action">Xem tất cả lịch đặt →</button>}</div>
+  {bookings.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">Không có lịch hẹn trong khoảng này.</p> : <div className="overflow-x-auto"><table className="admin-table min-w-[1280px]"><thead><tr>{['Mã lịch', 'Khách hàng', 'Salon', 'Dịch vụ', 'Chuyên viên', 'Lịch hẹn', 'Trạng thái lịch', 'Thanh toán', 'Thu online xác minh', 'Thao tác'].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{bookings.map(booking => <tr key={booking.id}>
+    <td><strong>{booking.bookingCode}</strong></td><td><span className="cell-label" title={booking.customerName}>{booking.customerName}</span></td><td><span className="cell-label" title={booking.supplierName}>{booking.supplierName}</span></td><td><span className="cell-label" title={booking.serviceName}>{booking.serviceName}</span></td><td>{booking.practitionerName || '—'}</td><td className="whitespace-nowrap">{booking.appointmentDate} · {booking.startTime.slice(0, 5)}</td><td><AdminStatusBadge kind="booking" value={booking.status} /></td><td><AdminStatusBadge kind="payment" value={booking.paymentStatus} />{booking.paymentReviewRequired && <div className="mt-1"><AdminStatusBadge kind="paymentReview" value="REVIEW_REQUIRED" /></div>}</td><td className="numeric">{booking.verifiedOnlineAmount == null ? '—' : money(booking.verifiedOnlineAmount)}</td><td><button type="button" className="admin-action" aria-label={`Chi tiết ${booking.bookingCode}`} onClick={() => onSelect(booking)}>Xem chi tiết</button></td>
+  </tr>)}</tbody></table></div>}
+</section>;

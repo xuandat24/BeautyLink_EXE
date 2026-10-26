@@ -30,6 +30,8 @@ import { BlogModal } from './components/BlogModal';
 import { ViewAllServicesModal, ViewAllContext } from './components/ViewAllServicesModal';
 import { FavoriteToast, FavoriteToastInfo } from './components/FavoriteToast';
 
+import { parseAdminDetailHash, adminDetailHash } from './components/admin/adminRoutes';
+const AdminDetailPage = React.lazy(() => import('./components/admin/AdminDetailPage').then(module => ({ default: module.AdminDetailPage })));
 const AdminDashboardPage = React.lazy(() => import('./components/admin/AdminDashboardPage').then((module) => ({ default: module.AdminDashboardPage })));
 const AdminModulesPage = React.lazy(() => import('./components/admin/AdminModulesPage').then(module => ({ default: module.AdminModulesPage })));
 const SupplierDashboard = React.lazy(() => import('./components/SupplierDashboard').then(module => ({ default: module.SupplierDashboard })));
@@ -281,8 +283,9 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     // Resolve the URL before the first paint; hashchange runs only after effects.
     if (continuationDestination()) return 'bookings';
     const hash = window.location.hash.slice(1).toLowerCase();
+    const detail = parseAdminDetailHash(window.location.hash); if (detail) return detail.kind === 'salon' ? 'admin-salons' : 'admin-customers';
     const aliases: Record<string, AppView> = { logout: 'account', schedule: 'supplier-dashboard',
-      admin: 'admin-dashboard', filter: 'filter-explore', explore: 'filter-explore' };
+      admin: 'admin-dashboard', 'admin-users': 'admin-customers', filter: 'filter-explore', explore: 'filter-explore' };
     const direct: AppView[] = ['login', 'register', 'account', 'bookings', 'checkout', 'supplier-register',
       'supplier-dashboard', 'reports', 'admin-dashboard', 'admin-bookings', 'admin-customers',
       'admin-payments', 'admin-salons', 'admin-reviews', 'admin-promotions', 'admin-settings', 'filter-explore', 'partner-detail'];
@@ -308,8 +311,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   } | null>(null);
   const [adminBookedCustomerRange, setAdminBookedCustomerRange] = useState<{ from: string; to: string } | null>(null);
   const [adminSearch, setAdminSearch] = useState('');
-  const [adminSalonId, setAdminSalonId] = useState<number | null>(null);
-  const [adminSalonDemo, setAdminSalonDemo] = useState(false);
+  const [adminDetail, setAdminDetail] = useState(() => parseAdminDetailHash(window.location.hash));
 
   // Load categories
   useEffect(() => {
@@ -327,6 +329,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     const handleHash = () => {
       if (continuationDestination()) { setCurrentPage('bookings'); return; }
       const hash = window.location.hash.toLowerCase();
+      const detail = parseAdminDetailHash(hash); setAdminDetail(detail);
+      if (detail) { setCurrentPage(detail.kind === 'salon' ? 'admin-salons' : 'admin-customers'); return; }
       if (hash === '#login') {
         setCurrentPage('login');
       } else if (hash === '#register') {
@@ -341,7 +345,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
         setCurrentPage('bookings');
       } else if (hash === '#reports') {
         setCurrentPage('reports');
-      } else if (hash === '#admin-customers') {
+      } else if ((hash === '#admin-customers' || hash === '#admin-users')) {
         setCurrentPage('admin-customers');
       } else if (hash === '#admin-dashboard' || hash === '#admin') {
         setCurrentPage('admin-dashboard');
@@ -716,7 +720,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       salons: 'admin-salons', reviews: 'admin-reviews', promotions: 'admin-promotions', settings: 'admin-settings',
     };
     if (section !== 'customers') setAdminBookedCustomerRange(null);
-    setAdminSalonId(null); setAdminSalonDemo(false);
+    setAdminDetail(null);
     setAdminSearch(query ?? '');
     navigateTo(destinations[section]);
   }, [navigateTo]);
@@ -862,11 +866,14 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     return <div className="grid min-h-screen place-items-center bg-slate-50 p-6 text-center"><div><h1 className="text-2xl font-black">Không có quyền truy cập</h1><p className="mt-2 text-sm text-slate-500">Trang quản trị chỉ dành cho tài khoản ADMIN.</p><button onClick={handleBackToHome} className="mt-5 rounded-2xl bg-pink-600 px-5 py-3 text-sm font-black text-white">Về trang chủ</button></div></div>;
   }
 
+  if (adminDetail && (currentPage === 'admin-salons' || currentPage === 'admin-customers')) {
+    return <React.Suspense fallback={<div role="status" className="p-6">Đang tải trang chi tiết…</div>}><AdminDetailPage key={currentUser?.id} route={adminDetail} adminName={currentUser?.name || 'Quản trị viên'} onNavigate={handleAdminNavigate} onHome={handleBackToHome} onLogout={handleLogout} /></React.Suspense>;
+  }
   if (currentPage === 'admin-dashboard' || currentPage === 'admin-bookings' || currentPage === 'admin-payments') {
     const mode = currentPage === 'admin-bookings' ? 'bookings' : currentPage === 'admin-payments' ? 'payments' : 'overview';
     return <React.Suspense fallback={<div className="grid min-h-screen place-items-center bg-slate-50 text-sm font-bold text-slate-500">Đang tải trang quản trị...</div>}><AdminDashboardPage mode={mode} adminName={currentUser?.name || 'Quản trị viên'}
       key={currentUser?.id}
-      initialSearch={adminSearch} onOpenSalon={(id, demo) => { setAdminSalonId(id); setAdminSalonDemo(demo); navigateTo('admin-salons'); }}
+      initialSearch={adminSearch} onOpenSalon={id => { window.location.hash = adminDetailHash('salon', id); }}
       onNavigate={handleAdminNavigate} onHome={handleBackToHome} onLogout={handleLogout}
       onOpenBookedCustomers={(from, to) => { setAdminBookedCustomerRange({ from, to }); navigateTo('admin-customers'); }} /></React.Suspense>;
   }
@@ -909,8 +916,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       <AdminModulesPage
         key={`${currentPage}:${currentUser?.id}`}
         section={currentPage.replace('admin-', '') as 'customers' | 'salons' | 'reviews' | 'promotions' | 'settings'}
-        salonId={adminSalonId}
-        initialDemo={adminSalonDemo}
+        onOpenSalon={id => { window.location.hash = adminDetailHash('salon', id); }}
+        onOpenAccount={id => { window.location.hash = adminDetailHash('account', id); }}
         onHome={handleBackToHome}
         onNavigate={handleAdminNavigate}
         onLogout={handleLogout}

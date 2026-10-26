@@ -38,6 +38,7 @@ class AdminDashboardV2IntegrationTest {
     @Autowired PaymentTransactionRepository payments; @Autowired BookingReviewRepository reviews;
     @Autowired EntityManager em; @Autowired AdminInsightsService insights; @Autowired AdminDirectoryService directory;
     @Autowired AdminDashboardService dashboard;
+    @Autowired AdminDetailService details;
     @Autowired MockMvc mvc; @Autowired JwtService jwt;
     @MockitoBean CloudinaryImageGateway images;
     final Instant start=Instant.parse("2026-10-01T17:00:00Z");
@@ -115,6 +116,53 @@ class AdminDashboardV2IntegrationTest {
         mvc.perform(get("/api/v1/admin/dashboard/insights")).andExpect(status().isUnauthorized());
         var empty=insights.insights(day.minusYears(2),day.minusYears(2),false,Granularity.MONTH);
         assertEquals(0,empty.totalBookings().value().intValue());assertNull(empty.paymentAttemptSuccessRate());assertTrue(empty.topSalons().isEmpty());
+    }
+    @Test void detailReadModelsStayInsideSalonAndCanonicalAccountingPolicy() throws Exception {
+        var header=details.salonHeader(a.getId()); assertTrue(header.services().isEmpty()); assertEquals(a.getId(),header.salon().id());
+        assertEquals(sa.getId(),details.services(a.getId(),0,1).content().getFirst().id());
+        assertEquals(pa.getId(),details.practitioners(a.getId(),0,1).content().getFirst().id());
+        assertEquals(pa.getId(),details.schedule(a.getId(),pa.getId()).getFirst().practitionerId());
+        assertThrows(com.example.backend.exception.ApiException.class,()->details.schedule(a.getId(),pb.getId()));
+        var rows=details.bookings(a.getId(),day,day,null,0,2); assertEquals(3,rows.totalElements()); assertTrue(rows.content().stream().allMatch(r->r.supplierId().equals(a.getId())));
+        assertEquals(0,details.bookings(a.getId(),day,day,BookingStatus.CONFIRMED,0,20).totalElements());
+        var money=details.payments(a.getId(),day,day,0,100);
+        assertEquals(200,money.verifiedOnlineAmount().intValue(),"no later paidAt, duplicate, manual or other salon receipt");
+        assertEquals(4,money.attempts()); assertEquals(1,money.reviewRequiredAttempts());
+        assertTrue(money.rows().content().stream().allMatch(r->r.supplierName().equals("Alpha")));
+        assertEquals(1,money.rows().content().stream().filter(r->r.canonicalVerified()&&r.paidAt().isBefore(start.plusSeconds(86400))).count());
+        assertEquals(500,details.payments(null,day,day,0,100).verifiedOnlineAmount().intValue());
+        assertThrows(com.example.backend.exception.ApiException.class,()->details.payments(demo.getId(),day,day,0,20));
+        String token=jwt.createToken(admin);
+        mvc.perform(get("/api/v1/admin/salons/"+a.getId()).param("headerOnly","true").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.services").isEmpty());
+        mvc.perform(get("/api/v1/admin/users/"+customer.getId()).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.passwordHash").doesNotExist()).andExpect(jsonPath("$.authVersion").doesNotExist());
+        mvc.perform(get("/api/v1/admin/payments").param("size","101").header("Authorization","Bearer "+token)).andExpect(status().isBadRequest());
+    }
+    @Test void adminCanChangeOnlyApprovedCustomerFieldsWithVersionAndImmutableAudit() throws Exception {
+        String token=jwt.createToken(admin), customerToken=jwt.createToken(customer);
+        var before=details.account(customer.getId()); var current=users.findById(customer.getId()).orElseThrow(); int version=current.getAuthVersion();
+        String payload="{\"fullName\":\"Nguyen Updated\",\"gender\":\"FEMALE\",\"dateOfBirth\":\"1995-01-01\",\"expectedUpdatedAt\":\""+before.updatedAt()+"\"}";
+        mvc.perform(patch("/api/v1/admin/users/"+customer.getId()+"/profile").header("Authorization","Bearer "+token).contentType("application/json").content(payload)).andExpect(status().isOk()).andExpect(jsonPath("$.fullName").value("Nguyen Updated")).andExpect(jsonPath("$.role").value("CUSTOMER"));
+        em.flush(); em.clear(); var after=users.findById(customer.getId()).orElseThrow(); assertEquals(version,after.getAuthVersion()); assertEquals(before.email(),after.getEmail()); assertEquals(before.phone(),after.getPhone()); assertEquals(before.status(),after.getStatus());
+        var audit=em.createQuery("select r from SupportReport r where r.reason='ADMIN-PROFILE-AUDIT:UPDATE' and r.targetId=:id",SupportReport.class).setParameter("id",customer.getId()).getResultList();
+        assertEquals(1,audit.size()); assertTrue(audit.getFirst().getDetails().contains("fullName")); assertFalse(audit.getFirst().getDetails().contains("Nguyen Updated"));
+        mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+customerToken)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+jwt.createToken(after))).andExpect(status().isOk());
+        mvc.perform(patch("/api/v1/reports/"+audit.getFirst().getId()).header("Authorization","Bearer "+token).contentType("application/json").content("{\"status\":\"OPEN\",\"resolutionNote\":\"tamper\"}")).andExpect(status().isConflict());
+        mvc.perform(patch("/api/v1/admin/users/"+customer.getId()+"/profile").header("Authorization","Bearer "+token).contentType("application/json").content(payload)).andExpect(status().isConflict());
+    }
+    @Test void profileEditRejectsSensitiveFieldsInvalidInputAndOtherRoles() throws Exception {
+        String token=jwt.createToken(admin); var before=details.account(customer.getId());
+        String valid="{\"fullName\":\"Valid Name\",\"gender\":\"MALE\",\"dateOfBirth\":\"1995-01-01\",\"expectedUpdatedAt\":\""+before.updatedAt()+"\"}";
+        for(String field:java.util.List.of("role","status","email","phone","passwordHash","authVersion")) mvc.perform(patch("/api/v1/admin/users/"+customer.getId()+"/profile").header("Authorization","Bearer "+token).contentType("application/json").content(valid.substring(0,valid.length()-1)+",\""+field+"\":\"forbidden\"}")).andExpect(status().isBadRequest());
+        mvc.perform(patch("/api/v1/admin/users/"+customer.getId()+"/profile").header("Authorization","Bearer "+token).contentType("application/json").content(valid.replace("Valid Name"," "))).andExpect(status().isBadRequest());
+        mvc.perform(patch("/api/v1/admin/users/"+admin.getId()+"/profile").header("Authorization","Bearer "+token).contentType("application/json").content(valid)).andExpect(status().isForbidden());
+        for(Role role:java.util.List.of(Role.CUSTOMER,Role.SUPPLIER,Role.STAFF)) {
+            String denied=jwt.createToken(user("Denied detail "+role,role));
+            for(String path:java.util.List.of("/users/"+customer.getId(),"/salons/"+a.getId()+"/services","/salons/"+a.getId()+"/bookings","/payments?salonId="+a.getId())) mvc.perform(get("/api/v1/admin"+path).header("Authorization","Bearer "+denied)).andExpect(status().isForbidden());
+            mvc.perform(patch("/api/v1/admin/users/"+customer.getId()+"/profile").header("Authorization","Bearer "+denied).contentType("application/json").content(valid)).andExpect(status().isForbidden());
+        }
+        assertEquals(before.fullName(),details.account(customer.getId()).fullName());
+        assertNull(details.account(customer.getId()).dateOfBirth()); assertNull(details.account(customer.getId()).gender());
     }
     UserAccount user(String name,Role role) {var u=new UserAccount();u.setFullName(name);u.setEmail(name.toLowerCase()+"@v2.example.com");u.setRole(role);ReflectionTestUtils.setField(u,"createdAt",start.plusSeconds(1));return users.saveAndFlush(u);}
     Supplier salon(String name,boolean demo) {var s=new Supplier();s.setOwner(user(name,Role.SUPPLIER));s.setName(name);s.setSlug(name.toLowerCase());s.setAddressLine("Test address");s.setVerificationStatus(VerificationStatus.VERIFIED);s.setDemoData(demo);return suppliers.saveAndFlush(s);}
