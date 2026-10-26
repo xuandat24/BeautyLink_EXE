@@ -72,7 +72,7 @@ test('account view has no edit discovery; direct edit sends only approved fields
   try {
     await render(false); assert.doesNotMatch([...document.querySelectorAll('button,a')].map(n => n.textContent).join(' '), /chỉnh sửa|edit/i); assert.equal(document.querySelector('form:not(header form)'), null);
     await render(true); const form = document.querySelector('main form')!;
-    assert.equal(form.querySelectorAll('input').length, 2); assert.equal(form.querySelectorAll('select').length, 1);
+    assert.equal(form.querySelectorAll('input').length, 2); assert.equal(form.querySelectorAll('select').length, 1); assert.equal(form.querySelector('select')?.getAttribute('aria-label'), 'Giới tính');
     await act(async () => { form.dispatchEvent(new env.dom.window.Event('submit', { bubbles: true, cancelable: true })); form.dispatchEvent(new env.dom.window.Event('submit', { bubbles: true, cancelable: true })); }); assert.equal(calls, 1);
     account = { ...account, updatedAt: '2026-10-02T00:00:00Z' }; await act(async () => finish(account)); assert.match(document.body.textContent ?? '', /Đã lưu hồ sơ khách hàng/);
   } finally { adminV2Api.account = original.account; adminV2Api.updateAccount = original.update; await env.close(); }

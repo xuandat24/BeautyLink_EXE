@@ -89,7 +89,7 @@ try {
       const loadedServices = serviceCalls(); await salonNav.getByRole('button', { name: 'Thông tin chung', exact: true }).click(); await salonNav.getByRole('button', { name: 'Dịch vụ', exact: true }).click();
       assert.equal(serviceCalls(), loadedServices, 'tab cache avoids another services request');
       await salonNav.getByRole('button', { name: 'Chuyên viên', exact: true }).click(); await page.getByText('Xem lịch tuần', { exact: true }).first().waitFor(); await page.getByText('Xem lịch tuần', { exact: true }).first().click();
-      await page.getByRole('columnheader', { name: 'Giờ làm', exact: true }).waitFor(); await capture('salon-people');
+      await page.getByRole('columnheader', { name: 'Giờ làm', exact: true }).waitFor(); assert.equal(await page.locator('details[open] tbody tr').first().locator('td').first().textContent(), 'Thứ Hai'); await capture('salon-people');
       await salonNav.getByRole('button', { name: 'Lịch đặt', exact: true }).click(); await page.getByRole('heading', { name: 'Lịch đặt của salon', exact: true }).waitFor();
       await checkLayout(); await salonNav.getByRole('button', { name: 'Thanh toán', exact: true }).click(); await page.getByRole('heading', { name: 'Lượt thanh toán & đối soát', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Xem lịch', exact: true }).first().waitFor(); await checkLayout();
