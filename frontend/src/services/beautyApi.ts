@@ -37,6 +37,7 @@ import {
   VOUCHERS,
 } from '../data/mockData';
 import { cache } from '../lib/cache';
+import { presentationAccount, presentationEmail, presentationEnabled, presentationService } from '../lib/presentationData';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { clearSession, getSessionToken, installToken, peekAccessToken, sessionSnapshot, setSessionPhase, sessionCredentialEpoch } from '../lib/authSession';
 
@@ -699,7 +700,7 @@ export const beautyApi = {
   async services(categorySlug: string, locationId?: number): Promise<BackendService[]> {
     const mapServices = (list: BackendService[]) =>
       list.map((s) => ({
-        ...s,
+        ...presentationService(s),
         imageUrl: getOptimizedImageUrl(s.imageUrl, 'service-card'),
         supplierImageUrl: s.supplierImageUrl
           ? getOptimizedImageUrl(s.supplierImageUrl, 'salon-card')
@@ -735,7 +736,7 @@ export const beautyApi = {
   async homepageServices(locationId?: number): Promise<BackendService[]> {
     const mapServices = (list: BackendService[]) =>
       list.map((s) => ({
-        ...s,
+        ...presentationService(s),
         imageUrl: getOptimizedImageUrl(s.imageUrl, 'service-card'),
         supplierImageUrl: s.supplierImageUrl
           ? getOptimizedImageUrl(s.supplierImageUrl, 'salon-card')
@@ -804,7 +805,7 @@ export const beautyApi = {
   async publicSupplierServices(id: number): Promise<BackendService[]> {
     if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Không xác định được nhà cung cấp.');
     const shop = await unwrap<{ services: BackendService[] }>(apiClient.get(`/v1/suppliers/${id}`));
-    return shop.services;
+    return shop.services.map(service => presentationService(service));
   },
 
   async completeBooking(id: number): Promise<BackendBooking> {
@@ -939,11 +940,16 @@ export const beautyApi = {
   // Admin / Customer accounts
   // ==========================================
   async adminCustomers(params?: { from?: string; to?: string; bookedOnly?: boolean; includeDemo?: boolean }): Promise<AdminCustomer[]> {
-    return unwrap(apiClient.get('/v1/admin/customers', { params }));
+    const customers = await unwrap<AdminCustomer[]>(apiClient.get('/v1/admin/customers', { params }));
+    return customers.map(presentationAccount);
   },
 
   async exportAdminCustomers(): Promise<Blob> {
     const response = await apiClient.get('/v1/admin/customers/export', { responseType: 'blob' });
+    if (presentationEnabled) {
+      const text = await (response.data as Blob).text();
+      return new Blob([text.replace(/[a-zA-Z0-9._+\-]+@seed\.beautylink\.test/gi, email => presentationEmail(email)!)], { type: response.data.type });
+    }
     return response.data;
   },
 

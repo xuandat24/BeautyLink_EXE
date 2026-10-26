@@ -133,7 +133,8 @@ test('directories use normal scope even with a legacy demo flag and preserve rol
   const props = { adminName: 'Admin', onNavigate() {}, onHome() {}, onLogout() {}, initialDemo: true };
   try {
     await act(async () => env.root.render(React.createElement(AdminModulesPage, { ...props, section: 'customers' })));
-    assert.match(document.querySelector('tbody')?.textContent ?? '', /Nguyễn An.*Khách hàng.*Hoạt động/);
+    assert.match(document.querySelector('tbody')?.textContent ?? '', /Nguyễn An.*Khách hàng/);
+    assert.doesNotMatch(document.querySelector('tbody')?.textContent ?? '', /Hoạt động/);
     await click('Trang sau'); assert.equal(userRequests.at(-1)?.page, 1);
     await act(async () => { const select = document.querySelector<HTMLSelectElement>('[aria-label="Lọc vai trò"]')!; select.value = 'SUPPLIER'; select.dispatchEvent(new env.dom.window.Event('change', { bubbles: true })); });
     assert.equal(userRequests.at(-1)?.role, 'SUPPLIER'); assert.equal(userRequests.at(-1)?.page, 0);
