@@ -30,6 +30,7 @@ class PasswordResetServiceTest {
     @Mock UserAccountRepository users;
     @Mock OtpDeliveryService delivery;
     @Mock AuthAbuseGuard abuseGuard;
+    @Mock jakarta.persistence.EntityManager em;
     private PasswordEncoder encoder;
     private PasswordResetService service;
 
@@ -38,7 +39,7 @@ class PasswordResetServiceTest {
         encoder = new BCryptPasswordEncoder(4);
         service = new PasswordResetService(challenges, users,
                 new OtpHashingService("test-password-reset-pepper-that-is-longer-than-thirty-two-bytes"),
-                delivery, encoder, abuseGuard, 600, 5);
+                delivery, encoder, abuseGuard, 600, 5, em);
     }
 
     @Test
@@ -55,7 +56,7 @@ class PasswordResetServiceTest {
         verify(delivery).sendPasswordResetCode(eq("owner@example.com"), otp.capture(), eq(10L));
         PasswordResetChallenge challenge = saved.getValue();
         when(challenges.findLockedById(started.challengeId())).thenReturn(Optional.of(challenge));
-        when(users.findById(user.getId())).thenReturn(Optional.of(user));
+        when(users.findLockedById(user.getId())).thenReturn(Optional.of(user));
 
         var result = service.confirm(new ConfirmPasswordResetRequest(
                 started.challengeId(), otp.getValue(), "NewStrongPassword123!"), "198.51.100.20");
@@ -66,6 +67,16 @@ class PasswordResetServiceTest {
         assertNotNull(challenge.getConsumedAt());
         assertThrows(ApiException.class, () -> service.confirm(new ConfirmPasswordResetRequest(
                 started.challengeId(), otp.getValue(), "AnotherStrongPassword123!"), "198.51.100.20"));
+    }
+
+    @Test void contactAuthVersionChangeInvalidatesPreviouslyDeliveredRecoveryCode() {
+        UserAccount user=activeUser(); ArgumentCaptor<PasswordResetChallenge> saved=ArgumentCaptor.forClass(PasswordResetChallenge.class); ArgumentCaptor<String> otp=ArgumentCaptor.forClass(String.class);
+        when(delivery.isEmailConfigured()).thenReturn(true);when(users.findByPhone("0908433898")).thenReturn(Optional.of(user));when(challenges.save(saved.capture())).thenAnswer(i->i.getArgument(0));
+        var started=service.start(new StartPasswordResetRequest("0908433898"),"198.51.100.25");verify(delivery).sendPasswordResetCode(anyString(),otp.capture(),anyLong());
+        when(challenges.findLockedById(started.challengeId())).thenReturn(Optional.of(saved.getValue()));when(users.findLockedById(user.getId())).thenReturn(Optional.of(user));
+        user.setAuthVersion(1);String old=user.getPasswordHash();
+        assertThrows(ApiException.class,()->service.confirm(new ConfirmPasswordResetRequest(started.challengeId(),otp.getValue(),"NewStrongPassword123!"),"198.51.100.25"));assertEquals(old,user.getPasswordHash());assertEquals(1,saved.getValue().getAttempts());
+        verify(em).refresh(user,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
     }
 
     @Test

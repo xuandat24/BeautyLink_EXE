@@ -40,15 +40,27 @@ public class AdminDetailService {
         if(actor.getRole()!=Role.ADMIN||actor.getStatus()!=AccountStatus.ACTIVE) throw new ApiException(HttpStatus.FORBIDDEN,"ADMIN_REQUIRED","Chỉ quản trị viên được phép sửa hồ sơ.");
         UserAccount u=users.findLockedById(id).orElseThrow(()->new ApiException(HttpStatus.NOT_FOUND,"USER_NOT_FOUND","Không tìm thấy tài khoản."));
         em.refresh(u,LockModeType.PESSIMISTIC_WRITE);
-        if(u.getRole()!=Role.CUSTOMER) throw new ApiException(HttpStatus.FORBIDDEN,"CUSTOMER_PROFILE_ONLY","Chỉ được chỉnh sửa hồ sơ khách hàng.");
+        if(u.getRole()!=Role.CUSTOMER&&u.getRole()!=Role.SUPPLIER) throw new ApiException(HttpStatus.FORBIDDEN,"CUSTOMER_PROFILE_ONLY","Chỉ được chỉnh sửa hồ sơ khách hàng hoặc đối tác.");
         if(!u.getUpdatedAt().equals(request.expectedUpdatedAt())) throw new ApiException(HttpStatus.CONFLICT,"PROFILE_CHANGED","Hồ sơ đã thay đổi. Vui lòng tải lại trước khi lưu.");
         String name=request.fullName().strip().replaceAll("\\s+"," ");
         if(name.length()<2||(request.dateOfBirth()!=null&&request.dateOfBirth().getYear()<1900)) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_PROFILE","Tên tối thiểu 2 ký tự; năm sinh từ 1900.");
         List<String> fields=new ArrayList<>();
+        String email=request.email()==null?u.getEmail():request.email().strip().toLowerCase(Locale.ROOT);
+        String phone=request.phone()==null?u.getPhone():AuthService.normalizePhone(request.phone());
+        if(request.email()!=null&&(email.isBlank()||email.length()>160)) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_EMAIL","Email không hợp lệ.");
+        if(request.phone()!=null&&(phone==null||!phone.matches("^0(?:3|5|7|8|9)[0-9]{8}$"))) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_PHONE","Số điện thoại phải có 10 số, bắt đầu 03, 05, 07, 08 hoặc 09.");
+        boolean emailChanged=!Objects.equals(email,u.getEmail()),phoneChanged=!Objects.equals(phone,u.getPhone());
+        if(emailChanged||phoneChanged) {
+            if(!request.confirmContactChange()) throw new ApiException(HttpStatus.BAD_REQUEST,"CONTACT_CONFIRMATION_REQUIRED","Vui lòng kiểm tra và xác nhận thông tin liên hệ mới.");
+            if(emailChanged&&em.createQuery("select count(u) from UserAccount u where lower(u.email)=:email and u.id<>:id",Long.class).setParameter("email",email).setParameter("id",id).getSingleResult()>0 || phoneChanged&&users.existsByPhoneAndIdNot(phone,id)) throw new ApiException(HttpStatus.CONFLICT,"CONTACT_IN_USE","Email hoặc số điện thoại đã được sử dụng.");
+            if(emailChanged) {u.setEmail(email);fields.add("email");}
+            if(phoneChanged) {u.setPhone(phone);fields.add("phone");if(u.getRole()==Role.CUSTOMER){u.setBookingContactConfirmedPhone(null);u.setBookingContactConfirmedAt(null);u.setBookingContactConfirmationRequired(true);}}
+            u.setAuthVersion(u.getAuthVersion()+1);
+        }
         if(!Objects.equals(name,u.getFullName())) { u.setFullName(name); fields.add("fullName"); }
         if(request.gender()!=null&&request.gender()!=u.getGender()) { u.setGender(request.gender()); fields.add("gender"); }
         if(request.dateOfBirth()!=null&&!Objects.equals(request.dateOfBirth(),u.getDateOfBirth())) { u.setDateOfBirth(request.dateOfBirth()); fields.add("dateOfBirth"); }
-        em.flush();
+        try {users.saveAndFlush(u);} catch(org.springframework.dao.DataIntegrityViolationException ex) { throw new ApiException(HttpStatus.CONFLICT,"CONTACT_IN_USE","Email hoặc số điện thoại đã được sử dụng."); }
         if(!fields.isEmpty()) {
             SupportReport audit=new SupportReport(); audit.setReporter(em.getReference(UserAccount.class,actor.getId())); audit.setAssignedStaff(em.getReference(UserAccount.class,actor.getId()));
             audit.setTargetType(ReportTargetType.USER); audit.setTargetId(id); audit.setReason("ADMIN-PROFILE-AUDIT:UPDATE");
@@ -56,7 +68,7 @@ public class AdminDetailService {
             audit.setStatus(ReportStatus.RESOLVED); audit.setResolutionNote("Scoped customer profile update"); audit.setResolvedAt(Instant.now()); em.persist(audit); em.flush();
         }
         if(!fields.isEmpty()) TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override public void afterCommit() { LoggerFactory.getLogger(AdminDetailService.class).info("ADMIN_CUSTOMER_PROFILE_UPDATED actorId={} targetId={} fields={}",actor.getId(),id,String.join(",",fields)); }
+            @Override public void afterCommit() { LoggerFactory.getLogger(AdminDetailService.class).info("ADMIN_ACCOUNT_PROFILE_UPDATED actorId={} targetId={} fields={}",actor.getId(),id,String.join(",",fields)); }
         });
         return account(id);
     }

@@ -56,4 +56,19 @@ class AdminProfileConcurrencyTest {
             });
         }
     }
+    @Test void twoAccountContactEditsCannotClaimSameEmailOrPhoneAndLoserKeepsOriginal() throws Exception {
+        UserAccount actor=new UserAccount();actor.setFullName("Contact Admin");actor.setRole(Role.ADMIN);actor=users.saveAndFlush(actor);
+        List<Long> ids=new ArrayList<>();for(int i=0;i<2;i++){UserAccount u=new UserAccount();u.setFullName("Contact Target "+i);u.setEmail("contact-target-"+i+"@example.test");u.setPhone("039887766"+i);ids.add(users.saveAndFlush(u).getId());}
+        final Long actorId=actor.getId();String token=jwt.createToken(actor);var first=details.account(ids.get(0));var second=details.account(ids.get(1));
+        try {
+            CyclicBarrier barrier=new CyclicBarrier(2);try(ExecutorService executor=Executors.newFixedThreadPool(2)) {
+                List<Future<Integer>> results=new ArrayList<>();for(var target:List.of(first,second))results.add(executor.submit(()->{barrier.await(10,TimeUnit.SECONDS);String body="{\"fullName\":\""+target.fullName()+"\",\"email\":\"shared-contact@example.test\",\"phone\":\"0909988776\",\"confirmContactChange\":true,\"expectedUpdatedAt\":\""+target.updatedAt()+"\"}";return mvc.perform(patch("/api/v1/admin/users/"+target.id()+"/profile").header("Authorization","Bearer "+token).contentType("application/json").content(body)).andReturn().getResponse().getStatus();}));
+                assertEquals(Set.of(200,409),Set.of(results.get(0).get(25,TimeUnit.SECONDS),results.get(1).get(25,TimeUnit.SECONDS)));
+            }
+            var a=details.account(ids.get(0));var b=details.account(ids.get(1));assertEquals(1,List.of(a,b).stream().filter(u->"shared-contact@example.test".equals(u.email())&&"0909988776".equals(u.phone())).count());
+            var loser="shared-contact@example.test".equals(a.email())?b:a;var original=loser.id().equals(first.id())?first:second;assertEquals(original.email(),loser.email());assertEquals(original.phone(),loser.phone());
+            new TransactionTemplate(manager).execute(status->{assertEquals(1,em.createQuery("select count(r) from SupportReport r where r.reason='ADMIN-PROFILE-AUDIT:UPDATE' and r.targetId in :ids",Long.class).setParameter("ids",ids).getSingleResult());return null;});
+        } finally {new TransactionTemplate(manager).execute(status->{em.createQuery("delete from SupportReport r where r.reason='ADMIN-PROFILE-AUDIT:UPDATE' and r.targetId in :ids").setParameter("ids",ids).executeUpdate();var all=new ArrayList<>(ids);all.add(actorId);em.createQuery("delete from AuthenticationSession s where s.accountId in :ids").setParameter("ids",all).executeUpdate();em.createQuery("delete from UserAccount u where u.id in :ids").setParameter("ids",all).executeUpdate();return null;});}
+    }
+
 }

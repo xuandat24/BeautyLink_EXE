@@ -33,12 +33,13 @@ public class PasswordResetService {
     private final AuthAbuseGuard abuseGuard;
     private final long codeTtlSeconds;
     private final int maxAttempts;
+    private final jakarta.persistence.EntityManager em;
 
     public PasswordResetService(PasswordResetChallengeRepository challenges, UserAccountRepository users,
                                 OtpHashingService hashing, OtpDeliveryService delivery, PasswordEncoder encoder,
                                 AuthAbuseGuard abuseGuard,
                                 @Value("${app.otp.code-ttl-seconds:600}") long codeTtlSeconds,
-                                @Value("${app.otp.max-attempts:5}") int maxAttempts) {
+                                @Value("${app.otp.max-attempts:5}") int maxAttempts, jakarta.persistence.EntityManager em) {
         this.challenges = challenges;
         this.users = users;
         this.hashing = hashing;
@@ -46,7 +47,7 @@ public class PasswordResetService {
         this.encoder = encoder;
         this.abuseGuard = abuseGuard;
         this.codeTtlSeconds = codeTtlSeconds;
-        this.maxAttempts = maxAttempts;
+        this.maxAttempts = maxAttempts; this.em = em;
     }
 
     @Transactional
@@ -70,7 +71,7 @@ public class PasswordResetService {
         PasswordResetChallenge challenge = new PasswordResetChallenge();
         challenge.setId(challengeId);
         challenge.setUserId(user == null ? null : user.getId());
-        challenge.setCodeHash(hashing.hash("password-reset-otp-" + challengeId, otpCode));
+        challenge.setCodeHash(hashing.hash("password-reset-v2-" + challengeId + ":" + (user==null?0:user.getAuthVersion()), otpCode));
         challenge.setExpiresAt(Instant.now().plusSeconds(codeTtlSeconds));
         challenges.save(challenge);
 
@@ -89,15 +90,15 @@ public class PasswordResetService {
         Instant now = Instant.now();
         if (challenge.getConsumedAt() != null || !challenge.getExpiresAt().isAfter(now)
                 || challenge.getAttempts() >= maxAttempts) throw invalidCode();
-        boolean codeMatches = hashing.matches(challenge.getCodeHash(),
-                hashing.hash("password-reset-otp-" + challenge.getId(), request.otpCode()));
+        UserAccount user = challenge.getUserId()==null?null:users.findLockedById(challenge.getUserId()).orElse(null);
+        if(user!=null) em.refresh(user,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        boolean codeMatches = user!=null && user.getStatus()==ACTIVE && hashing.matches(challenge.getCodeHash(),
+                hashing.hash("password-reset-v2-" + challenge.getId() + ":" + user.getAuthVersion(), request.otpCode()));
         if (!codeMatches || challenge.getUserId() == null) {
             challenge.setAttempts(challenge.getAttempts() + 1);
             throw invalidCode();
         }
 
-        UserAccount user = users.findById(challenge.getUserId()).filter(account -> account.getStatus() == ACTIVE)
-                .orElseThrow(this::invalidCode);
         user.setPasswordHash(encoder.encode(request.newPassword()));
         user.setAuthVersion(user.getAuthVersion() + 1);
         challenge.setConsumedAt(now);

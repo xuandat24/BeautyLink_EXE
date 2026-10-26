@@ -14,7 +14,8 @@ public final class AdminDetailDtos {
             LocalDate dateOfBirth, Role role, AccountStatus status, Instant createdAt, Instant updatedAt,
             List<OwnedSalon> salons) {}
     public record ProfilePatch(@NotBlank @Size(min=2,max=120) String fullName, Gender gender,
-            @Past LocalDate dateOfBirth, @NotNull Instant expectedUpdatedAt) {
+            @Past LocalDate dateOfBirth, @NotNull Instant expectedUpdatedAt,
+            @Email @Size(max=160) String email, @Size(max=20) String phone, boolean confirmContactChange) {
         @JsonAnySetter public void rejectUnknown(String field, Object value) {
             throw new IllegalArgumentException("Unsupported profile field");
         }
