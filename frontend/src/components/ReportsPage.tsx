@@ -12,6 +12,8 @@ import { BackendReport } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { adminReportSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
+import { AdminStatusBadge } from './admin/AdminStatusBadge';
+import { adminStatusGroups } from './admin/adminStatus';
 import { AdminNav, type AdminSection } from './admin/AdminNav';
 
 interface ReportsPageProps {
@@ -22,12 +24,7 @@ interface ReportsPageProps {
   onLogout?: () => void;
 }
 
-const statusLabel: Record<string, string> = {
-  OPEN: 'Mới',
-  IN_REVIEW: 'Đang xử lý',
-  RESOLVED: 'Đã giải quyết',
-  REJECTED: 'Từ chối',
-};
+const statusLabel = Object.fromEntries(Object.entries(adminStatusGroups.report).map(([value, presentation]) => [value, presentation.label]));
 
 export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomers, adminName, onAdminNavigate, onLogout }) => {
   const [reports, setReports] = useState<BackendReport[]>([]);
@@ -114,12 +111,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomer
         </div>
       </header>}
 
-      <main className={adminName ? 'min-w-0 px-4 py-6 lg:ml-60 lg:px-7' : 'mx-auto max-w-7xl px-4 py-10 sm:px-6'}>
-        <div className="mb-8">
+      <main className={adminName ? 'min-w-0 px-4 py-5 lg:ml-60 lg:px-6' : 'mx-auto max-w-7xl px-4 py-10 sm:px-6'}>
+        <div className={adminName ? 'mb-5' : 'mb-8'}>
           <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-pink-600">
             Nhân viên & quản trị
           </p>
-          <h1 className="mt-2 text-3xl font-black">Trung tâm hỗ trợ</h1>
+          <h1 className={adminName ? 'text-2xl font-extrabold' : 'mt-2 text-3xl font-black'}>Trung tâm hỗ trợ</h1>
           <p className="mt-2 text-sm text-slate-500">
             Tiếp nhận phản hồi, gán trạng thái và lưu kết quả xử lý.
           </p>
@@ -157,9 +154,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomer
             <Loader2 className="h-8 w-8 animate-spin text-pink-600" />
           </div>
         ) : (
-          <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
+          <div className="grid gap-4 xl:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)]">
             {/* Reports Queue */}
-            <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-5 py-4 text-sm font-black">
                 Hàng đợi phản hồi
               </div>
@@ -181,9 +178,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomer
                         <span className="text-xs font-black text-slate-400">
                           #{item.id} · {item.targetType}
                         </span>
-                        <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-pink-700 shadow-sm">
-                          {statusLabel[item.status] || item.status}
-                        </span>
+                        <AdminStatusBadge kind="report" value={item.status} />
                       </div>
                       <p className="mt-2 line-clamp-1 text-sm font-black text-slate-800">
                         {item.reason}
@@ -202,7 +197,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomer
             </section>
 
             {/* Report Detail & Action Pane */}
-            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               {selected ? (
                 <>
                   <div className="border-b border-slate-100 pb-5">

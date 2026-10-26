@@ -136,3 +136,47 @@ Final run links and screenshots belong in the refinement PR; no production rollo
 Deployment/rollback: frontend-only bundle change; existing backend/API/schema remains compatible.
 After review and separate deployment approval, roll back only the frontend build if necessary; no database
 restore or backend/session/payment-policy rollback is needed.
+
+## Compact responsive follow-up (base 7230249, 26 October 2026)
+
+Inspected existing AdminDashboardPage, AdminOverview, AdminNav, AdminModulesPage, AdminCustomersPage,
+ReportsPage, adminStatus, adminApi, beautyApi, App routing, Tailwind/Vite, existing tests and browser gate.
+Confirmed actual backend enum definitions and existing customer/demo API defaults; no API/query changes.
+
+Preserved: nine routes and aliases, ADMIN/session guards, KPI formulas, real API reporting, booking/salon
+drawers, customer history/CSV, revenue pagination/export, financial review warnings and all payment rules.
+Refined only: visible demo inclusion controls removed; every scoped UI request uses includeDemo=false
+(legacy initialDemo navigation input cannot enable it). Existing demo fixtures/exclusion tests remain.
+Customer export/history retain their existing non-demo backend defaults. No records deleted or changed.
+
+KPI default view is icon/label, tabular value, short comparison and one detail action. Missing comparison
+is "Chưa có so sánh", never zero growth. Metric notes/basis/prior-period explanation remain in the closed
+keyboard-accessible disclosure; booked-customer drilldown remains next to it. Currency uses vi-VN Intl,
+nonwrapping text and container-relative font sizing. Grid: one column mobile, two at sm, three at xl,
+six only from 1800px. Main padding 16-24px, card radius/padding 16px, contained table scroll preserved.
+
+AdminStatusBadge/adminStatus are the single status presentation source for users, roles, supplier approval,
+booking/payment tables and drawers, customer history and report queue. Actual AccountStatus is ACTIVE,
+DISABLED, SUSPENDED; no unsupported INACTIVE/BLOCKED enum is invented. Actual approval statuses are
+PENDING, VERIFIED, REJECTED, SUSPENDED. Unknown values have a neutral "Không xác định" fallback.
+Filter values remain raw enums. Labels and colored backgrounds have foreground colors designed for AA.
+
+Regression found by the new module-switch test: an old result could render under the next section before
+effect cleanup, causing user rows to be formatted as salon counts. Results are now bound atomically to
+their section; salon details also require their selected ID. Existing stale-request/token guards remain.
+
+Local npm lint/typecheck, all 112 tests, production build and diff check pass. Three new cases cover
+shared enum/fallback styling, normal-scope directories/role filter/pagination, and compact KPI/currency.
+The existing browser gate now covers seven viewports (1920, 1440, 1366, 1024, 768, 390, 360 widths),
+normal-scope API calls, all routes, CSV downloads, pagination/history, keyboard navigation, logout and
+revocation. It checks page overflow, compact KPI height, badge AA contrast, and a deliberately synthetic
+large-revenue response for UI containment only; that response is not financial/accounting evidence.
+Screenshots use actual isolated API data and include overview/users/salons/detail at every viewport.
+
+Only backend diff: three test-fixture lines designate one in-memory supplier non-demo so the existing
+real Spring/JWT/H2 browser gate can exercise normal reporting without a toggle. Other demo suppliers
+remain excluded. This test class is absent from production JARs. Production backend, schema, seeds,
+dependencies, auth, PayOS and reporting formulas are unchanged. Final CI/screenshots recorded in PR.
+Rollback: previous frontend bundle only; no migration, production data write or backend rollout needed.
+
+Visual QA caught mixed-unit Tailwind ordering: min-[1800px] was emitted before xl (rem) and got overridden at 1920px. The 1800px-equivalent breakpoint now uses 112.5rem, matching default units. Browser asserts the expected 6/3/2/1 columns at each width, rather than inferring responsive success solely from overflow.
