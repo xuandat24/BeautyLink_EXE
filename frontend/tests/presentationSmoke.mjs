@@ -41,6 +41,11 @@ try {
       await page.goto(`${base}/#admin-dashboard`); await page.reload();
       const completed = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Lịch hẹn hoàn thành', exact: true }) });
       await completed.locator('[data-admin-value]').filter({ hasText: '59' }).waitFor();
+      const cards = page.locator('[aria-label="Chỉ số kinh doanh"] article');
+      assert.deepEqual(await cards.locator('[data-admin-value]').allTextContents().then(values => values.slice(0, 3)), ['90', '78', new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(1906000)]);
+      await page.getByRole('heading', { name: 'Doanh thu hoa hồng', exact: true }).waitFor();
+      await page.locator('svg[aria-label="90 lịch trong kỳ"]').waitFor();
+      await page.getByRole('heading', { name: 'Kết quả kinh doanh & tài chính', exact: true }).waitFor();
       await page.goto(`${base}/#admin-customers`);
       await page.locator('tbody').getByText('Nguyễn Minh Anh', { exact: true }).waitFor();
       assert.deepEqual(await page.locator('thead th').allTextContents(), ['Người dùng', 'Email', 'Vai trò', 'Ngày tạo', 'Thao tác']);
@@ -52,7 +57,7 @@ try {
       await page.getByText(/nguyen\.minhanh\d{2}@(gmail|outlook|yahoo)\.com/).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
       assert.deepEqual(errors, []);
-      console.log(`PASS ${viewport.width}x${viewport.height}: sample stars, 59 completed, five user columns and consistent email details`);
+      console.log(`PASS ${viewport.width}x${viewport.height}: stars, 90 bookings, 78 customers, 59 completed, 1,906,000 commission, matching donut and user columns/emails`);
     } finally { await context.close(); }
   }
 } finally { await browser.close(); }
