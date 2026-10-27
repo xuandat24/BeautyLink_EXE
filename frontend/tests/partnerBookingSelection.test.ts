@@ -120,7 +120,7 @@ test('unavailable payment quote gives visible feedback instead of a dead button'
     });
     await clickButton('Tiếp tục: Chọn hình thức');
     await clickButton('Tiếp tục: Tóm tắt');
-    const submit = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('Xác nhận thanh toán')) as HTMLButtonElement;
+    const submit = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('Tiếp tục tới PayOS')) as HTMLButtonElement;
     assert.ok(submit);
     assert.equal(submit.disabled, false);
     await act(async () => submit.click());

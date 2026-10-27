@@ -6,6 +6,7 @@ import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import type { BackendBooking, PaymentOption, PaymentQuote } from '../types';
 import { BookingContactDialog } from './BookingContactDialog';
 import { isAuthStorageEvent } from '../lib/authSession';
+import { ArrowLeft, ArrowRight, CalendarDays, CircleAlert, CreditCard, RefreshCw, ShieldCheck, Store } from 'lucide-react';
 
 const formatMoney = (value: number | null | undefined) => value == null ? 'Đang xác minh' : `${value.toLocaleString('vi-VN')}đ`;
 
@@ -56,7 +57,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
   }, [booking, option, voucher]);
   const pay = async () => {
     if (submitting.current || !booking || !canPayBooking(booking)) return;
-    if (!booking.paymentAttemptActive && (quoteLoading || quoteError || !quote?.paymentAvailable)) {
+    if (!booking.paymentAttemptActive && (quoteLoading || quoteError || quote?.paymentOption !== option || !quote?.paymentAvailable)) {
       setError(quoteError || 'Số tiền chưa được máy chủ xác minh hoặc chưa thể thanh toán qua PayOS.');
       return;
     }
@@ -92,7 +93,11 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
     } }
     finally { submitting.current = false; if (generation.current > 0) setBusy(false); }
   };
-  return <div className="fixed inset-0 z-[140] grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="payment-continue-title"
+  const canContinue = booking && canPayBooking(booking);
+  const displayedQuote = quote?.paymentOption === option ? quote : null;
+  const amount = booking?.paymentAttemptActive ? booking.paymentAmount : displayedQuote?.amount;
+  const remaining = booking?.paymentAttemptActive ? booking.paymentRemainingAmount : displayedQuote?.remainingAmount;
+  return <div className="fixed inset-0 z-[140] grid place-items-center overflow-y-auto bg-slate-950/70 p-3 backdrop-blur-sm sm:p-6" role="dialog" aria-modal="true" aria-labelledby="payment-continue-title"
     onKeyDown={event => {
       if (event.key === 'Escape' && !busy) onClose();
       if (event.key === 'Tab') {
@@ -104,27 +109,42 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
       }
     }}>
     {contactDialogOpen && currentUser && <BookingContactDialog currentUser={currentUser} onCancel={() => setContactDialogOpen(false)} onComplete={(updated) => { setCurrentUser(updated); setContactDialogOpen(false); void pay(); }} />}
-    <div className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6">
-      <h2 id="payment-continue-title" className="text-xl font-black">Tiếp tục thanh toán lịch hẹn</h2>
-      <button ref={focus} type="button" disabled={busy} onClick={onClose}>Quay lại</button>
-      {loading && <p role="status">Đang tải trạng thái từ máy chủ...</p>}
-      {error && <p role="alert" className="text-rose-700">{error}</p>}
-      {booking && <><p>{booking.bookingCode} — {booking.serviceName}</p><p>{booking.appointmentDate} {booking.startTime.slice(0, 5)} — {booking.totalAmount.toLocaleString('vi-VN')}đ</p>
-        {!canPayBooking(booking) && <p role="alert">Lịch hẹn không thể mở checkout ({booking.paymentBlockerReason ?? booking.status}). Vui lòng liên hệ hỗ trợ khi cần đối soát.</p>}
-        <label className="block">Hình thức thanh toán<select aria-label="Hình thức thanh toán" value={option} disabled={busy || !canPayBooking(booking) || booking.paymentAttemptActive === true} onChange={e => setOption(e.target.value as PaymentOption)}>
-          {option === 'DEPOSIT_50' && <option value="DEPOSIT_50">Đặt cọc 50% (giao dịch cũ)</option>}
-          <option value="DEPOSIT_05">Đặt cọc 5%</option><option value="FULL_100">Thanh toán 100%</option></select></label>
-        <label className="block">Voucher<input aria-label="Voucher" maxLength={40} value={voucher} disabled={busy || !canPayBooking(booking) || booking.paymentAttemptActive === true} onChange={e => setVoucher(e.target.value)} /></label>
-        {booking.paymentAttemptActive && <p>Phiên đang hoạt động giữ nguyên hình thức thanh toán/voucher; không tạo lại link để thay đổi.</p>}
-        <div className="rounded-xl border border-pink-100 bg-pink-50/50 p-3 text-sm">
-          <p>Cần thanh toán ngay: <strong>{formatMoney(booking.paymentAttemptActive ? booking.paymentAmount : quote?.amount)}</strong></p>
-          <p>Còn lại tại salon: <strong>{formatMoney(booking.paymentAttemptActive ? booking.paymentRemainingAmount : quote?.remainingAmount)}</strong></p>
+    <div className="my-auto w-full max-w-xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
+      <div className="bg-gradient-to-br from-[#861146] via-[#bd195c] to-[#e1146c] p-5 text-white sm:p-7">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-bold tracking-wide text-pink-100"><ShieldCheck className="h-4 w-4" /> BEAUTYLINK · THANH TOÁN</div>
+          <button ref={focus} type="button" disabled={busy} onClick={onClose} className="inline-flex min-h-10 items-center gap-1 rounded-full border border-white/40 px-3 text-xs font-semibold hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-50"><ArrowLeft className="h-4 w-4" /> Quay lại</button>
         </div>
-        {quoteError && <p role="alert" className="text-rose-700">{quoteError}</p>}
-        {quote && !quote.paymentAvailable && <p role="alert">Số tiền này chưa đạt mức tối thiểu của PayOS. Hãy chọn thanh toán 100% nếu tùy chọn đó hợp lệ.</p>}
-        <button type="button" disabled={loading || busy || !canPayBooking(booking) || (!booking.paymentAttemptActive && (quoteLoading || Boolean(quoteError) || !quote?.paymentAvailable))} onClick={() => void pay()} className="rounded-xl bg-pink-600 p-3 text-white">{busy ? 'Đang kiểm tra...' : quoteLoading ? 'Đang xác minh giá...' : 'Tiếp tục tới PayOS'}</button>
-      </>}
-      <button type="button" disabled={busy || loading} onClick={() => setRevision(n => n + 1)}>Làm mới trạng thái</button>
+        <h2 id="payment-continue-title" className="mt-6 text-2xl font-black tracking-tight sm:text-3xl">Tiếp tục thanh toán</h2>
+        <p className="mt-2 max-w-md text-sm leading-relaxed text-pink-100">Kiểm tra lịch hẹn và số tiền trước khi chuyển sang trang thanh toán PayOS.</p>
+      </div>
+      <div className="space-y-5 p-5 sm:p-7">
+        {loading && <p role="status" className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Đang tải trạng thái từ máy chủ...</p>}
+        {error && <p role="alert" className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-800"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />{error}</p>}
+        {booking && <>
+          <section aria-label="Thông tin lịch hẹn" className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-pink-100 text-[#bd195c]"><Store className="h-5 w-5" /></span><div className="min-w-0"><p className="text-xs font-semibold text-slate-500">Lịch hẹn {booking.bookingCode}</p><h3 className="mt-0.5 text-base font-bold text-slate-900">{booking.serviceName}</h3></div></div>
+            <p className="mt-3 flex items-center gap-2 border-t border-slate-200 pt-3 text-sm text-slate-700"><CalendarDays className="h-4 w-4 text-[#bd195c]" />{booking.appointmentDate} lúc {booking.startTime.slice(0, 5)}</p>
+          </section>
+          {!canContinue && <p role="alert" className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />Lịch hẹn chưa thể mở PayOS ({booking.paymentBlockerReason ?? booking.status}). Vui lòng kiểm tra lịch hẹn hoặc liên hệ hỗ trợ nếu cần đối soát.</p>}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-semibold text-slate-800">Hình thức thanh toán<select aria-label="Hình thức thanh toán" value={option} disabled={busy || !canContinue || booking.paymentAttemptActive === true} onChange={e => { setQuote(null); setOption(e.target.value as PaymentOption); }} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-[#bd195c] focus:outline-none focus:ring-2 focus:ring-pink-200 disabled:bg-slate-100 disabled:text-slate-500">
+              {option === 'DEPOSIT_50' && <option value="DEPOSIT_50">Đặt cọc 50% (giao dịch cũ)</option>}
+              <option value="DEPOSIT_05">Đặt cọc 5%</option><option value="FULL_100">Thanh toán 100%</option></select></label>
+            <label className="text-sm font-semibold text-slate-800">Mã giảm giá<input aria-label="Voucher" maxLength={40} placeholder="Nhập mã nếu có" value={voucher} disabled={busy || !canContinue || booking.paymentAttemptActive === true} onChange={e => { setQuote(null); setVoucher(e.target.value); }} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 placeholder:text-slate-400 focus:border-[#bd195c] focus:outline-none focus:ring-2 focus:ring-pink-200 disabled:bg-slate-100 disabled:text-slate-500" /></label>
+          </div>
+          {booking.paymentAttemptActive && <p className="rounded-xl bg-blue-50 p-3 text-xs leading-relaxed text-blue-900">Phiên PayOS đang hoạt động giữ nguyên hình thức thanh toán và mã giảm giá đã chọn.</p>}
+          <section aria-label="Chi tiết thanh toán" className="overflow-hidden rounded-2xl border border-pink-200">
+            <div className="space-y-2 p-4 text-sm"><div className="flex justify-between gap-3 text-slate-600"><span>Tổng giá dịch vụ</span><strong className="text-slate-900">{formatMoney(booking.totalAmount)}</strong></div><div className="flex justify-between gap-3 text-slate-600"><span>Còn lại tại salon</span><strong className="text-slate-900">{formatMoney(remaining)}</strong></div></div>
+            <div className="flex items-center justify-between gap-3 bg-pink-50 px-4 py-4"><span className="text-sm font-bold text-[#861146]">Thanh toán trên PayOS</span><strong className="text-xl font-black text-[#bd195c]">{quoteLoading && !booking.paymentAttemptActive ? 'Đang xác minh' : formatMoney(amount)}</strong></div>
+          </section>
+          {quoteError && <p role="alert" className="text-sm font-medium text-rose-700">{quoteError}</p>}
+          {displayedQuote && !displayedQuote.paymentAvailable && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Số tiền này chưa đạt mức tối thiểu của PayOS. Hãy chọn thanh toán 100% nếu tùy chọn đó hợp lệ.</p>}
+          <button type="button" disabled={loading || busy || !canContinue || (!booking.paymentAttemptActive && (quoteLoading || Boolean(quoteError) || !displayedQuote?.paymentAvailable))} onClick={() => void pay()} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#bd195c] px-5 text-sm font-bold text-white shadow-lg shadow-pink-200 transition hover:bg-[#9e174e] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#bd195c] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none">{busy ? 'Đang kiểm tra...' : quoteLoading ? 'Đang xác minh giá...' : <>Tiếp tục tới PayOS <ArrowRight className="h-4 w-4" /></>}</button>
+          <p className="flex items-start gap-2 text-xs leading-relaxed text-slate-500"><CreditCard className="mt-0.5 h-4 w-4 shrink-0" />Bạn sẽ rời BeautyLink để thanh toán trên pay.payos.vn. Sau khi quay lại, BeautyLink kiểm tra trạng thái với máy chủ trước khi xác nhận.</p>
+        </>}
+        <button type="button" disabled={busy || loading} onClick={() => setRevision(n => n + 1)} className="mx-auto flex min-h-10 items-center gap-2 rounded-full px-4 text-xs font-semibold text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-[#bd195c] disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Làm mới trạng thái</button>
+      </div>
     </div>
   </div>;
 }
