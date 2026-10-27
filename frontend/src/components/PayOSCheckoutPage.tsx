@@ -45,7 +45,7 @@ export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initial
           autoRetryAllowed.current = false; setError('Máy chủ chưa hỗ trợ xác minh phiên QR này. Vui lòng quay lại lịch hẹn và thử sau khi hệ thống cập nhật.'); return;
         }
         setPayment(fresh); setVerified(true);
-        if (fresh.verificationPending) throw new Error('Provider verification deferred');
+        if (fresh.verificationPending && !fresh.requiresManualReview && fresh.status !== 'REVIEW_REQUIRED') throw new Error('Provider verification deferred');
         setError(''); failures = 0;
         if (fresh.status !== 'PENDING' || fresh.requiresManualReview) {
           const key = `${fresh.status}:${fresh.requiresManualReview}`;

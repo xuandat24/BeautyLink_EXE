@@ -128,8 +128,9 @@ test('older backend without verification capabilities fails closed even with a h
  });
 });
 test('verified paid and manual states remove QR and transfer details',async()=>{
- for(const status of [{...payment,status:'PAID' as const},{...payment,status:'REVIEW_REQUIRED' as const,requiresManualReview:true}]) await run(status,()=>{
+ for(const status of [{...payment,status:'PAID' as const},{...payment,status:'REVIEW_REQUIRED' as const,requiresManualReview:true},{...payment,status:'REVIEW_REQUIRED' as const,requiresManualReview:true,verificationPending:true}]) await run(status,()=>{
   assert.equal(document.querySelector('[aria-label="Sao chép số tài khoản"]'),null);
+  assert.equal(document.querySelector('[data-checkout-state]')?.getAttribute('data-checkout-state'),status.status==='PAID'?'PAID':'REVIEW_REQUIRED');
   assert.match(document.body.textContent??'', status.status==='PAID'?/Thanh toán thành công/:/không thanh toán lại/);
  });
 });
