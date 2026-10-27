@@ -153,6 +153,8 @@ export interface BookingReview {
 }
 
 export interface PayOSPayment {
+  checkoutAllowed?: boolean;
+  verificationPending?: boolean;
   qrCode?: string | null;
   bankBin?: string | null;
   bankAccountNumber?: string | null;

@@ -222,7 +222,8 @@ public final class ApiDtos {
                                        String checkoutUrl, BigDecimal amount, BigDecimal remainingAmount,
                                        PaymentOption paymentOption, PaymentTransactionStatus status,
                                        boolean requiresManualReview, Instant expiresAt, String qrCode, String bankBin,
-                                       String bankAccountNumber, String bankAccountName, String transferDescription) {}
+                                       String bankAccountNumber, String bankAccountName, String transferDescription,
+                                       boolean checkoutAllowed, boolean verificationPending) {}
     public record PayOSWebhookResponse(boolean success) {}
     public record ReportResponse(Long id, ReportTargetType targetType, Long targetId, String reason, String details,
                                  ReportStatus status, String reporterName, String assignedStaffName,

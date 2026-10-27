@@ -181,7 +181,7 @@ class PaymentServiceSecurityTest {
                 new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_05, "BEAUTY50"));
         assertEquals(new BigDecimal("22500"), deposit.amount());
         assertEquals(new BigDecimal("427500"), deposit.remainingAmount());
-        assertEquals("TEST-QR-NOT-PAYABLE", deposit.qrCode());
+        assertEquals(TestPayOSQr.payload(22500), deposit.qrCode());
         assertEquals("TEST ACCOUNT", deposit.bankAccountName());
         assertEquals("TEST-ACCOUNT", deposit.bankAccountNumber());
 
@@ -228,6 +228,8 @@ class PaymentServiceSecurityTest {
         when(bookings.findByIdForUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(payments.findAllByBookingIdForUpdate(booking.getId())).thenReturn(List.of(legacy));
         when(payments.findAllByBookingIdOrderByCreatedAtDesc(booking.getId())).thenReturn(List.of(legacy));
+        var observed = provider(legacy, PaymentLinkStatus.PENDING);
+        when(gateway.get(legacy.getOrderCode())).thenReturn(observed);
 
         PayOSPaymentResponse response = service.create(booking.getCustomer(), booking.getId(),
                 new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_50, null));
@@ -319,7 +321,7 @@ class PaymentServiceSecurityTest {
                 "PAYOS_RECONCILIATION_FAILED", "temporary"));
         service.reconcileById(72L);
         assertEquals(PaymentTransactionStatus.PENDING, pending.getStatus());
-        assertTrue(pending.getLastReconciledAt() != null);
+        org.junit.jupiter.api.Assertions.assertNull(pending.getLastReconciledAt(), "A timeout must not become a successful verification timestamp");
     }
 
     private void lockPayment(PaymentTransaction payment) {
@@ -337,6 +339,8 @@ class PaymentServiceSecurityTest {
         booking.setCustomer(customer);
         booking.setStatus(BookingStatus.PENDING);
         booking.setPaymentStatus(PaymentStatus.UNPAID);
+        booking.setAppointmentDate(LocalDate.now().plusDays(1));
+        booking.setStartTime(LocalTime.of(10,0));
 
         PaymentTransaction payment = new PaymentTransaction();
         payment.setBooking(booking);
@@ -372,7 +376,92 @@ class PaymentServiceSecurityTest {
         return booking;
     }
 
+    @Test void existingAttemptWithoutQrIsVerifiedWithoutCreatingAnotherPayment() {
+        var p = pendingPayment(); p.setQrCode(null);
+        p.setCheckoutUrl("https://pay.payos.vn/web/legacy");
+        p.setExpiresAt(Instant.now().plusSeconds(600));
+        lockPayment(p);
+        when(payments.findAllByBookingIdOrderByCreatedAtDesc(p.getBooking().getId())).thenReturn(List.of(p));
+        var observed = provider(p, PaymentLinkStatus.PENDING);
+        when(gateway.get(p.getOrderCode())).thenReturn(observed);
+        var response = service.status(p.getBooking().getCustomer(), p.getOrderCode());
+        assertTrue(response.checkoutAllowed());
+        org.junit.jupiter.api.Assertions.assertNull(response.qrCode());
+        assertEquals(p.getOrderCode(), response.orderCode());
+        assertEquals(PaymentTransactionStatus.PENDING, p.getStatus());
+        verify(gateway, never()).create(any());
+    }
+
+    @Test void providerTimeoutLocksInstructionsUntilVerifiedRetryAndThenAcceptsPaid() {
+        var p = pendingPayment(); p.setExpiresAt(Instant.now().plusSeconds(600));
+        p.setCheckoutUrl("https://pay.payos.vn/web/pending"); p.setQrCode(TestPayOSQr.payload(p.getAmount().longValueExact()));
+        lockPayment(p);
+        when(payments.findAllByBookingIdOrderByCreatedAtDesc(p.getBooking().getId())).thenReturn(List.of(p));
+        when(payments.findAllByBookingIdForUpdate(p.getBooking().getId())).thenReturn(List.of(p));
+        when(gateway.get(p.getOrderCode())).thenThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,"PAYOS_RECONCILIATION_FAILED","Test network outage"));
+        var locked = service.status(p.getBooking().getCustomer(),p.getOrderCode());
+        assertTrue(locked.verificationPending());
+        org.junit.jupiter.api.Assertions.assertFalse(locked.checkoutAllowed());
+        org.junit.jupiter.api.Assertions.assertNull(locked.qrCode());
+        org.junit.jupiter.api.Assertions.assertNull(p.getLastReconciledAt());
+        assertEquals(BookingStatus.PENDING,p.getBooking().getStatus());
+        var paid = new PaymentLink(); paid.setId(p.getPaymentLinkId());paid.setOrderCode(p.getOrderCode());paid.setAmount(p.getAmount().longValueExact());paid.setAmountPaid(p.getAmount().longValueExact());paid.setStatus(PaymentLinkStatus.PAID);
+        org.mockito.Mockito.doReturn(paid).when(gateway).get(p.getOrderCode());
+        assertEquals(PaymentTransactionStatus.PAID,service.status(p.getBooking().getCustomer(),p.getOrderCode()).status());
+        assertEquals(BookingStatus.CONFIRMED,p.getBooking().getStatus());
+        org.junit.jupiter.api.Assertions.assertNull(service.status(p.getBooking().getCustomer(),p.getOrderCode()).qrCode());
+        verify(gateway,times(2)).get(p.getOrderCode());
+    }
+
+    @Test void unknownProviderAmountCannotReenableInstructionsOnTheNextPoll() {
+        var p=pendingPayment();lockPayment(p);
+        var unknown=provider(p,PaymentLinkStatus.PENDING);when(unknown.getAmountPaid()).thenReturn(null);
+        when(gateway.get(p.getOrderCode())).thenReturn(unknown);
+        assertTrue(service.status(p.getBooking().getCustomer(),p.getOrderCode()).verificationPending());
+        assertTrue(service.status(p.getBooking().getCustomer(),p.getOrderCode()).verificationPending());
+        org.junit.jupiter.api.Assertions.assertNull(p.getLastReconciledAt());
+        assertEquals(PaymentTransactionStatus.PENDING,p.getStatus());
+    }
+
+    @Test void freshQrDoesNotRequireHostedUrlOrOptionalBankMetadata() {
+        var b=payableBooking(881L,500_000L);prepareCreate(b,"qr-only",true);
+        var result=service.create(b.getCustomer(),b.getId(),new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_05,null));
+        assertTrue(result.checkoutAllowed());assertEquals(TestPayOSQr.payload(25000),result.qrCode());
+        org.junit.jupiter.api.Assertions.assertNull(result.checkoutUrl());org.junit.jupiter.api.Assertions.assertNull(result.bankAccountName());
+        verify(gateway,times(1)).create(any());
+    }
+
+    @Test void finalizationDoesNotMutateReceiptWhenVerifiedWebhookWon() {
+        var b=payableBooking(882L,500000L);
+        when(bookings.findByIdForUpdate(b.getId())).thenReturn(Optional.of(b));
+        when(payments.findAllByBookingIdForUpdate(b.getId())).thenReturn(List.of());
+        var captured=new java.util.concurrent.atomic.AtomicReference<PaymentTransaction>();
+        org.mockito.Mockito.doAnswer(call->{PaymentTransaction p=call.getArgument(0);captured.set(p);when(payments.findByOrderCodeForUpdate(p.getOrderCode())).thenReturn(Optional.of(p));return p;}).when(payments).saveAndFlush(any());
+        Instant paidAt=Instant.parse("2026-01-01T00:00:00Z");
+        when(gateway.create(any())).thenAnswer(call->{
+            CreatePaymentLinkRequest r=call.getArgument(0);var p=captured.get();p.setPaymentLinkId("webhook-first");p.setStatus(PaymentTransactionStatus.PAID);p.setPaidAt(paidAt);b.setStatus(BookingStatus.CONFIRMED);b.setPaymentStatus(PaymentStatus.PARTIALLY_PAID);
+            var result=new CreatePaymentLinkResponse();result.setOrderCode(r.getOrderCode());result.setAmount(r.getAmount());result.setPaymentLinkId("webhook-first");result.setStatus(PaymentLinkStatus.PENDING);result.setQrCode(TestPayOSQr.payload(r.getAmount()));return result;
+        });
+        var result=service.create(b.getCustomer(),b.getId(),new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_05,null));
+        assertEquals(PaymentTransactionStatus.PAID,result.status());assertEquals(paidAt,captured.get().getPaidAt());
+        org.junit.jupiter.api.Assertions.assertNull(captured.get().getProviderCreatedAt());org.junit.jupiter.api.Assertions.assertNull(captured.get().getQrCode());
+        assertEquals(new BigDecimal("25000"),captured.get().getAmount());assertEquals(BookingStatus.CONFIRMED,b.getStatus());
+    }
+
+    @Test void reuseCannotBypassFailedProviderVerificationAndNeverCreatesAReplacement() {
+        var p=pendingPayment();p.setExpiresAt(Instant.now().plusSeconds(600));p.setCheckoutUrl("https://pay.payos.vn/web/existing");
+        when(bookings.findByIdForUpdate(p.getBooking().getId())).thenReturn(Optional.of(p.getBooking()));
+        when(payments.findAllByBookingIdForUpdate(p.getBooking().getId())).thenReturn(List.of(p));
+        when(gateway.get(p.getOrderCode())).thenThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,"PAYOS_RECONCILIATION_FAILED","Synthetic timeout"));
+        var error=assertThrows(ApiException.class,()->service.create(p.getBooking().getCustomer(),p.getBooking().getId(),new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_50,null)));
+        assertEquals("PAYMENT_RECONCILING",error.getCode());assertEquals(PaymentTransactionStatus.PENDING,p.getStatus());
+        org.junit.jupiter.api.Assertions.assertNull(p.getLastReconciledAt());verify(gateway,never()).create(any());verify(payments,never()).saveAndFlush(any());
+    }
+
     private void prepareCreate(Booking booking, String paymentLinkId) {
+        prepareCreate(booking,paymentLinkId,false);
+    }
+    private void prepareCreate(Booking booking, String paymentLinkId, boolean qrOnly) {
         when(bookings.findByIdForUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(payments.findAllByBookingIdForUpdate(booking.getId())).thenReturn(List.of());
         org.mockito.Mockito.doAnswer(invocation -> {
@@ -383,9 +472,9 @@ class PaymentServiceSecurityTest {
         when(gateway.create(any(CreatePaymentLinkRequest.class))).thenAnswer(invocation -> {
             CreatePaymentLinkRequest r = invocation.getArgument(0);
             var response = new CreatePaymentLinkResponse(); response.setOrderCode(r.getOrderCode()); response.setAmount(r.getAmount());
-            response.setQrCode("TEST-QR-NOT-PAYABLE"); response.setBin("970422");
-            response.setAccountNumber("TEST-ACCOUNT"); response.setAccountName("TEST ACCOUNT"); response.setDescription("TEST ONLY");
-            response.setStatus(PaymentLinkStatus.PENDING); response.setPaymentLinkId(paymentLinkId); response.setCheckoutUrl("https://pay.payos.vn/web/" + paymentLinkId);
+            response.setQrCode(TestPayOSQr.payload(r.getAmount()));
+            if(!qrOnly){response.setBin("970422");response.setAccountNumber("TEST-ACCOUNT"); response.setAccountName("TEST ACCOUNT"); response.setDescription("TEST ONLY");response.setCheckoutUrl("https://pay.payos.vn/web/" + paymentLinkId);}
+            response.setStatus(PaymentLinkStatus.PENDING); response.setPaymentLinkId(paymentLinkId);
             return response;
         });
     }

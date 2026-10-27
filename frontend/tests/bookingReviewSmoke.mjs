@@ -116,7 +116,12 @@ try {
   await page.getByRole('button', { name: /Mở thanh toán QR/ }).click();
   const paymentResponse = await paymentCreated; assert.equal(paymentResponse.status(), 200);
   assert.equal(observedPayment.status, 'PENDING'); assert.equal(observedPayment.requiresManualReview, false);
+  await page.locator('[data-checkout-state="NETWORK_ERROR"]').waitFor(); // real Spring marks fake provider timeout uncertain
+  assert.equal(await page.getByRole('img', { name: /Mã QR PayOS/ }).count(), 0);
+  await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click();
   await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
+  assert.equal(new URL(page.url()).hostname, 'localhost');
+  await page.getByText('PayOS chưa cung cấp thông tin này', { exact: true }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: 'backend/target/payos-qr-mobile.png', fullPage: true });
@@ -129,6 +134,17 @@ try {
   await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).waitFor();
   await page.getByRole('dialog').getByRole('button', { name: 'Quay lại', exact: true }).click();
   assert.doesNotMatch(page.url(), /bookingPayment=/);
+  await page.goto(`http://localhost:5173/?bookingPayment=${observedPayment.bookingId}#account`);
+  await page.getByRole('button', { name: 'Mở thanh toán QR', exact: true }).click();
+  await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
+  const callback = { success: true, code: '00', desc: 'SMOKE ONLY', signature: 'FAKE TEST GATEWAY ONLY', data: { code: '00', orderCode: observedPayment.orderCode, paymentLinkId: observedPayment.paymentLinkId, amount: observedPayment.amount, reference: 'SMOKE-VERIFIED', transactionDateTime: '2026-10-28 10:00:00' } };
+  for(let duplicate=0;duplicate<2;duplicate++)assert.equal((await page.request.post('http://localhost:8080/api/v1/payments/payos/webhook',{data:callback})).status(),200);
+  await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click();
+  await page.getByRole('heading', { name: 'Thanh toán thành công', exact: true }).waitFor();
+  assert.equal(await page.getByRole('img', { name: /Mã QR PayOS/ }).count(),0);
+  const jwt=await page.evaluate(()=>sessionStorage.getItem('beautylink_access_token'));
+  const persisted=await (await page.request.get(`http://localhost:8080/api/v1/payments/payos/${observedPayment.orderCode}`,{headers:{Authorization:`Bearer ${jwt}`}})).json();
+  assert.equal(persisted.status,'PAID');assert.equal(persisted.checkoutAllowed,false);assert.equal(persisted.qrCode,null);
   assert.deepEqual(failures, []);
   console.log('PASS: browser -> Spring/JWT/H2; continuation reload/back navigation/reuse/safe expiry retry without new booking; paid/manual guards, pending cancellation, completion, review upserts/reload, account/appointments/Explore/details, checkout -> fake gateway; no API/page/console errors.');
 } catch (error) {
