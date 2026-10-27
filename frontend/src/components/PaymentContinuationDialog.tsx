@@ -1,3 +1,5 @@
+import { PayOSCheckoutPage } from './PayOSCheckoutPage';
+import type { PayOSPayment } from '../types/beauty';
 import React, { useEffect, useRef, useState } from 'react';
 import { beautyApi, getAccessToken, getApiErrorMessage } from '../services/beautyApi';
 import { useBeautyStore } from '../store/beautyStore';
@@ -13,6 +15,7 @@ const formatMoney = (value: number | null | undefined) => value == null ? 'Đang
 export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: number; onClose: () => void }) {
   const { currentUser, setCurrentUser } = useBeautyStore();
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [activePayment, setActivePayment] = useState<PayOSPayment | null>(null);
   const [sessionRevision, setSessionRevision] = useState(0);
   const session = `${getAccessToken() ?? ''}:${currentUser?.id ?? ''}:${sessionRevision}`;
   const [booking, setBooking] = useState<BackendBooking | null>(null);
@@ -79,7 +82,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
       const url = safeCheckout(payment, bookingId);
       if (!url) throw new Error('Chưa có checkout an toàn. Không thanh toán lại; vui lòng làm mới hoặc liên hệ hỗ trợ.');
       sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
-      window.location.assign(url);
+      setActivePayment(payment);
     };
     try {
       if (!current()) return;
@@ -93,6 +96,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
     } }
     finally { submitting.current = false; if (generation.current > 0) setBusy(false); }
   };
+  if (activePayment) return <PayOSCheckoutPage key={String(activePayment.orderCode)} initialPayment={activePayment} onBack={onClose} />;
   const canContinue = booking && canPayBooking(booking);
   const displayedQuote = quote?.paymentOption === option ? quote : null;
   const amount = booking?.paymentAttemptActive ? booking.paymentAmount : displayedQuote?.amount;
@@ -116,7 +120,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
           <button ref={focus} type="button" disabled={busy} onClick={onClose} className="inline-flex min-h-10 items-center gap-1 rounded-full border border-white/40 px-3 text-xs font-semibold hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-50"><ArrowLeft className="h-4 w-4" /> Quay lại</button>
         </div>
         <h2 id="payment-continue-title" className="mt-6 text-2xl font-black tracking-tight sm:text-3xl">Tiếp tục thanh toán</h2>
-        <p className="mt-2 max-w-md text-sm leading-relaxed text-pink-100">Kiểm tra lịch hẹn và số tiền trước khi chuyển sang trang thanh toán PayOS.</p>
+        <p className="mt-2 max-w-md text-sm leading-relaxed text-pink-100">Kiểm tra lịch hẹn và số tiền trước khi mở mã QR thanh toán.</p>
       </div>
       <div className="space-y-5 p-5 sm:p-7">
         {loading && <p role="status" className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Đang tải trạng thái từ máy chủ...</p>}
@@ -140,8 +144,8 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
           </section>
           {quoteError && <p role="alert" className="text-sm font-medium text-rose-700">{quoteError}</p>}
           {displayedQuote && !displayedQuote.paymentAvailable && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Số tiền này chưa đạt mức tối thiểu của PayOS. Hãy chọn thanh toán 100% nếu tùy chọn đó hợp lệ.</p>}
-          <button type="button" disabled={loading || busy || !canContinue || (!booking.paymentAttemptActive && (quoteLoading || Boolean(quoteError) || !displayedQuote?.paymentAvailable))} onClick={() => void pay()} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#bd195c] px-5 text-sm font-bold text-white shadow-lg shadow-pink-200 transition hover:bg-[#9e174e] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#bd195c] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none">{busy ? 'Đang kiểm tra...' : quoteLoading ? 'Đang xác minh giá...' : <>Tiếp tục tới PayOS <ArrowRight className="h-4 w-4" /></>}</button>
-          <p className="flex items-start gap-2 text-xs leading-relaxed text-slate-500"><CreditCard className="mt-0.5 h-4 w-4 shrink-0" />Bạn sẽ rời BeautyLink để thanh toán trên pay.payos.vn. Sau khi quay lại, BeautyLink kiểm tra trạng thái với máy chủ trước khi xác nhận.</p>
+          <button type="button" disabled={loading || busy || !canContinue || (!booking.paymentAttemptActive && (quoteLoading || Boolean(quoteError) || !displayedQuote?.paymentAvailable))} onClick={() => void pay()} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#bd195c] px-5 text-sm font-bold text-white shadow-lg shadow-pink-200 transition hover:bg-[#9e174e] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#bd195c] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none">{busy ? 'Đang kiểm tra...' : quoteLoading ? 'Đang xác minh giá...' : <>Mở thanh toán QR <ArrowRight className="h-4 w-4" /></>}</button>
+          <p className="flex items-start gap-2 text-xs leading-relaxed text-slate-500"><CreditCard className="mt-0.5 h-4 w-4 shrink-0" />Mã QR và thông tin nhận tiền được cung cấp bởi PayOS. BeautyLink tự kiểm tra trạng thái thanh toán.</p>
         </>}
         <button type="button" disabled={busy || loading} onClick={() => setRevision(n => n + 1)} className="mx-auto flex min-h-10 items-center gap-2 rounded-full px-4 text-xs font-semibold text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-[#bd195c] disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Làm mới trạng thái</button>
       </div>
