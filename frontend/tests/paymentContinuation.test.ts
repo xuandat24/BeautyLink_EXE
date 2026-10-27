@@ -66,7 +66,7 @@ test('continuation rereads same booking, preserves pending options and double su
     assert.equal(reads, 1, 'activity from another tab cannot reset checkout');
     assert.equal((document.querySelector('select') as HTMLSelectElement).value, 'FULL_100'); assert.equal((document.querySelector('select') as HTMLSelectElement).disabled, true);
     assert.equal((document.querySelector('input') as HTMLInputElement).value, 'SERVER-VOUCHER');
-    await click('Tiếp tục tới PayOS', true); assert.equal(reads, 2); assert.equal(pays, 1); assert.equal(creates, 0);
+    await click('Mở thanh toán QR', true); assert.equal(reads, 2); assert.equal(pays, 1); assert.equal(creates, 0);
     await act(async () => finish({ bookingId: 42, status: 'PENDING', requiresManualReview: false, checkoutUrl: 'https://evil.test/checkout' } as PayOSPayment));
     assert.match(document.body.textContent ?? '', /checkout an toàn/); assert.equal(sessionStorage.getItem('beautylink_payos_order_code'), null);
   } finally { await act(async () => root.unmount()); beautyApi.myBooking = old.read; beautyApi.createPayOSPayment = old.pay; beautyApi.createBooking = old.create; dom.window.close(); }
@@ -105,11 +105,11 @@ test('server blockers and stale capability stop checkout; missing fields fail cl
       { status: 'COMPLETED' }, { status: 'CANCELLED', paymentEligible: false }, { paymentBlockerReason: 'PAYMENT_REVIEW_REQUIRED' }, { paymentBlockerReason: 'PAYMENT_RECONCILING' } ]) {
       id++; beautyApi.myBooking = async () => ({ ...pending, ...delta, id } as BackendBooking);
       await act(async () => root.render(React.createElement(PaymentContinuationDialog, { bookingId: id, onClose() {} })));
-      const button = [...document.querySelectorAll('button')].find(b => b.textContent?.includes('Tiếp tục tới PayOS'))!; assert.equal(button.disabled, true);
+      const button = [...document.querySelectorAll('button')].find(b => b.textContent?.includes('Mở thanh toán QR'))!; assert.equal(button.disabled, true);
     }
     let calls = 0; beautyApi.myBooking = async () => ++calls === 1 ? pending : { ...pending, paymentEligible: false, paymentBlockerReason: 'PAYMENT_REVIEW_REQUIRED' };
     await act(async () => root.render(React.createElement(PaymentContinuationDialog, { bookingId: 42, onClose() {} })));
-    await click('Tiếp tục tới PayOS'); assert.match(document.body.textContent ?? '', /không còn được phép/); assert.equal(payments, 0);
+    await click('Mở thanh toán QR'); assert.match(document.body.textContent ?? '', /không còn được phép/); assert.equal(payments, 0);
   } finally { await act(async () => root.unmount()); beautyApi.myBooking = old.read; beautyApi.createPayOSPayment = old.pay; dom.window.close(); }
 });
 test('stale booking/account responses are discarded, failed read has retry and missing token never pays', async () => {
