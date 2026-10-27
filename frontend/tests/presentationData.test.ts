@@ -30,6 +30,17 @@ test('presentation stars are stable per supplier, preserve real reviews and leav
   assert.deepEqual(presentationService(actual, allocation, true), actual);
 });
 
+test('public service specialists do not show seeded demo markers', () => {
+  const source = { id: 11, supplierId: 7, serviceReviewCount: 0, supplierReviewCount: 0,
+    practitioners: [{ id: 51, displayName: 'Hồ Ngọc Thanh', specialty: 'DEMO - Hair studio', bio: 'DEMO BeautyLink [bl-practitioner-010]' },
+      { id: 52, displayName: 'Mai An', specialty: 'Nail artist', bio: 'Chuyên viên chăm sóc móng' }] } as BackendService;
+  const result = presentationService(source, null, false);
+  assert.equal(result.practitioners?.[0].specialty, 'Hair studio');
+  assert.equal(result.practitioners?.[0].bio, undefined);
+  assert.deepEqual(result.practitioners?.[1], source.practitioners?.[1]);
+  assert.equal(source.practitioners?.[0].specialty, 'DEMO - Hair studio');
+});
+
 test('154 services share at most 90 reviews and unbooked services get one or two only while budget remains', () => {
   const catalog = Array.from({ length: 154 }, (_, index) => ({
     id: index + 1, supplierId: 1 + Math.floor(index / 11), serviceReviewCount: index === 2 ? 2 : 0,
