@@ -66,9 +66,9 @@ test('checkout retains booking after provider failure, rereads backend and block
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 7);
     await act(async () => root.render(React.createElement(CheckoutPage, { currentUser: user, directService: service, preselectedDate: tomorrow.toISOString().slice(0, 10), preselectedTime: '10:00', onBack() {}, onViewBookings() {}, onNeedLogin() {} })));
     await click('Tiếp tục: Chọn hình thức'); await click('Tiếp tục: Tóm tắt');
-    await click('Xác nhận thanh toán', true);
+    await click('Tiếp tục tới PayOS', true);
     assert.equal(created, 1); assert.equal(payCalls, 1); assert.match(document.body.textContent ?? '', /Provider timeout/);
-    await click('Xác nhận thanh toán');
+    await click('Tiếp tục tới PayOS');
     assert.equal(created, 1); assert.equal(payCalls, 1); assert.equal(readCalls, 1);
     assert.match(document.body.textContent ?? '', /chưa được máy chủ cho phép/);
   } finally { await act(async () => root.unmount()); beautyApi.createBooking = originals.create; beautyApi.createPayOSPayment = originals.pay; beautyApi.myBookings = originals.load; beautyApi.servicePaymentQuote = originals.quote; beautyApi.serviceCapacity = originals.capacity; dom.window.close(); }
