@@ -127,7 +127,7 @@ public class PaymentService {
         List<PaymentTransaction> pending = attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).toList();
         if (!pending.isEmpty()) {
             PaymentTransaction p = pending.getFirst();
-            if (pending.size() != 1 || isExpired(p) || p.getCheckoutUrl() == null || booking.getStatus() == BookingStatus.CANCELLED)
+            if (pending.size() != 1 || isExpired(p) || (p.getCheckoutUrl() == null && !PayOSQrInstructions.usable(p.getQrCode(), p.getAmount())) || booking.getStatus() == BookingStatus.CANCELLED)
                 throw conflict("PAYMENT_RECONCILING", "Giao dịch cũ đang được đối soát. Vui lòng kiểm tra lịch hẹn.");
             if (p.getPaymentOption() == request.paymentOption() && Objects.equals(p.getVoucherCode(), voucherCode))
                 return new Creation(bookingId, null, response(p), null);
@@ -182,13 +182,15 @@ public class PaymentService {
             requireManualReview(transaction, "create-response-link-mismatch");
             return new CreationResult(null, manualError());
         }
+        if (transaction.getStatus() == PaymentTransactionStatus.PAID)
+            return new CreationResult(response(transaction), null); // webhook won; do not mutate the verified receipt
         transaction.setPaymentLinkId(provider.getPaymentLinkId());
-        transaction.setProviderCreatedAt(time.now());
         if (transaction.getStatus() != PaymentTransactionStatus.PENDING || booking.getStatus() == BookingStatus.CANCELLED)
             return new CreationResult(response(transaction), null); // do not overwrite webhook/cancel outcomes
-        if (provider.getStatus() != PaymentLinkStatus.PENDING || !safeCheckoutUrl(provider.getCheckoutUrl()))
+        if (provider.getStatus() != PaymentLinkStatus.PENDING || (!safeCheckoutUrl(provider.getCheckoutUrl()) && !PayOSQrInstructions.usable(provider.getQrCode(), transaction.getAmount())))
             return new CreationResult(null, reconcilingError());
-        transaction.setCheckoutUrl(provider.getCheckoutUrl());
+        transaction.setProviderCreatedAt(time.now());
+        transaction.setCheckoutUrl(safeCheckoutUrl(provider.getCheckoutUrl()) ? provider.getCheckoutUrl() : null);
         // The SDK verifies the provider response; retain exact transfer instructions for reuse/reload.
         transaction.setQrCode(provider.getQrCode());
         transaction.setBankBin(provider.getBin());
@@ -211,8 +213,11 @@ public class PaymentService {
         if (!payment.getBooking().getCustomer().getId().equals(customer.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "PAYMENT_FORBIDDEN", "Bạn không có quyền xem giao dịch này");
         }
-        if (needsReconciliation(payment) && shouldReconcile(payment)) reconcileLocked(payment);
-        return response(payment);
+        // Customer polling observes a delayed webhook without hitting PayOS on every five-second UI tick.
+        boolean due = BookingPaymentPolicy.manualAttempt(payment) ? shouldReconcile(payment)
+                : payment.getLastReconciledAt() == null || !payment.getLastReconciledAt().isAfter(time.now().minusSeconds(15));
+        boolean uncertain = needsReconciliation(payment) && due && !reconcileLocked(payment);
+        return response(payment, uncertain);
     }
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
@@ -274,7 +279,6 @@ public class PaymentService {
     }
 
     private boolean reconcileLocked(PaymentTransaction payment) {
-        payment.setLastReconciledAt(time.now());
         // Canonicalize legacy PENDING/manual rows without treating provider GET as operator approval.
         if (BookingPaymentPolicy.manualAttempt(payment)) requireManualReview(payment, "unresolved-provider-observation");
         PaymentLink provider;
@@ -285,6 +289,8 @@ public class PaymentService {
             return false;
         }
         if (!validateProviderIdentity(payment, provider)) return false;
+        // Manual cases remain blocked, but successful identity observations still respect scheduler throttling.
+        if (BookingPaymentPolicy.manualAttempt(payment)) payment.setLastReconciledAt(time.now());
         PaymentLinkStatus providerStatus = provider.getStatus();
         if (providerStatus == null) return false;
         switch (providerStatus) {
@@ -305,11 +311,11 @@ public class PaymentService {
             }
             default -> {
                 if (provider.getAmountPaid() != null && provider.getAmountPaid() != 0) requireManualReview(payment, "incomplete-provider-payment");
+                else if (providerStatus != PaymentLinkStatus.PENDING || provider.getAmountPaid() == null) return false;
                 else if (!BookingPaymentPolicy.manualAttempt(payment)) payment.setStatus(PaymentTransactionStatus.PENDING);
-                return !BookingPaymentPolicy.manualAttempt(payment) && provider.getStatus() == PaymentLinkStatus.PENDING
-                        && provider.getAmountPaid() != null && provider.getAmountPaid() == 0;
             }
         }
+        payment.setLastReconciledAt(time.now());
         return !BookingPaymentPolicy.manualAttempt(payment);
     }
 
@@ -529,19 +535,23 @@ public class PaymentService {
     }
 
     private PayOSPaymentResponse response(PaymentTransaction payment) {
+        return response(payment, false);
+    }
+
+    private PayOSPaymentResponse response(PaymentTransaction payment, boolean verificationPending) {
         Booking booking = payment.getBooking();
         List<PaymentTransaction> attempts = payments.findAllByBookingIdOrderByCreatedAtDesc(booking.getId());
         boolean manual = payment.isRequiresManualReview() || BookingPaymentPolicy.manual(attempts);
         boolean checkoutAllowed = payment.getStatus() == PaymentTransactionStatus.PENDING && !isExpired(payment)
                 && booking.getStatus() != BookingStatus.CANCELLED && booking.getStatus() != BookingStatus.COMPLETED
                 && booking.getPaymentStatus() == PaymentStatus.UNPAID && !manual && time.beforeStart(booking)
-                && safeCheckoutUrl(payment.getCheckoutUrl())
+                && !verificationPending && payment.getPaymentLinkId() != null && !payment.getPaymentLinkId().isBlank()
                 && attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).count() <= 1;
         return new PayOSPaymentResponse(booking.getId(), booking.getBookingCode(), payment.getOrderCode(),
-                payment.getPaymentLinkId(), checkoutAllowed ? payment.getCheckoutUrl() : null, payment.getAmount(), payment.getRemainingAmount(),
+                payment.getPaymentLinkId(), checkoutAllowed && safeCheckoutUrl(payment.getCheckoutUrl()) ? payment.getCheckoutUrl() : null, payment.getAmount(), payment.getRemainingAmount(),
                 payment.getPaymentOption(), payment.getStatus(), manual, payment.getExpiresAt(),
-                checkoutAllowed ? payment.getQrCode() : null, checkoutAllowed ? payment.getBankBin() : null,
+                checkoutAllowed && PayOSQrInstructions.usable(payment.getQrCode(), payment.getAmount()) ? payment.getQrCode() : null, checkoutAllowed ? payment.getBankBin() : null,
                 checkoutAllowed ? payment.getBankAccountNumber() : null, checkoutAllowed ? payment.getBankAccountName() : null,
-                checkoutAllowed ? payment.getTransferDescription() : null);
+                checkoutAllowed ? payment.getTransferDescription() : null, checkoutAllowed, verificationPending);
     }
 }

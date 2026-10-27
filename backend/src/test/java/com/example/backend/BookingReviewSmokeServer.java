@@ -17,6 +17,7 @@ import static com.example.backend.model.DomainEnums.*;
 /** Local browser fixture, on the test classpath only. Never included in the production jar. */
 public class BookingReviewSmokeServer {
     private static final java.util.Map<Long, PaymentLink> links = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Set<Long> failFirstStatus = java.util.concurrent.ConcurrentHashMap.newKeySet();
     @TestConfiguration(proxyBeanMethods = false)
     static class LocalGateway {
         @Bean @Primary PayOSGateway smokeGateway() {
@@ -25,19 +26,24 @@ public class BookingReviewSmokeServer {
                 CreatePaymentLinkRequest request = i.getArgument(0);
                 var link = new PaymentLink(); link.setId("smoke-" + request.getOrderCode()); link.setOrderCode(request.getOrderCode());
                 link.setAmount(request.getAmount()); link.setAmountPaid(0L); link.setStatus(PaymentLinkStatus.PENDING); links.put(request.getOrderCode(), link);
-                var result = new CreatePaymentLinkResponse(); result.setQrCode("TEST-QR-NOT-PAYABLE"); result.setBin("970422");
-                result.setAccountNumber("TEST-ACCOUNT"); result.setAccountName("SMOKE TEST ONLY"); result.setDescription("TEST ONLY");
+                var result = new CreatePaymentLinkResponse(); result.setQrCode(TestPayOSQr.payload(request.getAmount())); result.setBin("970422");
+                result.setAccountNumber("TEST-ACCOUNT"); result.setDescription("TEST ONLY"); // accountName deliberately absent
                 result.setOrderCode(request.getOrderCode()); result.setAmount(request.getAmount());
-                result.setPaymentLinkId(link.getId()); result.setStatus(link.getStatus()); result.setCheckoutUrl("https://pay.payos.vn/web/" + link.getId()); return result;
+                result.setPaymentLinkId(link.getId()); result.setStatus(link.getStatus()); result.setCheckoutUrl("https://pay.payos.vn/web/" + link.getId()); failFirstStatus.add(link.getOrderCode()); return result;
             });
-            when(gateway.get(any())).thenAnswer(i -> links.get(i.getArgument(0)));
+            when(gateway.get(any())).thenAnswer(i -> {
+                Long order=i.getArgument(0);
+                if(failFirstStatus.remove(order))throw new com.example.backend.exception.ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,"PAYOS_RECONCILIATION_FAILED","Synthetic provider timeout");
+                return links.get(order);
+            });
+            when(gateway.verify(any())).thenAnswer(i -> ((vn.payos.model.webhooks.Webhook)i.getArgument(0)).getData()); // test gateway only, never production signature verification
             when(gateway.cancel(any(), any())).thenAnswer(i -> { var link = links.get(i.getArgument(0)); if (link != null) link.setStatus(PaymentLinkStatus.CANCELLED); return link; });
             return gateway;
         }
     }
     public static void main(String[] args) {
         var context = new SpringApplicationBuilder(BackendApplication.class, LocalGateway.class).profiles("test").run(
-                "--spring.config.import=", "--server.address=127.0.0.1", "--server.port=8080",
+                "--spring.config.import=", "--server.address="+System.getenv().getOrDefault("SMOKE_BIND_ADDRESS","127.0.0.1"), "--server.port=8080",
                 "--spring.datasource.url=jdbc:h2:mem:review-browser;MODE=MySQL;DB_CLOSE_DELAY=-1",
                 "--app.payos.client-id=", "--app.payos.api-key=", "--app.payos.checksum-key=",
                 "--app.otp.resend.api-key=");
