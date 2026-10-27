@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ChevronRight, ChevronLeft, MapPin, Star, Users, ShieldCheck } from 'lucide-react';
+import { ChevronRight, ChevronLeft, MapPin, Star, ShieldCheck } from 'lucide-react';
 import { NewPartner } from '../data/mockData';
 import { useScrollReveal } from '../hooks/useScrollReveal';
 
@@ -141,10 +141,12 @@ export const NewPartnersSection: React.FC<NewPartnersSectionProps> = React.memo(
                   <span className="text-[10px] font-extrabold tracking-wider uppercase text-pink-200 block truncate">
                     {p.subTitle}
                   </span>
-                  <div className="inline-flex items-center gap-0.5 bg-black/60 backdrop-blur-xs px-1.5 py-0.5 rounded-md text-[10px] font-black text-amber-300">
-                    <Star className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
-                    <span>4.9★</span>
-                  </div>
+                  {(p.reviewsCount ?? 0) > 0 && (
+                    <div className="inline-flex items-center gap-0.5 bg-black/60 backdrop-blur-xs px-1.5 py-0.5 rounded-md text-[10px] font-black text-amber-300">
+                      <Star className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
+                      <span>{(p.rating ?? 0).toFixed(1)}★</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -167,14 +169,12 @@ export const NewPartnersSection: React.FC<NewPartnersSectionProps> = React.memo(
 
                   {/* Rating cho dịch vụ & Số lượt người đã trải nghiệm để nhìn sơ qua là biết ngay */}
                   <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded-md">
-                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      <span>4.9 (168+)</span>
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded-md">
-                      <Users className="w-3 h-3 text-[#be185d]" />
-                      <span>4,850+ đã trải nghiệm</span>
-                    </span>
+                    {(p.reviewsCount ?? 0) > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded-md">
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        <span>{(p.rating ?? 0).toFixed(1)} ({p.reviewsCount})</span>
+                      </span>
+                    ) : <span className="text-[10px] text-slate-500">Chưa có đánh giá</span>}
                   </div>
 
                   <div className="mt-2 flex items-start gap-1 text-[11px] text-slate-500">
