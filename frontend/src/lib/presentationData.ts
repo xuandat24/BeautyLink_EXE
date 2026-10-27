@@ -40,8 +40,17 @@ export function presentationReviewAllocation(catalog: BackendService[]): Present
 }
 
 export function presentationService(service: BackendService, allocation?: PresentationReviewAllocation | null, enabled = presentationEnabled): BackendService {
-  if (!enabled) return service;
-  const result = { ...service };
+  const hasDemoPractitioner = service.practitioners?.some(person => /^\s*DEMO\s*[-–—:]\s*/i.test(person.specialty ?? '') || /^\s*DEMO BeautyLink(?:\s*\[[^\]]*\])?\s*$/i.test(person.bio ?? ''));
+  const publicService = hasDemoPractitioner ? {
+    ...service,
+    practitioners: service.practitioners?.map(person => ({
+      ...person,
+      specialty: person.specialty?.replace(/^\s*DEMO\s*[-–—:]\s*/i, '').trim(),
+      bio: /^\s*DEMO BeautyLink(?:\s*\[[^\]]*\])?\s*$/i.test(person.bio ?? '') ? undefined : person.bio,
+    })),
+  } : service;
+  if (!enabled) return publicService;
+  const result = { ...publicService };
   if (!((service.serviceReviewCount ?? 0) > 0) && Number.isSafeInteger(service.id) && service.id > 0) {
     const count = allocation?.services.get(service.id) ?? 0;
     result.rating = count > 0 ? sampleRating(service.id) : 0;
