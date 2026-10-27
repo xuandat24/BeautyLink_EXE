@@ -246,7 +246,7 @@ production writes authorized/performed by this task.
 
 The manually entered URL is `https://beautylink.cloud/#admin-users/edit` (after this frontend change is released).
 It reuses the normal all-role user directory, search, role filter, paging and customer history/CSV.
-Only this opt-in directory shows a `Sửa hồ sơ` action for CUSTOMER rows; it opens the existing
+Only this opt-in directory shows a `Sửa hồ sơ` action for CUSTOMER/SUPPLIER rows (extended below); it opens the existing
 `#admin-users/123/edit` form with the real numeric ID, and its back action returns to the edit directory.
 `{id}` in documentation is a placeholder, never a literal ID to type into the browser.
 No normal sidebar/list/detail advertises this mode. All routes remain behind App's verified ADMIN gate;
@@ -254,3 +254,51 @@ URL secrecy is not authorization. Existing server validation/ACTIVE ADMIN/CUSTOM
 concurrency checks, immutable audit and JWT policy are unchanged. No new backend/API/schema changes.
 Browser regression adds direct entry, refresh, real all-role data, customer-only edit buttons,
 form/save/reload/back to the directory and responsive screenshots at all seven existing viewports.
+
+
+### Contact and partner editing extension (base 9dd2afc)
+
+Owner approved extending manual editing to CUSTOMER email/phone and partner profile/services/workforce/schedules.
+`#admin-users/edit` lists CUSTOMER/SUPPLIER edit actions; other roles remain read-only. A SUPPLIER account's
+manual edit page includes its linked non-demo salons with profile, service, practitioner and weekly schedule forms.
+No approval/rating/review/demo flag, role, password, ownership, finance or payment mutation is exposed.
+ADMIN must be ACTIVE. Contact changes require acknowledgement, normalized unique email/phone and the
+existing expectedUpdatedAt row lock; competing identity claims commit once or return409. Existing password
+hash/Google subject mappings remain. Contact changes increment authVersion (old JWTs rejected) and changing
+CUSTOMER phone clears booking contact confirmation for the next safe booking check.
+
+Email is a recovery destination: password-reset proofs are now bound to authVersion; changing contacts
+invalidates proofs delivered previously. Confirmation locks/rereads the account before testing the proof.
+At backend rollout, outstanding pre-v2 password-reset codes fail closed; users start a fresh reset request
+(usual code lifetime10min). No OTP email is sent by admin edits and no Google identity is relinked by email.
+
+Partner APIs under `/api/v1/admin/salons/{sid}` add GET/PUT `/edit`, `/services/{id}/edit`,
+`/practitioners/{id}/edit`, `/practitioners/{id}/schedule/edit`. Reads return `{data,revision}` and writes
+require `expectedRevision` rechecked under the target row lock. Strict profile DTO/explicit frontend payloads
+exclude privileged fields. Existing SupplierAccountService, WorkforceService and ScheduleService validate
+images, assignments, active status and future appointment conflicts; all changes plus immutable
+`ADMIN-PROFILE-AUDIT:PARTNER_*` audit commit atomically. Audit stores actor/target/action IDs, not contact
+values or images. No schema migration. API remains additive; old admin profile payloads still work.
+
+Logo exit now clears parsed detail/edit state and its hash before returning home; refresh no longer restores
+an edit URL accidentally. Session stays signed in. Browser regression uses only Spring/JWT/H2 synthetic
+accounts and fake payment gateway: contact save/new-identity login/profile, partner service/schedule saves,
+persisted reload, logo exit+reload on desktop/mobile. Not a production write or real PayOS/Google test.
+
+Rollout after review: backend then frontend; preserve the new recovery-proof check if reverting UI. A backend
+rollback after contact edits must not re-enable pre-change recovery proofs; wait for all outstanding reset
+codes to expire and review operator changes first. Never restore production DB to undo this code.
+
+
+Integration with concurrently merged main PR23 (42c2527): preserve presentation-only reporting and the
+five-column user table. Manual editor directory/account reads explicitly request unformatted backend
+contacts; write responses remain raw. Read/edit caches have separate keys so a presentation Gmail alias
+cannot appear in an editor and be saved accidentally. No presentation setting or production variable changed.
+
+
+PR25 resumed verification: head58ae897 passed backend/Docker, frontend and MySQL; browser failed at
+ReportsPage on390px after contact/partner/schedule/logo checks had succeeded. New long immutable audit
+reasons exposed the report detail grid's intrinsic minimum width. Narrow fix: explicit single-column mobile
+grid, min-width0 and anywhere text wrapping in the detail pane; no report content/audit/API edits. Browser
+now waits for the actual reports response/heading, selects a real long audit and captures Reports at every
+viewport, retaining strict overflow assertions plus failure geometry diagnostics. Final run recorded in PR25.

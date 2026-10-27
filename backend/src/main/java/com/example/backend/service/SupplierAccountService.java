@@ -236,7 +236,7 @@ public class SupplierAccountService {
         }
     }
 
-    private SupplierServiceResponse serviceResponse(ServiceOffering service) {
+    SupplierServiceResponse serviceResponse(ServiceOffering service) {
         ServiceCategory category = service.getCategory();
         return new SupplierServiceResponse(service.getId(), category.getId(), category.getSlug(), category.getName(),
                 service.getName(), service.getDescription(), service.getPrice(), service.getOriginalPrice(),
@@ -282,7 +282,7 @@ public class SupplierAccountService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private String normalizeImageSource(String value, Long ownerId) {
+    String normalizeImageSource(String value, Long ownerId) {
         String source = blankToNull(value);
         if (source == null) return null;
         if (source.startsWith("data:image/")) {
