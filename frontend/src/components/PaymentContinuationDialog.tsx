@@ -1,10 +1,10 @@
+import { CheckoutBrand } from './CheckoutBrand';
 import { PayOSCheckoutPage } from './PayOSCheckoutPage';
 import type { PayOSPayment } from '../types/beauty';
 import React, { useEffect, useRef, useState } from 'react';
-import { beautyApi, getAccessToken, getApiErrorMessage } from '../services/beautyApi';
+import { beautyApi, getAccessToken, getApiErrorMessage, getPaymentErrorMessage } from '../services/beautyApi';
 import { useBeautyStore } from '../store/beautyStore';
 import { canPayBooking } from '../lib/bookingPolicy';
-import { payableAttempt } from '../lib/payosCheckout';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import type { BackendBooking, PaymentOption, PaymentQuote } from '../types';
 import { BookingContactDialog } from './BookingContactDialog';
@@ -80,8 +80,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
           || payment.amount !== quote.amount || payment.remainingAmount !== quote.remainingAmount)) {
         throw new Error('Giá thanh toán đã thay đổi sau khi máy chủ xác minh. Phiên PayOS được giữ nguyên để bạn kiểm tra trước khi tiếp tục.');
       }
-      const url = payableAttempt(payment, bookingId);
-      if (!url) throw new Error('Chưa có checkout an toàn. Không thanh toán lại; vui lòng làm mới hoặc liên hệ hỗ trợ.');
+      if (payment.bookingId !== bookingId || !Number.isSafeInteger(payment.orderCode)) throw new Error('Chưa có checkout an toàn. Không thanh toán lại; vui lòng làm mới hoặc liên hệ hỗ trợ.');
       sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
       setBooking(fresh); setActivePayment(payment);
     };
@@ -93,7 +92,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
       else await execute(); // DB root locks/ledger still enforce idempotency across all browsers.
     } catch (err) { if (current()) {
       if ((err as any)?.response?.data?.code === 'BOOKING_CONTACT_REQUIRED' && currentUser) setContactDialogOpen(true);
-      else { setBooking(null); setError(getApiErrorMessage(err, 'Không thể tiếp tục thanh toán.')); }
+      else { setBooking(null); setError(getPaymentErrorMessage(err, 'Không thể tiếp tục thanh toán.')); }
     } }
     finally { submitting.current = false; if (generation.current > 0) setBusy(false); }
   };
@@ -117,13 +116,14 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
     <div className="my-auto w-full max-w-xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
       <div className="bg-gradient-to-br from-[#861146] via-[#bd195c] to-[#e1146c] p-5 text-white sm:p-7">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-bold tracking-wide text-pink-100"><ShieldCheck className="h-4 w-4" /> BEAUTYLINK · THANH TOÁN</div>
+          <CheckoutBrand light />
           <button ref={focus} type="button" disabled={busy} onClick={onClose} className="inline-flex min-h-10 items-center gap-1 rounded-full border border-white/40 px-3 text-xs font-semibold hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-50"><ArrowLeft className="h-4 w-4" /> Quay lại</button>
         </div>
         <h2 id="payment-continue-title" className="mt-6 text-2xl font-black tracking-tight sm:text-3xl">Tiếp tục thanh toán</h2>
         <p className="mt-2 max-w-md text-sm leading-relaxed text-pink-100">Kiểm tra lịch hẹn và số tiền trước khi mở mã QR thanh toán.</p>
       </div>
       <div className="space-y-5 p-5 sm:p-7">
+        {busy && <p role="status" className="rounded-xl bg-pink-50 p-3 text-sm text-[#bd195c]">Đang chuẩn bị và xác minh phiên QR. Vui lòng chờ; bạn không cần bấm lại.</p>}
         {loading && <p role="status" className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Đang tải trạng thái từ máy chủ...</p>}
         {error && <p role="alert" className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-800"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />{error}</p>}
         {booking && <>

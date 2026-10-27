@@ -83,10 +83,11 @@ try {
   // Real createBooking -> real createPayment persistence, but never contact PayOS:
   // block the redirect and replace it with a visibly test-only local document.
   await page.route('https://pay.payos.vn/**', route => route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<h1>FAKE GATEWAY — NO MONEY TRANSFER</h1>' }));
-  let observedPayment;
+  let observedPayment, delayNextCreate = false, delayedCreates = 0;
   await page.route('**/api/v1/payments/payos/bookings/*', async route => {
     // Read the REAL backend response before navigation destroys Chrome's response body.
     const response = await route.fetch(); observedPayment = await response.json();
+    if (delayNextCreate) { delayNextCreate = false; delayedCreates++; await new Promise(resolve => setTimeout(resolve, 11000)); }
     await route.fulfill({ response });
   });
   await page.getByRole('button', { name: 'Bookings', exact: true }).click();
@@ -112,14 +113,22 @@ try {
   await page.getByRole('button', { name: 'Checkout', exact: true }).click();
   await page.getByRole('button', { name: /Tiếp tục: Chọn hình thức/ }).click();
   await page.getByRole('button', { name: /Tiếp tục: Tóm tắt/ }).click();
+  delayNextCreate = true;
+  const openingStarted = Date.now();
   const paymentCreated = page.waitForResponse(r => r.url().includes('/payments/payos') && r.request().method() === 'POST');
   await page.getByRole('button', { name: /Mở thanh toán QR/ }).click();
   const paymentResponse = await paymentCreated; assert.equal(paymentResponse.status(), 200);
+  assert.ok(Date.now() - openingStarted >= 11000, 'real browser must survive a response slower than the former 10s cutoff');
+  assert.equal(delayedCreates, 1);
   assert.equal(observedPayment.status, 'PENDING'); assert.equal(observedPayment.requiresManualReview, false);
   await page.locator('[data-checkout-state="NETWORK_ERROR"]').waitFor(); // real Spring marks fake provider timeout uncertain
   assert.equal(await page.getByRole('img', { name: /Mã QR PayOS/ }).count(), 0);
-  await page.getByRole('button', { name: 'Kiểm tra trạng thái', exact: true }).click();
-  await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
+  // No second click: bounded status retry must recover this same attempt automatically.
+  await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor({ timeout: 20000 });
+  assert.equal(delayedCreates, 1);
+  const brand = page.locator('[data-checkout-brand] img');
+  assert.equal(await brand.getAttribute('src'), '/beautylink-icon.png');
+  assert.equal(await brand.evaluate(image => image.complete && image.naturalWidth > 0), true);
   assert.equal(new URL(page.url()).hostname, 'localhost');
   await page.getByText('PayOS chưa cung cấp thông tin này', { exact: true }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });

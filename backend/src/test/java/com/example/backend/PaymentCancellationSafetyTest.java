@@ -369,6 +369,28 @@ class PaymentCancellationSafetyTest {
         assertEquals(p.getPaymentLinkId(), payments.findById(p.getId()).orElseThrow().getPaymentLinkId());
         assertFalse(bookings.findById(b.getId()).orElseThrow().isPaymentRetryAllowed());
     }
+    @Test void currentAttemptRecoveryIsCustomerOwnedAndNeverCreatesReplacement() throws Exception {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID);
+        var p = attempt(b, PaymentTransactionStatus.PENDING); proof(p, PaymentLinkStatus.PENDING);
+        long before = payments.count();
+        var result = paymentService.statusForBooking(customer(), b.getId());
+        assertEquals(p.getOrderCode(), result.orderCode()); assertTrue(result.checkoutAllowed());
+        assertEquals(before, payments.count()); verify(gateway, never()).create(any());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/payments/payos/bookings/{id}/current", b.getId()))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isUnauthorized());
+        for (Role role : List.of(Role.SUPPLIER, Role.STAFF, Role.ADMIN)) {
+            var account = new UserAccount(); account.setFullName("Recovery authorization fixture");
+            account.setEmail("recovery-" + b.getId() + "-" + role + "@example.com");
+            account.setPhone(String.format("09887%05d", b.getId() * 4 + role.ordinal()));
+            account.setPasswordHash("not-used-by-this-token-test"); account.setRole(role); users.saveAndFlush(account);
+            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/payments/payos/bookings/{id}/current", b.getId())
+                    .header("Authorization", "Bearer " + jwt.createToken(account)))
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden());
+        }
+        var wrong = new UserAccount(); wrong.setId(-100L);
+        assertEquals("BOOKING_FORBIDDEN", assertThrows(ApiException.class, () -> paymentService.statusForBooking(wrong, b.getId())).getCode());
+    }
+
     @ParameterizedTest @CsvSource({"PAID,FULL_100", "PARTIALLY_PAID,DEPOSIT_50"})
     void adminCanCloseZeroSecondaryPreservingPrimaryAndReopeningReview(PaymentStatus payment, PaymentOption option) {
         var b = booking(BookingStatus.COMPLETED, payment); var primary = attempt(b, PaymentTransactionStatus.PAID);

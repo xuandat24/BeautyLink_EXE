@@ -28,8 +28,8 @@
     "react-dom": "^19.0.1",
     "react-hook-form": "^7.88.0",
     "tailwind-merge": "^3.7.0",
-    "vite": "^6.4.3",
-    "zod": "^4.6.5"
+    "vite": "^6.4.5",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/jsdom": "^21.1.7",

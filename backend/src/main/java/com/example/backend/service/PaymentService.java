@@ -217,6 +217,22 @@ public class PaymentService {
         if (!payment.getBooking().getCustomer().getId().equals(customer.getId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "PAYMENT_FORBIDDEN", "Bạn không có quyền xem giao dịch này");
         }
+        return observe(payment);
+    }
+
+    /** Recover a lost create response without another provider POST or a replacement attempt. */
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public PayOSPaymentResponse statusForBooking(UserAccount customer, Long bookingId) {
+        ownedBooking(customer, bookingId); // booking lock + ownership before examining attempts
+        List<PaymentTransaction> attempts = payments.findAllByBookingIdForUpdate(bookingId);
+        if (attempts.isEmpty()) throw notFound();
+        PaymentTransaction payment = attempts.getLast(); // repository orders by immutable ledger id
+        if (payment.getStatus() == PaymentTransactionStatus.PENDING && payment.getPaymentLinkId() == null)
+            return response(payment, true); // create is still in flight; do not guess its outcome
+        return observe(payment);
+    }
+
+    private PayOSPaymentResponse observe(PaymentTransaction payment) {
         // Customer polling observes a delayed webhook without hitting PayOS on every five-second UI tick.
         boolean due = BookingPaymentPolicy.manualAttempt(payment) ? shouldReconcile(payment)
                 : payment.getLastReconciledAt() == null || !payment.getLastReconciledAt().isAfter(time.now().minusSeconds(15));

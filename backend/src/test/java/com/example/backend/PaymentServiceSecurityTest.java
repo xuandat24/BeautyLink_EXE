@@ -458,6 +458,35 @@ class PaymentServiceSecurityTest {
         org.junit.jupiter.api.Assertions.assertNull(p.getLastReconciledAt());verify(gateway,never()).create(any());verify(payments,never()).saveAndFlush(any());
     }
 
+    @Test void lostCreateRecoveryNeverCreatesAndKeepsInstructionsLockedWhileCreationIsInFlight() {
+        var p = pendingPayment(); p.setPaymentLinkId(null);
+        when(bookings.findByIdForUpdate(p.getBooking().getId())).thenReturn(Optional.of(p.getBooking()));
+        when(payments.findAllByBookingIdForUpdate(p.getBooking().getId())).thenReturn(List.of(p));
+        var result = service.statusForBooking(p.getBooking().getCustomer(), p.getBooking().getId());
+        assertTrue(result.verificationPending()); assertEquals(false, result.checkoutAllowed());
+        assertEquals(p.getOrderCode(), result.orderCode()); assertEquals(null, result.qrCode());
+        verify(gateway, never()).get(any()); verify(gateway, never()).create(any()); verify(payments, never()).saveAndFlush(any());
+    }
+
+    @Test void lostCreateRecoveryChecksOwnershipBeforeReadingAnyPayment() {
+        var p = pendingPayment(); var other = new UserAccount(); other.setId(999L);
+        when(bookings.findByIdForUpdate(p.getBooking().getId())).thenReturn(Optional.of(p.getBooking()));
+        var error = assertThrows(ApiException.class, () -> service.statusForBooking(other, p.getBooking().getId()));
+        assertEquals("BOOKING_FORBIDDEN", error.getCode());
+        verify(payments, never()).findAllByBookingIdForUpdate(any()); verify(gateway, never()).get(any());
+    }
+
+    @Test void lostCreateRecoveryReturnsExistingIdentityAfterProviderVerificationWithoutCreating() {
+        var p = pendingPayment(); p.setExpiresAt(Instant.now().plusSeconds(600));
+        when(bookings.findByIdForUpdate(p.getBooking().getId())).thenReturn(Optional.of(p.getBooking()));
+        when(payments.findAllByBookingIdForUpdate(p.getBooking().getId())).thenReturn(List.of(p));
+        var proof = provider(p, PaymentLinkStatus.PENDING);
+        when(gateway.get(p.getOrderCode())).thenReturn(proof);
+        var result = service.statusForBooking(p.getBooking().getCustomer(), p.getBooking().getId());
+        assertEquals(p.getOrderCode(), result.orderCode()); assertTrue(result.checkoutAllowed());
+        assertEquals(false, result.verificationPending()); verify(gateway, never()).create(any());
+    }
+
     private void prepareCreate(Booking booking, String paymentLinkId) {
         prepareCreate(booking,paymentLinkId,false);
     }
