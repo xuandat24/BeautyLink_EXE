@@ -35,6 +35,12 @@ public class PaymentController {
         return payments.quote(current.require(auth), bookingId, paymentOption, voucherCode);
     }
 
+    @GetMapping("/bookings/{bookingId}/current")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public PayOSPaymentResponse currentAttempt(Authentication auth, @PathVariable Long bookingId) {
+        return payments.statusForBooking(current.require(auth), bookingId);
+    }
+
     @GetMapping("/{orderCode}")
     @PreAuthorize("hasRole('CUSTOMER')")
     public PayOSPaymentResponse status(Authentication auth, @PathVariable Long orderCode) {

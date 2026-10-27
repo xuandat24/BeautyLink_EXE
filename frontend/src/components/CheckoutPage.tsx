@@ -1,6 +1,6 @@
+import { CheckoutBrand } from './CheckoutBrand';
 import { PayOSCheckoutPage } from './PayOSCheckoutPage';
 import type { BackendBooking, PayOSPayment } from '../types/beauty';
-import { payableAttempt } from '../lib/payosCheckout';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
@@ -24,7 +24,7 @@ import {
 import { useBeautyStore } from '../store/beautyStore';
 import { CurrentUser, BackendService, CartItem, PaymentQuote } from '../types';
 import type { ServiceCapacity } from '../types/beauty';
-import { beautyApi, getApiErrorMessage, getAccessToken } from '../services/beautyApi';
+import { beautyApi, getApiErrorMessage, getPaymentErrorMessage, getAccessToken } from '../services/beautyApi';
 import { canPayBooking } from '../lib/bookingPolicy';
 import { OptimizedImage } from './OptimizedImage';
 import { bookingSchema, FieldErrors, voucherCodeSchema, zodFieldErrors } from '../lib/validation';
@@ -387,8 +387,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         setResumeId(booking.id);
         throw new Error('Giá thanh toán đã thay đổi sau khi máy chủ xác minh. Phiên PayOS được giữ nguyên để bạn kiểm tra số tiền trước khi tiếp tục.');
       }
-      const checkout = payableAttempt(payment, booking.id);
-      if (!checkout) {
+      if (payment.bookingId !== booking.id || !Number.isSafeInteger(payment.orderCode)) {
         throw new Error('Giao dịch chưa có checkout an toàn hoặc cần hỗ trợ đối soát. Không thanh toán lại; vui lòng kiểm tra lịch hẹn.');
       }
       sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
@@ -399,7 +398,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           setContactDialogOpen(true);
           return;
         }
-        setErrorMsg(getApiErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng kiểm tra lịch hẹn trước khi thử lại.'));
+        setErrorMsg(getPaymentErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng kiểm tra lịch hẹn trước khi thử lại.'));
         if (axios.isAxiosError(err) && err.response?.status === 401) onNeedLogin();
       }
     } finally {
@@ -454,6 +453,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         />
       )}
       {/* Top Bar with Navigation */}
+      <div className="border-b border-pink-100 bg-white px-4 py-3 sm:px-6"><div className="mx-auto flex max-w-4xl items-center justify-between gap-3"><CheckoutBrand /><span className="text-xs font-semibold text-slate-500">Thanh toán an toàn</span></div></div>
       <section className="bg-white border-b border-pink-100 shadow-2xs">
         <div className="max-w-4xl mx-auto px-4 py-3 sm:px-6 flex items-center justify-between">
           <button
@@ -471,9 +471,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             <span>{currentStep > 1 ? 'Quay lại bước trước' : 'Quay lại'}</span>
           </button>
 
-          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+          <div className="hidden items-center gap-1.5 text-xs font-bold text-emerald-600 lg:flex">
             <ShieldCheck className="w-4 h-4 text-emerald-500" />
-            <span>Kiểm tra số tiền trước khi đến PayOS</span>
+            <span>Thanh toán an toàn tại BeautyLink</span>
           </div>
         </div>
       </section>
@@ -892,7 +892,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                             Khuyên dùng
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">VietQR / chuyển khoản ngân hàng trên trang thanh toán PayOS.</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Quét mã VietQR ngay tại BeautyLink, được xác minh qua PayOS.</p>
                       </div>
                     </div>
                     <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 border-[#e1146c] bg-[#e1146c]">
@@ -902,7 +902,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
                     <div className="flex items-start gap-2">
                       <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                      <p>BeautyLink không lưu thông tin ngân hàng. Trạng thái được xác thực tự động bằng webhook có chữ ký và đối soát trực tiếp với PayOS.</p>
+                      <p>Chỉ dẫn chuyển khoản do PayOS cung cấp. BeautyLink xác nhận thanh toán bằng webhook có chữ ký và đối soát trực tiếp với PayOS.</p>
                     </div>
                   </div>
                 </div>
@@ -1185,7 +1185,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </span>
                 </button>
                 </div>
-                <p className="mt-3 text-center text-xs leading-relaxed text-slate-500">Mở mã QR để thanh toán bằng ứng dụng ngân hàng. BeautyLink chỉ xác nhận sau khi máy chủ kiểm tra trạng thái PayOS.</p>
+                <p className="mt-3 text-center text-xs leading-relaxed text-slate-500">{submitting ? 'Đang chuẩn bị và xác minh phiên QR. Vui lòng chờ; bạn không cần bấm lại.' : 'Quét QR bằng ứng dụng ngân hàng ngay tại BeautyLink. Kết quả được máy chủ xác minh qua PayOS.'}</p>
               </div>
             </div>
           </div>

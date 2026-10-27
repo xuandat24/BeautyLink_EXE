@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createWithRecovery, PAYMENT_HTTP_TIMEOUT } from '../lib/paymentCreation';
 import {
   BackendCategory,
   BackendService,
@@ -191,6 +192,12 @@ export function getApiErrorMessage(err: unknown, defaultMessage = 'Đã xảy ra
     return err.message;
   }
   return defaultMessage;
+}
+
+export function getPaymentErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err) && ['ECONNABORTED', 'ETIMEDOUT', 'ERR_NETWORK'].includes(err.code ?? ''))
+    return 'Kết nối đang chậm hoặc bị gián đoạn. Lịch hẹn được giữ nguyên; hãy kiểm tra lại trạng thái, không tạo đơn mới hay chuyển tiền lần nữa.';
+  return getApiErrorMessage(err, fallback);
 }
 
 export function getAuthErrorMessage(err: unknown): string {
@@ -845,7 +852,11 @@ export const beautyApi = {
     bookingId: number,
     data: { paymentOption: PaymentOption; voucherCode?: string }
   ): Promise<PayOSPayment> {
-    return unwrap(apiClient.post(`/v1/payments/payos/bookings/${bookingId}`, data));
+    const token = getAccessToken(), epoch = sessionCredentialEpoch();
+    return createWithRecovery(bookingId,
+      () => unwrap(apiClient.post(`/v1/payments/payos/bookings/${bookingId}`, data, { timeout: PAYMENT_HTTP_TIMEOUT })),
+      () => unwrap(apiClient.get(`/v1/payments/payos/bookings/${bookingId}/current`, { timeout: PAYMENT_HTTP_TIMEOUT })),
+      () => token === getAccessToken() && epoch === sessionCredentialEpoch());
   },
 
   async servicePaymentQuote(serviceId: number, paymentOption: Exclude<PaymentOption, 'DEPOSIT_50'>, voucherCode?: string): Promise<PaymentQuote> {
@@ -857,7 +868,7 @@ export const beautyApi = {
   },
 
   async payOSPaymentStatus(orderCode: string, signal?: AbortSignal): Promise<PayOSPayment> {
-    return unwrap(apiClient.get(`/v1/payments/payos/${encodeURIComponent(orderCode)}`, { signal }));
+    return unwrap(apiClient.get(`/v1/payments/payos/${encodeURIComponent(orderCode)}`, { signal, timeout: PAYMENT_HTTP_TIMEOUT }));
   },
 
   // ==========================================

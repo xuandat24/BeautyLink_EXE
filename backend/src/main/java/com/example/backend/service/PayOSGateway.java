@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import vn.payos.PayOS;
+import vn.payos.core.ClientOptions;
 import vn.payos.exception.PayOSException;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
@@ -30,7 +31,7 @@ public class PayOSGateway {
 
     public CreatePaymentLinkResponse create(CreatePaymentLinkRequest request) {
         ensureConfigured();
-        PayOS payOS = new PayOS(clientId, apiKey, checksumKey);
+        PayOS payOS = new PayOS(clientOptions(clientId, apiKey, checksumKey));
         try {
             return payOS.paymentRequests().create(request);
         } catch (RuntimeException ex) {
@@ -42,7 +43,7 @@ public class PayOSGateway {
 
     public WebhookData verify(Webhook webhook) {
         ensureConfigured();
-        PayOS payOS = new PayOS(clientId, apiKey, checksumKey);
+        PayOS payOS = new PayOS(clientOptions(clientId, apiKey, checksumKey));
         try {
             return payOS.webhooks().verify(webhook);
         } catch (PayOSException ex) {
@@ -54,7 +55,7 @@ public class PayOSGateway {
 
     public PaymentLink get(Long orderCode) {
         ensureConfigured();
-        PayOS payOS = new PayOS(clientId, apiKey, checksumKey);
+        PayOS payOS = new PayOS(clientOptions(clientId, apiKey, checksumKey));
         try {
             return payOS.paymentRequests().get(orderCode);
         } catch (RuntimeException ex) {
@@ -66,7 +67,7 @@ public class PayOSGateway {
 
     public PaymentLink cancel(Long orderCode, String reason) {
         ensureConfigured();
-        PayOS payOS = new PayOS(clientId, apiKey, checksumKey);
+        PayOS payOS = new PayOS(clientOptions(clientId, apiKey, checksumKey));
         try {
             return payOS.paymentRequests().cancel(orderCode, reason);
         } catch (RuntimeException ex) {
@@ -78,7 +79,7 @@ public class PayOSGateway {
 
     public ConfirmWebhookResponse confirmWebhook(String webhookUrl) {
         ensureConfigured();
-        PayOS payOS = new PayOS(clientId, apiKey, checksumKey);
+        PayOS payOS = new PayOS(clientOptions(clientId, apiKey, checksumKey));
         try {
             return payOS.webhooks().confirm(webhookUrl);
         } catch (PayOSException ex) {
@@ -86,6 +87,12 @@ public class PayOSGateway {
         } finally {
             payOS.close();
         }
+    }
+
+    // Bound provider work below the checkout HTTP deadline. Never retry a provider write implicitly.
+    static ClientOptions clientOptions(String clientId, String apiKey, String checksumKey) {
+        return ClientOptions.builder().clientId(clientId).apiKey(apiKey).checksumKey(checksumKey)
+                .timeoutMs(15000).maxRetries(0).build();
     }
 
     public boolean isConfigured() {
