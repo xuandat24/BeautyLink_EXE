@@ -13,7 +13,10 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => { if (response.url().startsWith(`${base}/api/`) && response.status() >= 500) errors.push(`${response.status()} ${new URL(response.url()).pathname}`); });
     const checkLayout = async () => {
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `${width}: page overflow`);
+      const layout = await page.evaluate(() => ({ viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth, offenders: [...document.querySelectorAll('main, main section, main h2')].filter(el => el.getBoundingClientRect().right > innerWidth + 1).map(el => ({ tag: el.tagName, classes: el.className, width: Math.round(el.getBoundingClientRect().width) })) }));
+      const fits = layout.scrollWidth <= layout.viewport + 1;
+      if (!fits) await page.screenshot({ path: `backend/target/admin-v2-${width}-overflow.png`, fullPage: true });
+      assert.equal(fits, true, `${width}: page overflow ${JSON.stringify(layout)}`);
       assert.equal(await page.getByText(/Bao gồm.*demo\/test/).count(), 0);
       assert.equal(await page.getByText('Dữ liệu chỉ đọc; quyền thay đổi nghiệp vụ không được thêm trong Dashboard V2.', { exact: true }).count(), 0);
       assert.equal(await page.locator('[data-admin-value]').evaluateAll(nodes => nodes.every(n => n.scrollWidth <= n.clientWidth + 1)), true, 'KPI values fit without clipping');
@@ -182,7 +185,16 @@ try {
       await navigate('Đánh giá'); await page.getByRole('heading', { name: 'Đánh giá', exact: true }).waitFor(); await checkLayout();
       await navigate('Khuyến mãi'); await page.getByRole('heading', { name: 'Quản lý chiến dịch chưa được triển khai', exact: true }).waitFor(); await checkLayout();
       await navigate('Cài đặt'); await page.getByRole('heading', { name: 'Thông tin quản trị · chỉ đọc', exact: true }).waitFor(); await checkLayout();
-      await navigate('Báo cáo'); await page.locator('main').waitFor(); await checkLayout();
+      const reportResponse = page.waitForResponse(r => r.url().includes('/api/v1/reports') && r.request().method() === 'GET');
+      await navigate('Báo cáo'); const reports = await (await reportResponse).json();
+      await page.getByRole('heading', { name: 'Trung tâm hỗ trợ', exact: true }).waitFor();
+      const audit = reports.filter(row => row.reason.startsWith('ADMIN-PROFILE-AUDIT:')).sort((a, b) => b.reason.length - a.reason.length)[0];
+      if (width <= 1366) assert.ok(audit, 'real edit audit available after the desktop edit flow');
+      if (audit) {
+        await page.getByRole('button').filter({ has: page.getByText(audit.reason, { exact: true }) }).first().click();
+        await page.getByRole('heading', { name: audit.reason, exact: true }).waitFor();
+      }
+      await capture('reports');
       if (width === 1366 || width === 390) {
         const token = await page.evaluate(() => sessionStorage.getItem('beautylink_access_token'));
         assert.equal((await context.request.post(`${base}/api/v1/auth/session/logout`, { headers: { Authorization: `Bearer ${token}` } })).status(), 204);

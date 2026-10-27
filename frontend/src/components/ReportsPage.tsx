@@ -154,7 +154,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomer
             <Loader2 className="h-8 w-8 animate-spin text-pink-600" />
           </div>
         ) : (
-          <div className="grid gap-4 xl:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)]">
+          <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)]">
             {/* Reports Queue */}
             <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-5 py-4 text-sm font-black">
@@ -197,7 +197,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onBack, onOpenCustomer
             </section>
 
             {/* Report Detail & Action Pane */}
-            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm [overflow-wrap:anywhere]">
               {selected ? (
                 <>
                   <div className="border-b border-slate-100 pb-5">

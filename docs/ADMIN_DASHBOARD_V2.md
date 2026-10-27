@@ -294,3 +294,11 @@ Integration with concurrently merged main PR23 (42c2527): preserve presentation-
 five-column user table. Manual editor directory/account reads explicitly request unformatted backend
 contacts; write responses remain raw. Read/edit caches have separate keys so a presentation Gmail alias
 cannot appear in an editor and be saved accidentally. No presentation setting or production variable changed.
+
+
+PR25 resumed verification: head58ae897 passed backend/Docker, frontend and MySQL; browser failed at
+ReportsPage on390px after contact/partner/schedule/logo checks had succeeded. New long immutable audit
+reasons exposed the report detail grid's intrinsic minimum width. Narrow fix: explicit single-column mobile
+grid, min-width0 and anywhere text wrapping in the detail pane; no report content/audit/API edits. Browser
+now waits for the actual reports response/heading, selects a real long audit and captures Reports at every
+viewport, retaining strict overflow assertions plus failure geometry diagnostics. Final run recorded in PR25.
