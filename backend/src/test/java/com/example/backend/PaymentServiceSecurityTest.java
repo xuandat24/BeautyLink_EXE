@@ -181,6 +181,9 @@ class PaymentServiceSecurityTest {
                 new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_05, "BEAUTY50"));
         assertEquals(new BigDecimal("22500"), deposit.amount());
         assertEquals(new BigDecimal("427500"), deposit.remainingAmount());
+        assertEquals("TEST-QR-NOT-PAYABLE", deposit.qrCode());
+        assertEquals("TEST ACCOUNT", deposit.bankAccountName());
+        assertEquals("TEST-ACCOUNT", deposit.bankAccountNumber());
 
         Booking fullBooking = payableBooking(52L, 500_000L);
         prepareCreate(fullBooking, "full-link");
@@ -380,6 +383,8 @@ class PaymentServiceSecurityTest {
         when(gateway.create(any(CreatePaymentLinkRequest.class))).thenAnswer(invocation -> {
             CreatePaymentLinkRequest r = invocation.getArgument(0);
             var response = new CreatePaymentLinkResponse(); response.setOrderCode(r.getOrderCode()); response.setAmount(r.getAmount());
+            response.setQrCode("TEST-QR-NOT-PAYABLE"); response.setBin("970422");
+            response.setAccountNumber("TEST-ACCOUNT"); response.setAccountName("TEST ACCOUNT"); response.setDescription("TEST ONLY");
             response.setStatus(PaymentLinkStatus.PENDING); response.setPaymentLinkId(paymentLinkId); response.setCheckoutUrl("https://pay.payos.vn/web/" + paymentLinkId);
             return response;
         });
