@@ -238,12 +238,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   }, [serviceId, depositOption, appliedVoucher?.code]);
 
   // Definitive checkout amounts come only from the backend quote.
-  const quotedSubtotal = paymentQuote?.originalAmount ?? subtotal;
-  const discountAmount = paymentQuote?.discountAmount ?? 0;
-  const discountedTotal = paymentQuote?.payableAmount ?? quotedSubtotal;
-  const amountDueNow = paymentQuote?.amount ?? 0;
-  const remainingAtSalon = paymentQuote?.remainingAmount ?? 0;
-  const totalBillAfterDiscount = discountedTotal;
+  const selectedPaymentOption = depositOption === 'deposit05' ? 'DEPOSIT_05' : 'FULL_100';
+  const verifiedQuote = paymentQuote?.paymentOption === selectedPaymentOption ? paymentQuote : null;
+  const quotedSubtotal = verifiedQuote?.originalAmount ?? subtotal;
+  const discountAmount = verifiedQuote?.discountAmount ?? 0;
+  const discountedTotal = verifiedQuote?.payableAmount ?? quotedSubtotal;
+  const amountDueNow = verifiedQuote?.amount ?? 0;
+  const remainingAtSalon = verifiedQuote?.remainingAmount ?? 0;
 
   // Apply Voucher
   const handleApplyVoucher = (codeToApply?: string) => {
@@ -258,6 +259,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setVoucherError('Mã voucher không hợp lệ hoặc đã hết hạn.');
       return;
     }
+    setPaymentQuote(null);
     setAppliedVoucher({
       code: found.code,
       description: found.label,
@@ -267,6 +269,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   };
 
   const handleRemoveVoucher = () => {
+    setPaymentQuote(null);
     setAppliedVoucher(null);
     setVoucherError('');
   };
@@ -320,8 +323,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setErrorMsg('Mỗi giao dịch chỉ áp dụng cho một lịch hẹn. Vui lòng thanh toán từng dịch vụ.');
       return;
     }
-    if (quoteLoading || !paymentQuote || quoteError || !paymentQuote.paymentAvailable) {
-      setErrorMsg(quoteError || quoteUnavailableMessage(paymentQuote) || 'Số tiền chưa được máy chủ xác minh hoặc chưa đủ mức tối thiểu để thanh toán PayOS.');
+    if (quoteLoading || !verifiedQuote || quoteError || !verifiedQuote.paymentAvailable) {
+      setErrorMsg(quoteError || quoteUnavailableMessage(verifiedQuote) || 'Số tiền chưa được máy chủ xác minh hoặc chưa đủ mức tối thiểu để thanh toán PayOS.');
       return;
     }
     const validation = bookingSchema.safeParse({
@@ -374,8 +377,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         voucherCode: appliedVoucher?.code,
       });
       if (!current()) return;
-      if (payment.paymentOption !== paymentQuote.paymentOption || payment.amount !== paymentQuote.amount
-          || payment.remainingAmount !== paymentQuote.remainingAmount) {
+      if (payment.paymentOption !== verifiedQuote.paymentOption || payment.amount !== verifiedQuote.amount
+          || payment.remainingAmount !== verifiedQuote.remainingAmount) {
         setResumeId(booking.id);
         throw new Error('Giá thanh toán đã thay đổi sau khi máy chủ xác minh. Phiên PayOS được giữ nguyên để bạn kiểm tra số tiền trước khi tiếp tục.');
       }
@@ -464,7 +467,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
           <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
             <ShieldCheck className="w-4 h-4 text-emerald-500" />
-            <span>Thanh toán bảo mật tức thì</span>
+            <span>Kiểm tra số tiền trước khi đến PayOS</span>
           </div>
         </div>
       </section>
@@ -579,20 +582,20 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       </span>
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 fill-emerald-100" />
-                        <span>Đã xác thực danh tính</span>
+                        <span>Tài khoản đã đăng nhập</span>
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                      <span>SĐT: <strong className="text-slate-700">{currentUser?.phone || '0988 888 888'}</strong></span>
+                      <span>SĐT: <strong className="text-slate-700">{currentUser?.phone || 'Chưa cập nhật'}</strong></span>
                       <span>·</span>
-                      <span>Email: <strong className="text-slate-700">{currentUser?.email || 'verified.member@beautylink.vn'}</strong></span>
+                      <span>Email: <strong className="text-slate-700">{currentUser?.email || 'Chưa cập nhật'}</strong></span>
                     </p>
                   </div>
                 </div>
 
                 <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200/80 shrink-0 self-start sm:self-auto">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>Dữ liệu đã tự động đồng bộ</span>
+                  <span>Thông tin tài khoản</span>
                 </div>
               </div>
             </div>
@@ -771,9 +774,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Option 1: Cọc 5% */}
-                <div
-                  onClick={() => setDepositOption('deposit05')}
-                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                <button
+                  type="button"
+                  aria-pressed={depositOption === 'deposit05'}
+                  onClick={() => { setPaymentQuote(null); setDepositOption('deposit05'); }}
+                  className={`w-full p-5 rounded-2xl border-2 text-left transition-all cursor-pointer relative flex flex-col justify-between focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#bd195c] ${
                     depositOption === 'deposit05'
                       ? 'border-[#e1146c] bg-pink-50/40 shadow-sm'
                       : 'border-pink-200 bg-white hover:bg-pink-50/20'
@@ -804,19 +809,21 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <div className="mt-4 pt-3 border-t border-pink-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500">Cần trả hôm nay:</span>
                     <strong className="text-base font-black text-[#e1146c]">
-                      {formatCurrency(amountDueNow)}
+                      {depositOption === 'deposit05' && verifiedQuote ? formatCurrency(amountDueNow) : 'Xem khi chọn'}
                     </strong>
                   </div>
                   <div className="mt-1 text-[11px] text-slate-500 flex justify-between">
                     <span>Còn lại tại salon:</span>
-                    <span className="font-bold text-slate-700">{formatCurrency(remainingAtSalon)} (95% sau giảm giá)</span>
+                    <span className="font-bold text-slate-700">{depositOption === 'deposit05' && verifiedQuote ? formatCurrency(remainingAtSalon) : 'Xem khi chọn'}</span>
                   </div>
-                </div>
+                </button>
 
                 {/* Option 2: Thanh toán 100% */}
-                <div
-                  onClick={() => setDepositOption('full100')}
-                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                <button
+                  type="button"
+                  aria-pressed={depositOption === 'full100'}
+                  onClick={() => { setPaymentQuote(null); setDepositOption('full100'); }}
+                  className={`w-full p-5 rounded-2xl border-2 text-left transition-all cursor-pointer relative flex flex-col justify-between focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#bd195c] ${
                     depositOption === 'full100'
                       ? 'border-[#e1146c] bg-pink-50/40 shadow-sm'
                       : 'border-pink-200 bg-white hover:bg-pink-50/20'
@@ -840,17 +847,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       Thanh toán toàn bộ 100%
                     </h3>
                     <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                      Thanh toán trọn gói không lo phát sinh. Đến chỉ cần đọc mã check-in thư giãn trọn vẹn liệu trình.
+                      Thanh toán toàn bộ giá dịch vụ đã được máy chủ xác minh trước khi đến salon.
                     </p>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-pink-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500">Cần trả hôm nay:</span>
                     <strong className="text-base font-black text-[#e1146c]">
-                      {formatCurrency(totalBillAfterDiscount)}
+                      {depositOption === 'full100' && verifiedQuote ? formatCurrency(amountDueNow) : 'Xem khi chọn'}
                     </strong>
                   </div>
-                </div>
+                </button>
               </div>
             </div>
 
@@ -1030,7 +1037,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-black text-[#e1146c]">
-                      {quoteLoading ? 'Đang xác minh...' : paymentQuote ? `-${formatCurrency(paymentQuote.discountAmount)}` : 'Chưa xác minh'}
+                      {quoteLoading ? 'Đang xác minh...' : verifiedQuote ? `-${formatCurrency(verifiedQuote.discountAmount)}` : 'Chưa xác minh'}
                     </span>
                     <button
                       type="button"
@@ -1067,9 +1074,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
               {quoteLoading && <p role="status" className="mt-3 text-xs text-slate-500">Đang xác minh giá và voucher với máy chủ...</p>}
               {quoteError && <p role="alert" className="mt-3 text-xs font-semibold text-rose-600">{quoteError}</p>}
-              {paymentQuote && !paymentQuote.paymentAvailable && (
+              {verifiedQuote && !verifiedQuote.paymentAvailable && (
                 <p role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                  {quoteUnavailableMessage(paymentQuote)}
+                  {quoteUnavailableMessage(verifiedQuote)}
                 </p>
               )}
 
@@ -1105,17 +1112,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       Số tiền cần thanh toán ngay hôm nay
                     </span>
                     <span className="text-xl sm:text-2xl font-black text-[#e1146c]">
-                      {formatCurrency(amountDueNow)}
+                      {verifiedQuote ? formatCurrency(amountDueNow) : 'Đang xác minh'}
                     </span>
                   </div>
 
                   {depositOption === 'deposit05' && (
                     <div className="text-right">
-                      <span className="text-[11px] text-slate-500 block">Thanh toán tại salon sau (95% sau giảm giá):</span>
+                      <span className="text-[11px] text-slate-500 block">Phần còn lại thanh toán tại salon:</span>
                       <strong className="text-sm text-slate-800 font-black">
-                        {formatCurrency(remainingAtSalon)}
+                        {verifiedQuote ? formatCurrency(remainingAtSalon) : 'Đang xác minh'}
                       </strong>
-                      <span className="text-[10px] text-slate-400 block font-medium">Đã áp dụng voucher vào toàn bộ số tiền phải trả</span>
+                      {appliedVoucher && <span className="text-[10px] text-slate-400 block font-medium">Mức giảm giá đã tính trong báo giá</span>}
                     </div>
                   )}
                 </div>
@@ -1125,11 +1132,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <div className="mt-4 pt-3 border-t border-pink-50 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-500">
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span>Đổi dời lịch miễn phí trước 2 tiếng</span>
+                  <span>Kiểm tra lịch hẹn và số tiền trước khi rời BeautyLink</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span>Trạng thái được xác thực trực tiếp với PayOS</span>
+                  <span>Trạng thái thanh toán do máy chủ xác minh</span>
                 </div>
               </div>
 
@@ -1168,10 +1175,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       ? 'Đang tiến hành xử lý...'
                       : quoteLoading
                         ? 'Đang xác minh giá với máy chủ...'
-                      : `Xác nhận thanh toán ${formatCurrency(amountDueNow)}`}
+                      : verifiedQuote ? `Tiếp tục tới PayOS · ${formatCurrency(amountDueNow)}` : 'Đang xác minh giá với máy chủ...'}
                   </span>
                 </button>
                 </div>
+                <p className="mt-3 text-center text-xs leading-relaxed text-slate-500">Bạn sẽ thanh toán trên pay.payos.vn. BeautyLink chỉ xác nhận giao dịch sau khi máy chủ kiểm tra trạng thái PayOS.</p>
               </div>
             </div>
           </div>
