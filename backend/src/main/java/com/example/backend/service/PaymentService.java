@@ -371,6 +371,7 @@ public class PaymentService {
     }
 
     private void requireManualReview(PaymentTransaction payment, String reason) {
+        payment.setLastReconciledAt(time.now()); // audit observation time; manual flags independently block checkout
         if (payment.getStatus() != PaymentTransactionStatus.PAID) payment.setStatus(PaymentTransactionStatus.REVIEW_REQUIRED);
         payment.setRequiresManualReview(true);
         payment.getBooking().setPaymentRetryAllowed(false);
@@ -490,6 +491,7 @@ public class PaymentService {
         // actions until verified payment or an approved manual resolution exists.
         payment.setCheckoutUrl(null);
         payment.setRequiresManualReview(true);
+        payment.setLastReconciledAt(time.now()); // preserve the uncertain-cancellation audit timestamp
         payment.getBooking().setPaymentRetryAllowed(false);
         return reconcilingError();
     }

@@ -440,8 +440,12 @@ class PaymentCancellationSafetyTest {
     @Test void pastPendingCheckoutStatusDoesNotExposeStillLiveProviderUrl() {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.PENDING);
         tx(() -> { bookings.findByIdForUpdate(b.getId()).orElseThrow().setAppointmentDate(LocalDate.of(2000, 1, 1)); return null; });
-        assertNull(paymentService.status(customer(), p.getOrderCode()).checkoutUrl());
+        var stillLive = provider(p, PaymentLinkStatus.PENDING);
+        when(gateway.get(p.getOrderCode())).thenReturn(stillLive);
+        var response = paymentService.status(customer(), p.getOrderCode());
+        assertNull(response.checkoutUrl()); assertNull(response.qrCode()); assertFalse(response.checkoutAllowed());
         assertEquals(PaymentTransactionStatus.PENDING, payments.findById(p.getId()).orElseThrow().getStatus());
+        verify(gateway).get(p.getOrderCode());
         verify(gateway, never()).cancel(any(), any());
     }
     private ApiException timeout() { return new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY, "PAYOS_RECONCILIATION_FAILED", "test network timeout"); }
