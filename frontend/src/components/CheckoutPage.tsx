@@ -1,3 +1,5 @@
+import { PayOSCheckoutPage } from './PayOSCheckoutPage';
+import type { PayOSPayment } from '../types/beauty';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
@@ -85,6 +87,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 }) => {
   const { cartItems, updateCartQuantity, setCurrentUser } = useBeautyStore();
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [activePayment, setActivePayment] = useState<PayOSPayment | null>(null);
 
   // If there's a direct service passed, create synthetic cart list, else use store cart
   const items: CartItem[] = useMemo(() => {
@@ -387,7 +390,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         throw new Error('Giao dịch chưa có checkout an toàn hoặc cần hỗ trợ đối soát. Không thanh toán lại; vui lòng kiểm tra lịch hẹn.');
       }
       sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
-      window.location.assign(checkout);
+      setActivePayment(payment);
     } catch (err: unknown) {
       if (current()) {
         if (axios.isAxiosError(err) && err.response?.data?.code === 'BOOKING_CONTACT_REQUIRED') {
@@ -406,6 +409,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // =========================================================================
   // VIEW: EMPTY CART
   // =========================================================================
+  if (activePayment) return <PayOSCheckoutPage key={String(activePayment.orderCode)} initialPayment={activePayment} onBack={() => { setActivePayment(null); onViewBookings(); }} />;
   if (resumeId !== null) return <PaymentContinuationDialog bookingId={resumeId} onClose={() => { setPaymentBookingId(null); setResumeId(null); onViewBookings(); }} />;
   if (items.length === 0) {
     return (
@@ -1175,11 +1179,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       ? 'Đang tiến hành xử lý...'
                       : quoteLoading
                         ? 'Đang xác minh giá với máy chủ...'
-                      : verifiedQuote ? `Tiếp tục tới PayOS · ${formatCurrency(amountDueNow)}` : 'Đang xác minh giá với máy chủ...'}
+                      : verifiedQuote ? `Mở thanh toán QR · ${formatCurrency(amountDueNow)}` : 'Đang xác minh giá với máy chủ...'}
                   </span>
                 </button>
                 </div>
-                <p className="mt-3 text-center text-xs leading-relaxed text-slate-500">Bạn sẽ thanh toán trên pay.payos.vn. BeautyLink chỉ xác nhận giao dịch sau khi máy chủ kiểm tra trạng thái PayOS.</p>
+                <p className="mt-3 text-center text-xs leading-relaxed text-slate-500">Mở mã QR để thanh toán bằng ứng dụng ngân hàng. BeautyLink chỉ xác nhận sau khi máy chủ kiểm tra trạng thái PayOS.</p>
               </div>
             </div>
           </div>

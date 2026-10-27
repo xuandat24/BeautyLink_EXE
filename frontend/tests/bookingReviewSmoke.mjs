@@ -96,12 +96,15 @@ try {
   for (const [code, oldOrder, reuse] of [['SMOKE-RESUME', 9100002, true], ['SMOKE-RETRY', 9100003, false]]) {
     await card(code).getByRole('button', { name: 'Tiếp tục thanh toán', exact: true }).click();
     const resumeUrl = page.url(); assert.match(resumeUrl, /bookingPayment=\d+/);
-    await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Tiếp tục tới PayOS', exact: true }).waitFor();
+    await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).waitFor();
     const continued = page.waitForResponse(r => r.url().includes('/payments/payos/bookings/') && r.request().method() === 'POST');
-    await page.getByRole('dialog').getByRole('button', { name: 'Tiếp tục tới PayOS', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).click();
     assert.equal((await continued).status(), 200); assert.equal(observedPayment.orderCode === oldOrder, reuse);
-    await page.getByText('FAKE GATEWAY — NO MONEY TRANSFER', { exact: true }).waitFor(); assert.equal(newBookings, 0);
-    await page.goBack(); await page.getByRole('dialog').getByRole('button', { name: 'Tiếp tục tới PayOS', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Thanh toán lịch hẹn', exact: true }).waitFor();
+    if (reuse) await page.getByRole('link', { name: 'Mở phiên trên PayOS' }).waitFor();
+    else await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
+    assert.equal(newBookings, 0);
+    await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).waitFor();
     await page.getByRole('dialog').getByRole('button', { name: 'Quay lại', exact: true }).click();
     assert.doesNotMatch(page.url(), /bookingPayment=/); assert.equal(newBookings, 0);
   }
@@ -110,15 +113,20 @@ try {
   await page.getByRole('button', { name: /Tiếp tục: Chọn hình thức/ }).click();
   await page.getByRole('button', { name: /Tiếp tục: Tóm tắt/ }).click();
   const paymentCreated = page.waitForResponse(r => r.url().includes('/payments/payos') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: /Xác nhận thanh toán/ }).click();
+  await page.getByRole('button', { name: /Mở thanh toán QR/ }).click();
   const paymentResponse = await paymentCreated; assert.equal(paymentResponse.status(), 200);
   assert.equal(observedPayment.status, 'PENDING'); assert.equal(observedPayment.requiresManualReview, false);
-  await page.getByText('FAKE GATEWAY — NO MONEY TRANSFER', { exact: true }).waitFor();
+  await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: 'backend/target/payos-qr-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: 'backend/target/payos-qr-desktop.png', fullPage: true });
   // Actual App router (not the harness) restores checkout even from an account/home route.
   await page.goto(`http://localhost:5173/?bookingPayment=${observedPayment.bookingId}#account`);
-  await page.getByRole('dialog').getByRole('button', { name: 'Tiếp tục tới PayOS', exact: true }).waitFor();
+  await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).waitFor();
   assert.equal(await page.getByRole('dialog').getByLabel('Hình thức thanh toán').isDisabled(), true);
-  await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Tiếp tục tới PayOS', exact: true }).waitFor();
+  await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).waitFor();
   await page.getByRole('dialog').getByRole('button', { name: 'Quay lại', exact: true }).click();
   assert.doesNotMatch(page.url(), /bookingPayment=/);
   assert.deepEqual(failures, []);

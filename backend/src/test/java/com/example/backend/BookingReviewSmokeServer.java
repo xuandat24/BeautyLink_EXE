@@ -25,7 +25,9 @@ public class BookingReviewSmokeServer {
                 CreatePaymentLinkRequest request = i.getArgument(0);
                 var link = new PaymentLink(); link.setId("smoke-" + request.getOrderCode()); link.setOrderCode(request.getOrderCode());
                 link.setAmount(request.getAmount()); link.setAmountPaid(0L); link.setStatus(PaymentLinkStatus.PENDING); links.put(request.getOrderCode(), link);
-                var result = new CreatePaymentLinkResponse(); result.setOrderCode(request.getOrderCode()); result.setAmount(request.getAmount());
+                var result = new CreatePaymentLinkResponse(); result.setQrCode("TEST-QR-NOT-PAYABLE"); result.setBin("970422");
+                result.setAccountNumber("TEST-ACCOUNT"); result.setAccountName("SMOKE TEST ONLY"); result.setDescription("TEST ONLY");
+                result.setOrderCode(request.getOrderCode()); result.setAmount(request.getAmount());
                 result.setPaymentLinkId(link.getId()); result.setStatus(link.getStatus()); result.setCheckoutUrl("https://pay.payos.vn/web/" + link.getId()); return result;
             });
             when(gateway.get(any())).thenAnswer(i -> links.get(i.getArgument(0)));

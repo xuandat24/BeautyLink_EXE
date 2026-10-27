@@ -120,5 +120,6 @@ jobs:
           name: admin-v2-browser
           path: |
             backend/target/admin-v2-*.png
+            backend/target/payos-qr-*.png
             backend/target/browser-server.log
             backend/target/browser-vite.log

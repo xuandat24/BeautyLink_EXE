@@ -189,6 +189,12 @@ public class PaymentService {
         if (provider.getStatus() != PaymentLinkStatus.PENDING || !safeCheckoutUrl(provider.getCheckoutUrl()))
             return new CreationResult(null, reconcilingError());
         transaction.setCheckoutUrl(provider.getCheckoutUrl());
+        // The SDK verifies the provider response; retain exact transfer instructions for reuse/reload.
+        transaction.setQrCode(provider.getQrCode());
+        transaction.setBankBin(provider.getBin());
+        transaction.setBankAccountNumber(provider.getAccountNumber());
+        transaction.setBankAccountName(provider.getAccountName());
+        transaction.setTransferDescription(provider.getDescription());
         return new CreationResult(response(transaction), null);
     }
 
@@ -533,6 +539,9 @@ public class PaymentService {
                 && attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).count() <= 1;
         return new PayOSPaymentResponse(booking.getId(), booking.getBookingCode(), payment.getOrderCode(),
                 payment.getPaymentLinkId(), checkoutAllowed ? payment.getCheckoutUrl() : null, payment.getAmount(), payment.getRemainingAmount(),
-                payment.getPaymentOption(), payment.getStatus(), manual, payment.getExpiresAt());
+                payment.getPaymentOption(), payment.getStatus(), manual, payment.getExpiresAt(),
+                checkoutAllowed ? payment.getQrCode() : null, checkoutAllowed ? payment.getBankBin() : null,
+                checkoutAllowed ? payment.getBankAccountNumber() : null, checkoutAllowed ? payment.getBankAccountName() : null,
+                checkoutAllowed ? payment.getTransferDescription() : null);
     }
 }

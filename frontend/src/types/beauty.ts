@@ -153,6 +153,11 @@ export interface BookingReview {
 }
 
 export interface PayOSPayment {
+  qrCode?: string | null;
+  bankBin?: string | null;
+  bankAccountNumber?: string | null;
+  bankAccountName?: string | null;
+  transferDescription?: string | null;
   bookingId: number;
   bookingCode: string;
   orderCode: number;

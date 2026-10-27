@@ -20,6 +20,11 @@ public class PaymentTransaction {
     @Column(name = "merchant_reference", unique = true, length = 64) private String merchantReference;
     @Column(unique = true, length = 80) private String paymentLinkId;
     @Column(length = 1000) private String checkoutUrl;
+    @Column(columnDefinition = "TEXT") private String qrCode;
+    @Column(length = 100) private String bankBin;
+    @Column(length = 200) private String bankAccountNumber;
+    @Column(length = 300) private String bankAccountName;
+    @Column(length = 300) private String transferDescription;
     @Column(nullable = false, precision = 12, scale = 2) private BigDecimal amount;
     @Column(nullable = false, precision = 12, scale = 2) private BigDecimal remainingAmount = BigDecimal.ZERO;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private PaymentOption paymentOption;
@@ -42,6 +47,11 @@ public class PaymentTransaction {
     public String getMerchantReference() { return merchantReference; } public void setMerchantReference(String merchantReference) { this.merchantReference = merchantReference; }
     public String getPaymentLinkId() { return paymentLinkId; } public void setPaymentLinkId(String paymentLinkId) { this.paymentLinkId = paymentLinkId; }
     public String getCheckoutUrl() { return checkoutUrl; } public void setCheckoutUrl(String checkoutUrl) { this.checkoutUrl = checkoutUrl; }
+    public String getQrCode() { return qrCode; } public void setQrCode(String value) { qrCode = value; }
+    public String getBankBin() { return bankBin; } public void setBankBin(String value) { bankBin = value; }
+    public String getBankAccountNumber() { return bankAccountNumber; } public void setBankAccountNumber(String value) { bankAccountNumber = value; }
+    public String getBankAccountName() { return bankAccountName; } public void setBankAccountName(String value) { bankAccountName = value; }
+    public String getTransferDescription() { return transferDescription; } public void setTransferDescription(String value) { transferDescription = value; }
     public BigDecimal getAmount() { return amount; } public void setAmount(BigDecimal amount) { this.amount = amount; }
     public BigDecimal getRemainingAmount() { return remainingAmount; } public void setRemainingAmount(BigDecimal remainingAmount) { this.remainingAmount = remainingAmount; }
     public PaymentOption getPaymentOption() { return paymentOption; } public void setPaymentOption(PaymentOption paymentOption) { this.paymentOption = paymentOption; }
