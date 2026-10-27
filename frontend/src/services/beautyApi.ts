@@ -856,8 +856,8 @@ export const beautyApi = {
     return unwrap(apiClient.get(`/v1/payments/payos/bookings/${bookingId}/quote`, { params: { paymentOption, voucherCode } }));
   },
 
-  async payOSPaymentStatus(orderCode: string): Promise<PayOSPayment> {
-    return unwrap(apiClient.get(`/v1/payments/payos/${encodeURIComponent(orderCode)}`));
+  async payOSPaymentStatus(orderCode: string, signal?: AbortSignal): Promise<PayOSPayment> {
+    return unwrap(apiClient.get(`/v1/payments/payos/${encodeURIComponent(orderCode)}`, { signal }));
   },
 
   // ==========================================

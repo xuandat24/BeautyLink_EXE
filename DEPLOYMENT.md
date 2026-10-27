@@ -162,7 +162,7 @@ Verify all of these from the Vercel website:
 - A customer can sign in and create a booking.
 - A new customer and supplier receive a real six-digit email OTP through Resend and cannot register with a wrong, expired, or reused verification token.
 - The booking appears in **Tổng quan & Lịch hẹn**.
-- A PayOS payment opens on the hosted checkout and the booking becomes paid only after its webhook is received.
+- A PayOS payment normally renders the provider's exact QR inside BeautyLink. A verified legacy link without recoverable QR may use the explicitly labelled hosted fallback. Only signed webhook/server reconciliation confirms payment. See [custom QR verification and rollout](docs/PAYOS_QR_CHECKOUT.md).
 - A supplier can sign in, edit its profile, create a service, and update a schedule.
 - Staff can view and resolve a submitted report.
 - Browser developer tools show no CORS or failed `/api` requests.

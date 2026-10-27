@@ -3,7 +3,8 @@ import type { PayOSPayment } from '../types/beauty';
 import React, { useEffect, useRef, useState } from 'react';
 import { beautyApi, getAccessToken, getApiErrorMessage } from '../services/beautyApi';
 import { useBeautyStore } from '../store/beautyStore';
-import { canPayBooking, safeCheckout } from '../lib/bookingPolicy';
+import { canPayBooking } from '../lib/bookingPolicy';
+import { payableAttempt } from '../lib/payosCheckout';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import type { BackendBooking, PaymentOption, PaymentQuote } from '../types';
 import { BookingContactDialog } from './BookingContactDialog';
@@ -79,10 +80,10 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
           || payment.amount !== quote.amount || payment.remainingAmount !== quote.remainingAmount)) {
         throw new Error('Giá thanh toán đã thay đổi sau khi máy chủ xác minh. Phiên PayOS được giữ nguyên để bạn kiểm tra trước khi tiếp tục.');
       }
-      const url = safeCheckout(payment, bookingId);
+      const url = payableAttempt(payment, bookingId);
       if (!url) throw new Error('Chưa có checkout an toàn. Không thanh toán lại; vui lòng làm mới hoặc liên hệ hỗ trợ.');
       sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
-      setActivePayment(payment);
+      setBooking(fresh); setActivePayment(payment);
     };
     try {
       if (!current()) return;
@@ -96,7 +97,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
     } }
     finally { submitting.current = false; if (generation.current > 0) setBusy(false); }
   };
-  if (activePayment) return <PayOSCheckoutPage key={String(activePayment.orderCode)} initialPayment={activePayment} onBack={onClose} />;
+  if (activePayment) return <PayOSCheckoutPage key={String(activePayment.orderCode)} initialPayment={activePayment} booking={booking} onBack={onClose} />;
   const canContinue = booking && canPayBooking(booking);
   const displayedQuote = quote?.paymentOption === option ? quote : null;
   const amount = booking?.paymentAttemptActive ? booking.paymentAmount : displayedQuote?.amount;

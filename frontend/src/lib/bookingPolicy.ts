@@ -10,7 +10,7 @@ export const paymentSupportMessage = (booking: BackendBooking) => unresolved(boo
   ? 'Giao dịch đang cần đối soát. Không thanh toán lại; vui lòng gửi Phản hồi để liên hệ hỗ trợ.'
   : hasPayment(booking) && booking.status !== 'COMPLETED' ? 'Lịch hẹn đã thanh toán/đặt cọc không thể tự hủy. Cần hỗ trợ, vui lòng gửi Phản hồi.' : null;
 export function safeCheckout(payment: PayOSPayment, bookingId: number): string | null {
-  if (payment.bookingId !== bookingId || payment.status !== 'PENDING' || payment.requiresManualReview !== false || !payment.checkoutUrl) return null;
+  if (payment.bookingId !== bookingId || payment.status !== 'PENDING' || payment.requiresManualReview !== false || payment.checkoutAllowed === false || payment.verificationPending === true || !payment.checkoutUrl) return null;
   try {
     const url = new URL(payment.checkoutUrl);
     return url.protocol === 'https:' && url.hostname === 'pay.payos.vn' && !url.port && !url.username && !url.password ? payment.checkoutUrl : null;

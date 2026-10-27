@@ -1,5 +1,6 @@
 import { PayOSCheckoutPage } from './PayOSCheckoutPage';
-import type { PayOSPayment } from '../types/beauty';
+import type { BackendBooking, PayOSPayment } from '../types/beauty';
+import { payableAttempt } from '../lib/payosCheckout';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
@@ -24,7 +25,7 @@ import { useBeautyStore } from '../store/beautyStore';
 import { CurrentUser, BackendService, CartItem, PaymentQuote } from '../types';
 import type { ServiceCapacity } from '../types/beauty';
 import { beautyApi, getApiErrorMessage, getAccessToken } from '../services/beautyApi';
-import { canPayBooking, safeCheckout } from '../lib/bookingPolicy';
+import { canPayBooking } from '../lib/bookingPolicy';
 import { OptimizedImage } from './OptimizedImage';
 import { bookingSchema, FieldErrors, voucherCodeSchema, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
@@ -88,6 +89,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const { cartItems, updateCartQuantity, setCurrentUser } = useBeautyStore();
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [activePayment, setActivePayment] = useState<PayOSPayment | null>(null);
+  const [activeBooking, setActiveBooking] = useState<BackendBooking | null>(null);
 
   // If there's a direct service passed, create synthetic cart list, else use store cart
   const items: CartItem[] = useMemo(() => {
@@ -385,12 +387,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         setResumeId(booking.id);
         throw new Error('Giá thanh toán đã thay đổi sau khi máy chủ xác minh. Phiên PayOS được giữ nguyên để bạn kiểm tra số tiền trước khi tiếp tục.');
       }
-      const checkout = safeCheckout(payment, booking.id);
+      const checkout = payableAttempt(payment, booking.id);
       if (!checkout) {
         throw new Error('Giao dịch chưa có checkout an toàn hoặc cần hỗ trợ đối soát. Không thanh toán lại; vui lòng kiểm tra lịch hẹn.');
       }
       sessionStorage.setItem('beautylink_payos_order_code', String(payment.orderCode));
-      setActivePayment(payment);
+      setActiveBooking(booking); setActivePayment(payment);
     } catch (err: unknown) {
       if (current()) {
         if (axios.isAxiosError(err) && err.response?.data?.code === 'BOOKING_CONTACT_REQUIRED') {
@@ -409,7 +411,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // =========================================================================
   // VIEW: EMPTY CART
   // =========================================================================
-  if (activePayment) return <PayOSCheckoutPage key={String(activePayment.orderCode)} initialPayment={activePayment} onBack={() => { setActivePayment(null); onViewBookings(); }} />;
+  if (activePayment) return <PayOSCheckoutPage key={String(activePayment.orderCode)} initialPayment={activePayment} booking={activeBooking} onBack={() => { setActivePayment(null); onViewBookings(); }} />;
   if (resumeId !== null) return <PaymentContinuationDialog bookingId={resumeId} onClose={() => { setPaymentBookingId(null); setResumeId(null); onViewBookings(); }} />;
   if (items.length === 0) {
     return (
