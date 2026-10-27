@@ -9,7 +9,7 @@ import type { PayOSPayment } from '../src/types/beauty';
 import { sessionToken } from './sessionFixtures';
 import { testQr } from './payosQrFixture';
 import { payableAttempt, retryDelay, usableProviderQr } from '../src/lib/payosCheckout';
-const payment: PayOSPayment = { bookingId: 42, bookingCode: 'TEST-42', orderCode: 123, paymentLinkId: 'test-link', checkoutUrl: 'https://pay.payos.vn/web/test-link', amount: 11000, remainingAmount: 209000, paymentOption: 'DEPOSIT_05', status: 'PENDING', requiresManualReview: false, expiresAt: new Date(Date.now()+600000).toISOString(), qrCode: testQr(11000), bankBin: '970422', bankAccountNumber: 'TEST-ACCOUNT', bankAccountName: 'TEST MERCHANT', transferDescription: 'TEST ONLY' };
+const payment: PayOSPayment = { checkoutAllowed: true, verificationPending: false, bookingId: 42, bookingCode: 'TEST-42', orderCode: 123, paymentLinkId: 'test-link', checkoutUrl: 'https://pay.payos.vn/web/test-link', amount: 11000, remainingAmount: 209000, paymentOption: 'DEPOSIT_05', status: 'PENDING', requiresManualReview: false, expiresAt: new Date(Date.now()+600000).toISOString(), qrCode: testQr(11000), bankBin: '970422', bankAccountNumber: 'TEST-ACCOUNT', bankAccountName: 'TEST MERCHANT', transferDescription: 'TEST ONLY' };
 async function run(status: PayOSPayment | (()=>Promise<PayOSPayment>), check: () => Promise<void> | void, setup?:()=>void) {
  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' });
  Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage });
@@ -115,9 +115,17 @@ test('QR CRC and fixed amount are validated; eligibility accepts explicit capabi
  assert.equal(usableProviderQr(testQr(11000).slice(0,-4)+'0000',11000),false);
  assert.equal(payableAttempt({...payment,checkoutAllowed:true,checkoutUrl:null},42),true);
  assert.equal(payableAttempt({...payment,checkoutAllowed:false},42),false);
+ assert.equal(payableAttempt({...payment,checkoutAllowed:undefined},42),false);
  assert.equal(payableAttempt(payment,99),false);
  for(const failures of [1,2,3,4,9])assert.ok(retryDelay({},failures)<=30000);
  assert.equal(retryDelay({response:{headers:{'retry-after':'120'}}},1),60000);
+});
+test('older backend without verification capabilities fails closed even with a hosted URL and QR',async()=>{
+ await run({...payment,checkoutAllowed:undefined,verificationPending:undefined},()=>{
+  assert.equal(document.querySelector('[aria-label="Sao chép số tài khoản"]'),null);
+  assert.equal(document.querySelector('a[href^="https://pay.payos.vn"]'),null);
+  assert.match(document.body.textContent??'',/Máy chủ chưa hỗ trợ xác minh/);
+ });
 });
 test('verified paid and manual states remove QR and transfer details',async()=>{
  for(const status of [{...payment,status:'PAID' as const},{...payment,status:'REVIEW_REQUIRED' as const,requiresManualReview:true}]) await run(status,()=>{

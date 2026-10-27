@@ -41,6 +41,9 @@ export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initial
         if (!active) return;
         if (session !== getAccessToken()) { setError('Phiên đăng nhập đã thay đổi. Vui lòng quay lại lịch hẹn.'); return; }
         if (!samePayment(fresh, initialPayment)) { autoRetryAllowed.current = false; setError('Thông tin giao dịch không khớp. Không chuyển tiền; vui lòng liên hệ hỗ trợ.'); return; }
+        if (typeof fresh.checkoutAllowed !== 'boolean' || typeof fresh.verificationPending !== 'boolean') {
+          autoRetryAllowed.current = false; setError('Máy chủ chưa hỗ trợ xác minh phiên QR này. Vui lòng quay lại lịch hẹn và thử sau khi hệ thống cập nhật.'); return;
+        }
         setPayment(fresh); setVerified(true);
         if (fresh.verificationPending) throw new Error('Provider verification deferred');
         setError(''); failures = 0;

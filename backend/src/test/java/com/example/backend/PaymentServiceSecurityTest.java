@@ -228,6 +228,8 @@ class PaymentServiceSecurityTest {
         when(bookings.findByIdForUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(payments.findAllByBookingIdForUpdate(booking.getId())).thenReturn(List.of(legacy));
         when(payments.findAllByBookingIdOrderByCreatedAtDesc(booking.getId())).thenReturn(List.of(legacy));
+        var observed = provider(legacy, PaymentLinkStatus.PENDING);
+        when(gateway.get(legacy.getOrderCode())).thenReturn(observed);
 
         PayOSPaymentResponse response = service.create(booking.getCustomer(), booking.getId(),
                 new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_50, null));
@@ -444,6 +446,16 @@ class PaymentServiceSecurityTest {
         assertEquals(PaymentTransactionStatus.PAID,result.status());assertEquals(paidAt,captured.get().getPaidAt());
         org.junit.jupiter.api.Assertions.assertNull(captured.get().getProviderCreatedAt());org.junit.jupiter.api.Assertions.assertNull(captured.get().getQrCode());
         assertEquals(new BigDecimal("25000"),captured.get().getAmount());assertEquals(BookingStatus.CONFIRMED,b.getStatus());
+    }
+
+    @Test void reuseCannotBypassFailedProviderVerificationAndNeverCreatesAReplacement() {
+        var p=pendingPayment();p.setExpiresAt(Instant.now().plusSeconds(600));p.setCheckoutUrl("https://pay.payos.vn/web/existing");
+        when(bookings.findByIdForUpdate(p.getBooking().getId())).thenReturn(Optional.of(p.getBooking()));
+        when(payments.findAllByBookingIdForUpdate(p.getBooking().getId())).thenReturn(List.of(p));
+        when(gateway.get(p.getOrderCode())).thenThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,"PAYOS_RECONCILIATION_FAILED","Synthetic timeout"));
+        var error=assertThrows(ApiException.class,()->service.create(p.getBooking().getCustomer(),p.getBooking().getId(),new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_50,null)));
+        assertEquals("PAYMENT_RECONCILING",error.getCode());assertEquals(PaymentTransactionStatus.PENDING,p.getStatus());
+        org.junit.jupiter.api.Assertions.assertNull(p.getLastReconciledAt());verify(gateway,never()).create(any());verify(payments,never()).saveAndFlush(any());
     }
 
     private void prepareCreate(Booking booking, String paymentLinkId) {

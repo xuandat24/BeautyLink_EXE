@@ -608,8 +608,11 @@ class PaymentCancellationSafetyTest {
     }
     @Test void pendingReuseIsIdempotentButExpiredLinksFailClosed() {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.PENDING);
+        var observed = provider(p, PaymentLinkStatus.PENDING);
+        when(gateway.get(p.getOrderCode())).thenReturn(observed);
         assertEquals(p.getCheckoutUrl(), paymentService.create(customer(), b.getId(), request()).checkoutUrl());
         assertEquals(1, payments.count()); verify(gateway, never()).create(any());
+        verify(gateway).get(p.getOrderCode());
         tx(() -> { payments.findByIdForUpdate(p.getId()).orElseThrow().setExpiresAt(Instant.now().minusSeconds(1)); return null; });
         assertEquals("PAYMENT_RECONCILING", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), request())).getCode());
     }

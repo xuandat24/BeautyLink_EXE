@@ -1,5 +1,4 @@
 import type { PayOSPayment } from '../types/beauty';
-import { safeCheckout } from './bookingPolicy';
 
 export type QRCheckoutState = 'INITIALIZING' | 'PENDING' | 'VERIFYING' | 'NETWORK_ERROR' | 'QR_UNAVAILABLE' | 'PAID' | 'EXPIRED' | 'CANCELLED' | 'REVIEW_REQUIRED';
 
@@ -13,7 +12,7 @@ export function payableAttempt(payment: PayOSPayment, bookingId: number, now = D
     && payment.verificationPending !== true && Boolean(payment.paymentLinkId)
     && Number.isSafeInteger(payment.amount) && payment.amount > 0 && Number.isSafeInteger(payment.remainingAmount) && payment.remainingAmount >= 0
     && Date.parse(payment.expiresAt) > now
-    && (payment.checkoutAllowed === true || (payment.checkoutAllowed === undefined && Boolean(safeCheckout(payment, bookingId))));
+    && payment.checkoutAllowed === true && payment.verificationPending === false;
 }
 
 /** Inspect the provider's exact EMV payload, never construct payment instructions. */

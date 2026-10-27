@@ -129,8 +129,12 @@ public class PaymentService {
             PaymentTransaction p = pending.getFirst();
             if (pending.size() != 1 || isExpired(p) || (p.getCheckoutUrl() == null && !PayOSQrInstructions.usable(p.getQrCode(), p.getAmount())) || booking.getStatus() == BookingStatus.CANCELLED)
                 throw conflict("PAYMENT_RECONCILING", "Giao dịch cũ đang được đối soát. Vui lòng kiểm tra lịch hẹn.");
-            if (p.getPaymentOption() == request.paymentOption() && Objects.equals(p.getVoucherCode(), voucherCode))
+            if (p.getPaymentOption() == request.paymentOption() && Objects.equals(p.getVoucherCode(), voucherCode)) {
+                // Reuse must not bypass a previous inconclusive status observation (including older clients).
+                if ((p.getLastReconciledAt() == null || !p.getLastReconciledAt().isAfter(time.now().minusSeconds(15))) && !reconcileLocked(p))
+                    return new Creation(bookingId, null, null, BookingPaymentPolicy.manualAttempt(p) ? manualError() : reconcilingError());
                 return new Creation(bookingId, null, response(p), null);
+            }
             throw conflict("PAYMENT_ATTEMPT_EXISTS", "Lịch hẹn đang có một phiên PayOS; vui lòng hoàn tất hoặc chờ đối soát.");
         }
         // Historical terminal flags alone are not evidence that an old link is closed.
