@@ -32,6 +32,9 @@ try {
     try {
       await page.goto(`${base}/#home`);
       await page.getByText('4.9', { exact: true }).first().waitFor();
+      await page.getByText('4.9 (3)', { exact: true }).first().waitFor();
+      assert.equal(await page.getByText('4.9 (168+)', { exact: true }).count(), 0);
+      assert.equal(await page.getByText('4,850+ đã trải nghiệm', { exact: true }).count(), 0);
       await page.evaluate(() => {
         const sid = '11111111-1111-4111-8111-111111111111'; const expires = Date.now() + 3600000;
         const token = `header.${btoa(JSON.stringify({ sid, exp: Math.floor(expires / 1000) }))}.test-signature`;
