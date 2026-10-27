@@ -21,7 +21,10 @@ replaces `@seed.beautylink.test` emails in admin account views and customer CSV
 exports. Actual review contents, booking records, login emails and notification
 recipients stay in the backend. Disable the flag and rebuild to show only live
 values again. The overview status counts, trend totals and partner/service
-rankings reconcile to the report. Commission is a separate field from actual
+rankings reconcile to the report. Sample service reviews use confirmed/completed
+booking counts first and share a catalog-wide maximum of 90; once the count is
+used, remaining unbooked services show zero reviews. Supplier summaries reuse
+the service counts. Commission is a separate field from actual
 gross online receipts. Sample rating totals and report summaries do not create matching
 review or booking records in the detail lists.
 

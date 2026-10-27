@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
-import { presentationEmail, presentationInsights, presentationService } from '../src/lib/presentationData';
+import { presentationEmail, presentationInsights, presentationReviewAllocation, presentationService } from '../src/lib/presentationData';
 import { AdminModulesPage } from '../src/components/admin/AdminModulesPage';
 import { AdminOverview } from '../src/components/admin/AdminOverview';
 import { adminV2Api } from '../src/services/adminApi';
@@ -12,18 +12,38 @@ import { insightsFixture, paymentFixture } from './adminV2Fixtures';
 import type { BackendService } from '../src/types';
 
 test('presentation stars are stable per supplier, preserve real reviews and leave source objects intact', () => {
-  const source = { id: 11, supplierId: 7, rating: 0, serviceReviewCount: 0, supplierRating: 0, supplierReviewCount: 0 } as BackendService;
-  assert.equal(presentationService(source, false), source);
-  const first = presentationService(source, true);
-  const second = presentationService({ ...source, id: 12 }, true);
+  const source = { id: 11, supplierId: 7, rating: 0, serviceReviewCount: 0, supplierRating: 0, supplierReviewCount: 0, bookedOrCompletedCount: 3 } as BackendService;
+  const other = { ...source, id: 12, bookedOrCompletedCount: 2 };
+  const allocation = presentationReviewAllocation([source, other]);
+  assert.equal(presentationService(source, allocation, false), source);
+  const first = presentationService(source, allocation, true);
+  const second = presentationService(other, allocation, true);
+  assert.equal(first.serviceReviewCount, 3);
+  assert.equal(second.serviceReviewCount, 2);
+  assert.equal(first.supplierReviewCount, 5);
   assert.equal(first.supplierRating, second.supplierRating);
   assert.equal(first.supplierReviewCount, second.supplierReviewCount);
   assert.ok(first.rating >= 4.6 && first.rating <= 4.9);
-  assert.ok(first.serviceReviewCount! > 0);
-  assert.deepEqual(presentationService(source, true), first);
+  assert.deepEqual(presentationService(source, allocation, true), first);
   assert.equal(source.rating, 0);
   const actual = { ...source, rating: 3.5, serviceReviewCount: 2, supplierRating: 4.1, supplierReviewCount: 9 };
-  assert.deepEqual(presentationService(actual, true), actual);
+  assert.deepEqual(presentationService(actual, allocation, true), actual);
+});
+
+test('154 services share at most 90 reviews and unbooked services get one or two only while budget remains', () => {
+  const catalog = Array.from({ length: 154 }, (_, index) => ({
+    id: index + 1, supplierId: 1 + Math.floor(index / 11), serviceReviewCount: index === 2 ? 2 : 0,
+    bookedOrCompletedCount: index === 0 ? 6 : index === 1 ? 3 : 0,
+  } as BackendService));
+  const allocation = presentationReviewAllocation(catalog);
+  assert.equal(allocation.services.get(1), 6);
+  assert.equal(allocation.services.get(2), 3);
+  assert.equal(allocation.services.get(3), 2);
+  assert.equal([...allocation.services.values()].reduce((sum, count) => sum + count, 0), 90);
+  assert.equal([...allocation.suppliers.values()].reduce((sum, count) => sum + count, 0), 90);
+  assert.ok(catalog.slice(3).every(service => [0, 1, 2].includes(allocation.services.get(service.id)!)));
+  assert.ok(catalog.slice(3).some(service => allocation.services.get(service.id) === 0));
+  assert.deepEqual(presentationReviewAllocation(catalog), allocation);
 });
 
 test('only seeded email display addresses change; aliases are stable and use ordinary human-style local parts', () => {

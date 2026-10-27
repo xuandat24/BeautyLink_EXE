@@ -78,6 +78,20 @@ class BookingReviewReleaseTest {
             return bookings.saveAndFlush(b);
         });
     }
+    @Test void publicCatalogActivityCountsOnlyConfirmedAndCompletedBookings() {
+        Booking pending = fixture(BookingStatus.PENDING, PaymentStatus.UNPAID);
+        Long serviceId = pending.getService().getId();
+        long before = catalog.service(serviceId).bookedOrCompletedCount();
+        assertEquals(before, catalog.service(serviceId).bookedOrCompletedCount());
+        assertEquals(before, catalog.publicServices().stream().filter(s -> s.id().equals(serviceId)).findFirst().orElseThrow().bookedOrCompletedCount());
+        tx(() -> { bookings.findByIdForUpdate(pending.getId()).orElseThrow().setStatus(BookingStatus.CONFIRMED); return null; });
+        assertEquals(before + 1, catalog.service(serviceId).bookedOrCompletedCount());
+        assertEquals(before + 1, catalog.publicServices().stream().filter(s -> s.id().equals(serviceId)).findFirst().orElseThrow().bookedOrCompletedCount());
+        tx(() -> { bookings.findByIdForUpdate(pending.getId()).orElseThrow().setStatus(BookingStatus.COMPLETED); return null; });
+        assertEquals(before + 1, catalog.service(serviceId).bookedOrCompletedCount());
+        tx(() -> { bookings.findByIdForUpdate(pending.getId()).orElseThrow().setStatus(BookingStatus.CANCELLED); return null; });
+        assertEquals(before, catalog.service(serviceId).bookedOrCompletedCount());
+    }
     private PaymentTransaction payment(Booking b) {
         PaymentTransaction p = new PaymentTransaction(); p.setBooking(b);
         p.setOrderCode(b.getId() + 9000000); p.setPaymentLinkId("test-" + b.getId());

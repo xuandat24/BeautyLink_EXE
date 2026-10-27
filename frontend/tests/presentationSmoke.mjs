@@ -6,7 +6,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
 const base = process.env.PRESENTATION_SMOKE_BASE_URL || 'http://127.0.0.1:5182';
 const browser = await chromium.launch({ headless: true });
 const user = { id: 7, fullName: 'Nguyễn Minh Anh', email: 'nguyen.minhanh+492.351@seed.beautylink.test', role: 'CUSTOMER', status: 'ACTIVE', createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z', salons: [] };
-const service = { id: 11, name: 'Chăm sóc da chuyên sâu', price: 250000, originalPrice: 350000, durationMinutes: 60, imageUrl: '', categorySlug: 'spa', rating: 0, serviceReviewCount: 0, supplierId: 7, supplierRating: 0, supplierReviewCount: 0, supplierName: 'An Nhiên Spa', supplierBusinessType: 'SPA', supplierAddress: 'Quận 1', featured: true, supplierNearbyFeatured: true, supplierNewPartner: true, practitioners: [] };
+const service = { id: 11, name: 'Chăm sóc da chuyên sâu', price: 250000, originalPrice: 350000, durationMinutes: 60, imageUrl: '', categorySlug: 'spa', rating: 0, serviceReviewCount: 0, bookedOrCompletedCount: 3, supplierId: 7, supplierRating: 0, supplierReviewCount: 0, supplierName: 'An Nhiên Spa', supplierBusinessType: 'SPA', supplierAddress: 'Quận 1', featured: true, supplierNearbyFeatured: true, supplierNewPartner: true, practitioners: [] };
 try {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     const context = await browser.newContext({ viewport });
@@ -23,7 +23,7 @@ try {
       else if (path.endsWith('/admin/users')) json = { content: [user], totalElements: 1, totalPages: 1, page: 0, size: 20 };
       else if (path.endsWith('/admin/bookings')) json = { content: [], totalElements: 0, totalPages: 0, page: 0, size: 5 };
       else if (path.endsWith('/categories')) json = [{ id: 1, name: 'Spa', slug: 'spa', imageUrl: '' }];
-      else if (path.endsWith('/homepage/services') || path.endsWith('/spa/services')) json = [service];
+      else if (path.endsWith('/catalog/services') || path.endsWith('/homepage/services') || path.endsWith('/spa/services')) json = [service];
       return route.fulfill({ json });
     });
     await page.addInitScript(() => {

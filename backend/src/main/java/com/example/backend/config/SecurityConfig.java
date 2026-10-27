@@ -27,7 +27,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/register-supplier",
                                 "/api/v1/auth/registration-verification/start", "/api/v1/auth/registration-verification/confirm",
                                 "/api/v1/auth/password-reset/start", "/api/v1/auth/password-reset/confirm").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/locations/**", "/api/v1/categories/**", "/api/v1/services/**", "/api/v1/suppliers/**", "/api/v1/homepage/**", "/api/products/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/locations/**", "/api/v1/categories/**", "/api/v1/catalog/services", "/api/v1/services/**", "/api/v1/suppliers/**", "/api/v1/homepage/**", "/api/products/**").permitAll()
                         .requestMatchers("/api/products/**").hasRole("ADMIN")
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())

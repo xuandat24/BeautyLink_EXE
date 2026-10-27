@@ -26,6 +26,13 @@ public interface ServiceOfferingRepository extends JpaRepository<ServiceOffering
             """)
     List<ServiceOffering> findActiveInLocationTree(@Param("categorySlug") String categorySlug, @Param("locationId") Long locationId);
     List<ServiceOffering> findBySupplierIdAndActiveTrue(Long supplierId);
+    @Query("""
+            select offering from ServiceOffering offering
+            join offering.supplier supplier
+            where offering.active = true
+              and supplier.verificationStatus = com.example.backend.model.DomainEnums$VerificationStatus.VERIFIED
+            """)
+    List<ServiceOffering> findPublicServices();
     List<ServiceOffering> findBySupplierIdOrderByIdDesc(Long supplierId);
     Optional<ServiceOffering> findBySupplierIdAndName(Long supplierId, String name);
     @Query("""

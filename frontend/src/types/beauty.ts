@@ -70,6 +70,7 @@ export interface BackendService {
   rating: number;
   supplierId: number;
   serviceReviewCount?: number;
+  bookedOrCompletedCount?: number;
   supplierRating?: number;
   supplierName: string;
   supplierAddress: string;
