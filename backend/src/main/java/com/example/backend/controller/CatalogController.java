@@ -15,6 +15,7 @@ public class CatalogController {
     @GetMapping("/locations") public List<LocationResponse> locations(@RequestParam(required = false) Long parentId) { return catalog.locations(parentId); }
     @GetMapping("/categories") public List<CategoryResponse> categories() { return catalog.categories(); }
     @GetMapping("/categories/{slug}/services") public List<ServiceResponse> services(@PathVariable String slug, @RequestParam(required = false) Long locationId) { return catalog.services(slug, locationId); }
+    @GetMapping("/catalog/services") public List<ServiceResponse> publicServices() { return catalog.publicServices(); }
     @GetMapping("/services/{id}") public ServiceResponse service(@PathVariable Long id) { return catalog.service(id); }
     @GetMapping("/services/{id}/payment-quote") public PaymentQuoteResponse paymentQuote(
             @PathVariable Long id, @RequestParam PaymentOption paymentOption,

@@ -37,7 +37,7 @@ import {
   VOUCHERS,
 } from '../data/mockData';
 import { cache } from '../lib/cache';
-import { presentationAccount, presentationEmail, presentationEnabled, presentationService } from '../lib/presentationData';
+import { presentationAccount, presentationEmail, presentationEnabled, presentationReviewAllocation, presentationService, type PresentationReviewAllocation } from '../lib/presentationData';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { clearSession, getSessionToken, installToken, peekAccessToken, sessionSnapshot, setSessionPhase, sessionCredentialEpoch } from '../lib/authSession';
 
@@ -58,6 +58,8 @@ const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '/api';
 // bundle must always reflect the API and real database, even if an environment
 // variable was accidentally left enabled on the hosting provider.
 const DEMO_FALLBACK_ENABLED = import.meta.env?.DEV && import.meta.env?.VITE_ENABLE_DEMO_FALLBACK === 'true';
+let presentationCatalogPromise: Promise<BackendService[]> | null = null;
+let presentationAllocation: PresentationReviewAllocation | null = null;
 
 type BackendDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
 type BackendScheduleRule = {
@@ -108,7 +110,7 @@ apiClient.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const publicAuth = /\/auth\/(login|google|register|register-supplier|password-reset|registration-verification)(\/|$)/.test(config.url ?? '');
     if (publicAuth) { delete config.headers.Authorization; return config; }
-    const publicRead = config.method === 'get' && /\/(v1\/(locations|categories|services|suppliers|homepage)|products)(\/|$)/.test(config.url ?? '');
+    const publicRead = config.method === 'get' && /\/(v1\/(locations|categories|catalog|services|suppliers|homepage)|products)(\/|$)/.test(config.url ?? '');
     if (publicRead) { delete config.headers.Authorization; return config; }
     if (config.url?.endsWith('/auth/session/logout') && config.headers.Authorization) return config;
     const token = getAccessToken();
@@ -136,6 +138,22 @@ apiClient.interceptors.response.use(response => response, error => {
   }
   return Promise.reject(error);
 });
+
+async function reviewAllocation(): Promise<PresentationReviewAllocation | null> {
+  if (!presentationEnabled) return null;
+  if (presentationAllocation) return presentationAllocation;
+  if (!presentationCatalogPromise) {
+    presentationCatalogPromise = unwrap<BackendService[]>(apiClient.get('/v1/catalog/services'));
+  }
+  try {
+    const catalog = await presentationCatalogPromise;
+    presentationAllocation = presentationReviewAllocation(catalog);
+    return presentationAllocation;
+  } catch {
+    presentationCatalogPromise = null;
+    return null;
+  }
+}
 
 export function setAccessToken(token: string, rememberMe = false) {
   // Kept as a compatible argument for old callers; MVP persistent login is disabled.
@@ -698,9 +716,10 @@ export const beautyApi = {
   // Services & Availability
   // ==========================================
   async services(categorySlug: string, locationId?: number): Promise<BackendService[]> {
+    const allocation = await reviewAllocation();
     const mapServices = (list: BackendService[]) =>
       list.map((s) => ({
-        ...presentationService(s),
+        ...presentationService(s, allocation),
         imageUrl: getOptimizedImageUrl(s.imageUrl, 'service-card'),
         supplierImageUrl: s.supplierImageUrl
           ? getOptimizedImageUrl(s.supplierImageUrl, 'salon-card')
@@ -734,9 +753,10 @@ export const beautyApi = {
   },
 
   async homepageServices(locationId?: number): Promise<BackendService[]> {
+    const allocation = await reviewAllocation();
     const mapServices = (list: BackendService[]) =>
       list.map((s) => ({
-        ...presentationService(s),
+        ...presentationService(s, allocation),
         imageUrl: getOptimizedImageUrl(s.imageUrl, 'service-card'),
         supplierImageUrl: s.supplierImageUrl
           ? getOptimizedImageUrl(s.supplierImageUrl, 'salon-card')
@@ -805,7 +825,8 @@ export const beautyApi = {
   async publicSupplierServices(id: number): Promise<BackendService[]> {
     if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Không xác định được nhà cung cấp.');
     const shop = await unwrap<{ services: BackendService[] }>(apiClient.get(`/v1/suppliers/${id}`));
-    return shop.services.map(service => presentationService(service));
+    const allocation = await reviewAllocation();
+    return shop.services.map(service => presentationService(service, allocation));
   },
 
   async completeBooking(id: number): Promise<BackendBooking> {

@@ -5,22 +5,52 @@ import type { AdminInsights, Metric } from '../types/adminV2';
 export const presentationEnabled = import.meta.env?.VITE_PRESENTATION_DATA === 'true';
 export const presentationReport = { bookings: 90, customers: 78, completed: 59, commission: 1_906_000 };
 
-function sampleRating(id: number) {
-  return { rating: (46 + id % 4) / 10, count: 17 + (id * 13) % 89 };
+function sampleRating(id: number) { return (46 + id % 4) / 10; }
+
+export type PresentationReviewAllocation = { services: Map<number, number>; suppliers: Map<number, number> };
+
+// One review budget is shared by the entire public catalog and its supplier summaries.
+export function presentationReviewAllocation(catalog: BackendService[]): PresentationReviewAllocation {
+  const offerings = [...new Map(catalog.map(service => [service.id, service])).values()];
+  const services = new Map<number, number>();
+  let remaining = presentationReport.bookings;
+  for (const service of offerings) {
+    const verified = Math.max(0, service.serviceReviewCount ?? 0);
+    services.set(service.id, verified);
+    remaining = Math.max(0, remaining - verified);
+  }
+  const booked = offerings.filter(service => (service.bookedOrCompletedCount ?? 0) > 0 && !services.get(service.id))
+    .sort((a, b) => (b.bookedOrCompletedCount ?? 0) - (a.bookedOrCompletedCount ?? 0) || a.id - b.id);
+  for (const service of booked) {
+    const count = Math.min(remaining, service.bookedOrCompletedCount ?? 0);
+    services.set(service.id, count);
+    remaining -= count;
+  }
+  for (const service of offerings) {
+    if (remaining === 0) break;
+    if (services.get(service.id) || (service.bookedOrCompletedCount ?? 0) > 0) continue;
+    const count = Math.min(remaining, 1 + service.id % 2);
+    services.set(service.id, count);
+    remaining -= count;
+  }
+  const suppliers = new Map<number, number>();
+  for (const service of offerings) suppliers.set(service.supplierId,
+    (suppliers.get(service.supplierId) ?? 0) + (services.get(service.id) ?? 0));
+  return { services, suppliers };
 }
 
-export function presentationService(service: BackendService, enabled = presentationEnabled): BackendService {
+export function presentationService(service: BackendService, allocation?: PresentationReviewAllocation | null, enabled = presentationEnabled): BackendService {
   if (!enabled) return service;
   const result = { ...service };
   if (!((service.serviceReviewCount ?? 0) > 0) && Number.isSafeInteger(service.id) && service.id > 0) {
-    const sample = sampleRating(service.id);
-    result.rating = sample.rating;
-    result.serviceReviewCount = sample.count;
+    const count = allocation?.services.get(service.id) ?? 0;
+    result.rating = count > 0 ? sampleRating(service.id) : 0;
+    result.serviceReviewCount = count;
   }
   if (!(service.supplierReviewCount > 0) && Number.isSafeInteger(service.supplierId) && service.supplierId > 0) {
-    const sample = sampleRating(service.supplierId);
-    result.supplierRating = sample.rating;
-    result.supplierReviewCount = sample.count;
+    const count = allocation?.suppliers.get(service.supplierId) ?? 0;
+    result.supplierRating = count > 0 ? sampleRating(service.supplierId) : 0;
+    result.supplierReviewCount = count;
   }
   return result;
 }

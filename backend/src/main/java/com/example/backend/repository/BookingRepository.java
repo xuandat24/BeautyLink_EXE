@@ -15,6 +15,10 @@ import jakarta.persistence.LockModeType;
 import java.time.*;
 import java.util.*;
 public interface BookingRepository extends JpaRepository<Booking, Long> {
+    @Query("select b.service.id, count(b) from Booking b where b.service.id in :serviceIds " +
+            "and b.status in :statuses group by b.service.id")
+    List<Object[]> countByServiceIdsAndStatuses(@Param("serviceIds") Collection<Long> serviceIds,
+            @Param("statuses") Collection<BookingStatus> statuses);
     @Query("select b from Booking b join fetch b.customer join fetch b.supplier join fetch b.service join fetch b.practitioner where b.supplier.id = :supplierId and b.customer.role = :role order by b.createdAt desc, b.id desc")
     List<Booking> findAdminSalonRecent(@Param("supplierId") Long supplierId, @Param("role") Role role, Pageable pageable);
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -131,7 +131,8 @@ public final class ApiDtos {
                                   BigDecimal originalPrice, String highlightText, boolean featured,
                                   String supplierImageUrl, String supplierBusinessType, int supplierReviewCount,
                                   boolean supplierDemo, boolean supplierNearbyFeatured, boolean supplierNewPartner,
-                                  Double supplierLatitude, Double supplierLongitude) {}
+                                  Double supplierLatitude, Double supplierLongitude,
+                                  long bookedOrCompletedCount) {}
     public record AvailabilityResponse(Long practitionerId, LocalDate date, List<LocalTime> availableSlots) {}
     public record CapacitySlotResponse(LocalTime time, int availablePractitioners, String state) {}
     public record ServiceCapacityResponse(LocalDate date, int qualifiedPractitioners,
