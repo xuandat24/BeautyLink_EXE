@@ -119,9 +119,9 @@ try {
   await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-  await page.screenshot({ path: '/tmp/beautylink-qr-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'backend/target/payos-qr-mobile.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.screenshot({ path: '/tmp/beautylink-qr-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'backend/target/payos-qr-desktop.png', fullPage: true });
   // Actual App router (not the harness) restores checkout even from an account/home route.
   await page.goto(`http://localhost:5173/?bookingPayment=${observedPayment.bookingId}#account`);
   await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).waitFor();
