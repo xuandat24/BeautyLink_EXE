@@ -15,10 +15,12 @@ function recoverable(error: unknown): boolean {
 export async function createWithRecovery(
   bookingId: number, create: () => Promise<PayOSPayment>, read: () => Promise<PayOSPayment>,
   current: () => boolean, wait: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms)),
+  onRecovery?: () => void,
 ): Promise<PayOSPayment> {
   try { return await create(); }
   catch (error) {
     if (!recoverable(error)) throw error;
+    if (current()) onRecovery?.();
     for (let attempt = 0; attempt < 3; attempt++) {
       if (!current()) throw new Error('Phiên đăng nhập đã thay đổi. Vui lòng đăng nhập lại từ lịch hẹn.');
       try {

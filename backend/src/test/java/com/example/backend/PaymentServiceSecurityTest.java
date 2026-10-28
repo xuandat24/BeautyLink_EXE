@@ -487,6 +487,23 @@ class PaymentServiceSecurityTest {
         assertEquals(false, result.verificationPending()); verify(gateway, never()).create(any());
     }
 
+    @Test void signedCreateIsFreshForExactlyExistingFifteenSecondPolicyAndUnknownResultCannotRenewIt() {
+        var at = Instant.parse("2026-10-28T03:00:00Z");
+        var b = payableBooking(198L, 500000); b.setAppointmentDate(LocalDate.of(2026,10,29));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "time", new com.example.backend.service.BookingCompletionPolicy(java.time.Clock.fixed(at, java.time.ZoneOffset.UTC)));
+        prepareCreate(b, "fresh-create");
+        var created = service.create(b.getCustomer(), b.getId(), new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_05,null));
+        assertEquals(15000, created.instructionsFreshForMs()); assertTrue(created.checkoutAllowed());
+        var payment = payments.findByOrderCodeForUpdate(created.orderCode()).orElseThrow(); lockPayment(payment);
+        var cached = service.status(b.getCustomer(), created.orderCode()); assertEquals(15000, cached.instructionsFreshForMs());
+        verify(gateway, never()).get(any());
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "time", new com.example.backend.service.BookingCompletionPolicy(java.time.Clock.fixed(at.plusSeconds(15), java.time.ZoneOffset.UTC)));
+        when(gateway.get(payment.getOrderCode())).thenThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY, "PAYOS_RECONCILIATION_FAILED", "Synthetic timeout"));
+        var uncertain = service.status(b.getCustomer(), created.orderCode());
+        assertEquals(0, uncertain.instructionsFreshForMs()); assertTrue(uncertain.verificationPending()); assertEquals(false, uncertain.checkoutAllowed());
+        assertEquals(null, uncertain.qrCode()); assertEquals(at, payment.getLastReconciledAt());
+    }
+
     private void prepareCreate(Booking booking, String paymentLinkId) {
         prepareCreate(booking,paymentLinkId,false);
     }

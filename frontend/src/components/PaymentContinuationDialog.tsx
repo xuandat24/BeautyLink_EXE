@@ -1,3 +1,4 @@
+import { CheckoutPreparation, type PreparationStage } from './CheckoutPreparation';
 import { CheckoutBrand } from './CheckoutBrand';
 import { PayOSCheckoutPage } from './PayOSCheckoutPage';
 import type { PayOSPayment } from '../types/beauty';
@@ -15,6 +16,7 @@ const formatMoney = (value: number | null | undefined) => value == null ? 'Đang
 
 export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: number; onClose: () => void }) {
   const { currentUser, setCurrentUser } = useBeautyStore();
+  const [preparationStage, setPreparationStage] = useState<PreparationStage>('VALIDATING');
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [activePayment, setActivePayment] = useState<PayOSPayment | null>(null);
   const [sessionRevision, setSessionRevision] = useState(0);
@@ -65,6 +67,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
       setError(quoteError || 'Số tiền chưa được máy chủ xác minh hoặc chưa thể thanh toán qua PayOS.');
       return;
     }
+    setPreparationStage('VALIDATING');
     submitting.current = true; setBusy(true); setError('');
     const version = generation.current, token = getAccessToken();
     const current = () => version === generation.current && bookingId === latestId.current && token !== null && token === getAccessToken();
@@ -74,7 +77,9 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
       if (fresh.id !== bookingId) throw new Error('Máy chủ trả về lịch hẹn không khớp.');
       if (!canPayBooking(fresh)) { setBooking(fresh); throw new Error('Lịch hẹn không còn được phép thanh toán. Vui lòng làm mới hoặc liên hệ hỗ trợ.'); }
       // Options are from server or explicit customer input, never restored browser payment data.
-      const payment = await beautyApi.createPayOSPayment(bookingId, { paymentOption: option, voucherCode: voucher.trim() || undefined });
+      setPreparationStage('PROVIDER');
+      const payment = await beautyApi.createPayOSPayment(bookingId, { paymentOption: option, voucherCode: voucher.trim() || undefined },
+        () => { if (current()) setPreparationStage('RECOVERING'); });
       if (!current()) return;
       if (!booking.paymentAttemptActive && quote && (payment.paymentOption !== quote.paymentOption
           || payment.amount !== quote.amount || payment.remainingAmount !== quote.remainingAmount)) {
@@ -101,6 +106,8 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
   const displayedQuote = quote?.paymentOption === option ? quote : null;
   const amount = booking?.paymentAttemptActive ? booking.paymentAmount : displayedQuote?.amount;
   const remaining = booking?.paymentAttemptActive ? booking.paymentRemainingAmount : displayedQuote?.remainingAmount;
+  if (busy && !contactDialogOpen) return <CheckoutPreparation serviceName={booking?.serviceName ?? 'Lịch hẹn của bạn'} supplierName={booking?.supplierName}
+    bookingCode={booking?.bookingCode} amount={amount} option={option} stage={preparationStage} onBack={onClose} />;
   return <div className="fixed inset-0 z-[140] grid place-items-center overflow-y-auto bg-slate-950/70 p-3 backdrop-blur-sm sm:p-6" role="dialog" aria-modal="true" aria-labelledby="payment-continue-title"
     onKeyDown={event => {
       if (event.key === 'Escape' && !busy) onClose();

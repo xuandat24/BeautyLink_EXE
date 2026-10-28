@@ -1,0 +1,358 @@
+{
+  "base_sha": "60a7399d986cfc30781331ee88d0eda29019d87f",
+  "instrumented_baseline_sha": "14260a5b843ff8202541c2fb2ef34933c56f1f42",
+  "date_local": "2026-10-28",
+  "environment": "Windows Node24.20.0, Chromium Playwright1.62.1, Linux Java21 Docker, isolated H2; Vite proxy; nearest-rank30 samples",
+  "notes": [
+    "No production merchant/transaction samples. Fake provider350ms create/250msGET for browser;20ms create for JDBC test.",
+    "Browser sampling run separately from builds/tests. First after QR sample includes screenshot overhead; P99 conservative. At n30 P99 is maximum, not a production tail guarantee.",
+    "pre_service includes JWT/session/current-account and MVC/JIT. JDBC is statement execution only; transaction spans include lock/acquisition/hydration/commit.",
+    "Public categories is workstation-to-SFO network reference only, not authenticated checkout or PayOS. Connect includes DNS/queue/TCP; zero means reused socket.",
+    "TLS benchmark is actual SDK + signed HTTPS localhost, not PayOS internet."
+  ],
+  "browser": {
+    "before": {
+      "fresh_shell_ms": {
+        "n": 30,
+        "p50": 822.5,
+        "p95": 839.8000000000466,
+        "p99": 1362.5999999998603
+      },
+      "fresh_qr_ms": {
+        "n": 30,
+        "p50": 1028.6999999999534,
+        "p95": 1144.8999999999069,
+        "p99": 1366.0999999998603
+      },
+      "qr_encoding_ms": {
+        "n": 60,
+        "p50": 13.299999999813735,
+        "p95": 19.9000000001397,
+        "p99": 27.199999999953434
+      },
+      "recovery_ms": {
+        "n": 30,
+        "p50": 326.69999999995343,
+        "p95": 340,
+        "p99": 341.5
+      },
+      "reuse_shell_ms": {
+        "n": 30,
+        "p50": 828.0999999998603,
+        "p95": 845.5999999998603,
+        "p99": 848
+      },
+      "reuse_qr_ms": {
+        "n": 30,
+        "p50": 831.3999999999069,
+        "p95": 849.0999999998603,
+        "p99": 853.3999999999069
+      },
+      "fresh_post_rtt_ms": {
+        "n": 30,
+        "p50": 679.425,
+        "p95": 692.017,
+        "p99": 837.254
+      },
+      "fresh_jdbc_ms": {
+        "n": 30,
+        "p50": 0.752,
+        "p95": 1.234,
+        "p99": 2.653
+      },
+      "fresh_pre_service_ms": {
+        "n": 30,
+        "p50": 3.138,
+        "p95": 8.237,
+        "p99": 85.215
+      },
+      "fresh_reserve_tx_ms": {
+        "n": 30,
+        "p50": 2.684,
+        "p95": 11.538,
+        "p99": 23.172
+      },
+      "fresh_provider_create_ms": {
+        "n": 30,
+        "p50": 350.658,
+        "p95": 351.5,
+        "p99": 365.813
+      },
+      "fresh_persist_tx_ms": {
+        "n": 30,
+        "p50": 3.807,
+        "p95": 9.706,
+        "p99": 31.643
+      },
+      "fresh_total_ms": {
+        "n": 30,
+        "p50": 361.409,
+        "p95": 375.812,
+        "p99": 516.742
+      },
+      "fresh_sql_statements": {
+        "n": 30,
+        "p50": 11,
+        "p95": 11,
+        "p99": 11
+      },
+      "reuse_post_rtt_ms": {
+        "n": 30,
+        "p50": 321.644,
+        "p95": 343.001,
+        "p99": 344.124
+      },
+      "reuse_jdbc_ms": {
+        "n": 30,
+        "p50": 0.231,
+        "p95": 0.543,
+        "p99": 0.813
+      },
+      "reuse_pre_service_ms": {
+        "n": 30,
+        "p50": 3.433,
+        "p95": 5.771,
+        "p99": 6.041
+      },
+      "reuse_reserve_tx_ms": {
+        "n": 30,
+        "p50": 2.184,
+        "p95": 5.346,
+        "p99": 5.855
+      },
+      "reuse_total_ms": {
+        "n": 30,
+        "p50": 6.462,
+        "p95": 15.307,
+        "p99": 17.945
+      },
+      "reuse_sql_statements": {
+        "n": 30,
+        "p50": 6,
+        "p95": 6,
+        "p99": 6
+      }
+    },
+    "after": {
+      "fresh_shell_ms": {
+        "n": 30,
+        "p50": 5.5,
+        "p95": 7.199999999720603,
+        "p99": 29.5
+      },
+      "fresh_qr_ms": {
+        "n": 30,
+        "p50": 816.7999999998137,
+        "p95": 851.6000000000931,
+        "p99": 908.7000000001863
+      },
+      "qr_encoding_ms": {
+        "n": 60,
+        "p50": 7,
+        "p95": 9.600000000093132,
+        "p99": 31.200000000186265
+      },
+      "recovery_ms": {
+        "n": 30,
+        "p50": 322.89999999990687,
+        "p95": 329.70000000018626,
+        "p99": 329.89999999990687
+      },
+      "reuse_shell_ms": {
+        "n": 30,
+        "p50": 5.5,
+        "p95": 6.300000000279397,
+        "p99": 7.599999999627471
+      },
+      "reuse_qr_ms": {
+        "n": 30,
+        "p50": 817.6000000000931,
+        "p95": 833.8000000002794,
+        "p99": 834
+      },
+      "fresh_post_rtt_ms": {
+        "n": 30,
+        "p50": 673.342,
+        "p95": 687.487,
+        "p99": 689.71
+      },
+      "fresh_jdbc_ms": {
+        "n": 30,
+        "p50": 0.725,
+        "p95": 0.973,
+        "p99": 1.045
+      },
+      "fresh_pre_service_ms": {
+        "n": 30,
+        "p50": 3.208,
+        "p95": 5.813,
+        "p99": 53.387
+      },
+      "fresh_reserve_tx_ms": {
+        "n": 30,
+        "p50": 2.841,
+        "p95": 5.202,
+        "p99": 20.855
+      },
+      "fresh_provider_create_ms": {
+        "n": 30,
+        "p50": 350.655,
+        "p95": 350.979,
+        "p99": 358.215
+      },
+      "fresh_persist_tx_ms": {
+        "n": 30,
+        "p50": 3.741,
+        "p95": 5.947,
+        "p99": 19.515
+      },
+      "fresh_total_ms": {
+        "n": 30,
+        "p50": 361.682,
+        "p95": 371.163,
+        "p99": 462.836
+      },
+      "fresh_sql_statements": {
+        "n": 30,
+        "p50": 11,
+        "p95": 11,
+        "p99": 11
+      },
+      "reuse_post_rtt_ms": {
+        "n": 30,
+        "p50": 316.483,
+        "p95": 330.605,
+        "p99": 338.828
+      },
+      "reuse_jdbc_ms": {
+        "n": 30,
+        "p50": 0.225,
+        "p95": 0.378,
+        "p99": 0.382
+      },
+      "reuse_pre_service_ms": {
+        "n": 30,
+        "p50": 3.155,
+        "p95": 6.685,
+        "p99": 6.989
+      },
+      "reuse_reserve_tx_ms": {
+        "n": 30,
+        "p50": 2.178,
+        "p95": 4.828,
+        "p99": 5.075
+      },
+      "reuse_total_ms": {
+        "n": 30,
+        "p50": 5.977,
+        "p95": 17.079,
+        "p99": 17.738
+      },
+      "reuse_sql_statements": {
+        "n": 30,
+        "p50": 6,
+        "p95": 6,
+        "p99": 6
+      }
+    },
+    "requests_before": {
+      "post": 60,
+      "status": 60
+    },
+    "requests_after": {
+      "post": 60,
+      "status": 0
+    }
+  },
+  "public_network": {
+    "connect": {
+      "n": 30,
+      "p50": 0,
+      "p95": 0,
+      "p99": 419.34259999999995
+    },
+    "tls": {
+      "n": 30,
+      "p50": 0,
+      "p95": 0,
+      "p99": 38.612300000000005
+    },
+    "ttfb": {
+      "n": 30,
+      "p50": 230.66890000000058,
+      "p95": 348.6849000000002,
+      "p99": 732.3494
+    },
+    "total": {
+      "n": 30,
+      "p50": 243.89019999999982,
+      "p95": 386.22979999999916,
+      "p99": 879.2754
+    }
+  },
+  "local_https_sdk": {
+    "per_operation": {
+      "p50_ms": 95.152852,
+      "p95_ms": 100.416986,
+      "tls_handshakes": 30,
+      "p99_ms": 109.566761,
+      "n": 30,
+      "tls_p50_ms": 4.650214
+    },
+    "pooled": {
+      "p50_ms": 45.529727,
+      "p95_ms": 51.312169,
+      "tls_handshakes": 1,
+      "p99_ms": 90.321985,
+      "n": 30,
+      "tls_p50_ms": 4.896945,
+      "tls_observation_count": 1,
+      "tls_scope": "one observed handshake; remaining29 requests reused the socket; CI artifact additionally reports per-request TLS cost including zeros"
+    }
+  },
+  "h2_jdbc_30": {
+    "jdbc": {
+      "n": 30,
+      "p99": 3.337,
+      "p50": 1.187,
+      "p95": 2.124
+    },
+    "pre_service": {
+      "n": 30,
+      "p99": 1146.83,
+      "p50": 4.92,
+      "p95": 10.635
+    },
+    "reserve_tx": {
+      "n": 30,
+      "p99": 101.822,
+      "p50": 4.621,
+      "p95": 19.633
+    },
+    "provider_create": {
+      "n": 30,
+      "p99": 54.484,
+      "p50": 20.558,
+      "p95": 20.823
+    },
+    "persist_tx": {
+      "n": 30,
+      "p99": 26.684,
+      "p50": 5.689,
+      "p95": 13.355
+    },
+    "total": {
+      "n": 30,
+      "p99": 1429.36,
+      "p50": 37.777,
+      "p95": 70.631
+    },
+    "sql_count": {
+      "n": 30,
+      "p99": 12.0,
+      "p50": 12.0,
+      "p95": 12.0
+    }
+  },
+  "live_payos": "NOT MEASURED — no approved live payment operation"
+}

@@ -27,6 +27,7 @@ try {
    await open.click();
    await page.locator('[data-checkout-state]').waitFor();
    add(`${mode}_shell_ms`,await page.evaluate(()=>performance.now()-window.__perfClick));
+   if(label==='after'&&i===0&&mode==='fresh')await page.screenshot({path:'backend/target/payos-preparation-desktop.png'});
    await page.getByRole('img',{name:/Mã QR PayOS/}).waitFor();
    add(`${mode}_qr_ms`,await page.evaluate(()=>performance.now()-window.__perfClick));
    const qrMs=await page.evaluate(()=>performance.getEntriesByName('beautylink-qr-render').at(-1)?.duration);add('qr_encoding_ms',qrMs);

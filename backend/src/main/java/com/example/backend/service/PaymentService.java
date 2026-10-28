@@ -202,6 +202,9 @@ public class PaymentService {
         transaction.setBankAccountNumber(provider.getAccountNumber());
         transaction.setBankAccountName(provider.getAccountName());
         transaction.setTransferDescription(provider.getDescription());
+        // Signed PENDING create identity/amount + committed instructions are a successful observation.
+        // The existing fifteen-second freshness policy still bounds reuse; unknown GETs never renew it.
+        transaction.setLastReconciledAt(time.now());
         return new CreationResult(response(transaction), null);
     }
 
@@ -572,11 +575,15 @@ public class PaymentService {
                 && booking.getPaymentStatus() == PaymentStatus.UNPAID && !manual && time.beforeStart(booking)
                 && !verificationPending && payment.getPaymentLinkId() != null && !payment.getPaymentLinkId().isBlank()
                 && attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).count() <= 1;
+        long freshForMs = checkoutAllowed && payment.getLastReconciledAt() != null
+                ? Math.max(0, java.time.Duration.between(time.now(), java.util.stream.Stream.of(
+                    payment.getLastReconciledAt().plusSeconds(15), payment.getExpiresAt(), BookingCompletionPolicy.startsAt(booking))
+                    .min(Instant::compareTo).orElseThrow()).toMillis()) : 0;
         return new PayOSPaymentResponse(booking.getId(), booking.getBookingCode(), payment.getOrderCode(),
                 payment.getPaymentLinkId(), checkoutAllowed && safeCheckoutUrl(payment.getCheckoutUrl()) ? payment.getCheckoutUrl() : null, payment.getAmount(), payment.getRemainingAmount(),
                 payment.getPaymentOption(), payment.getStatus(), manual, payment.getExpiresAt(),
                 checkoutAllowed && PayOSQrInstructions.usable(payment.getQrCode(), payment.getAmount()) ? payment.getQrCode() : null, checkoutAllowed ? payment.getBankBin() : null,
                 checkoutAllowed ? payment.getBankAccountNumber() : null, checkoutAllowed ? payment.getBankAccountName() : null,
-                checkoutAllowed ? payment.getTransferDescription() : null, checkoutAllowed, verificationPending);
+                checkoutAllowed ? payment.getTransferDescription() : null, checkoutAllowed, verificationPending, freshForMs);
     }
 }

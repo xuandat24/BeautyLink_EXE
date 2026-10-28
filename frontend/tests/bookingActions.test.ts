@@ -51,7 +51,7 @@ test('bookings hide paid/manual/legacy cancellation, guard double submit and rej
 });
 test('checkout retains booking after provider failure, rereads backend and blocks manual checkout', async () => {
   const { dom, root } = environment();
-  const originals = { create: beautyApi.createBooking, pay: beautyApi.createPayOSPayment, load: beautyApi.myBookings, quote: beautyApi.servicePaymentQuote, capacity: beautyApi.serviceCapacity };
+  const originals = { create: beautyApi.createBooking, pay: beautyApi.createPayOSPayment, load: beautyApi.myBooking, quote: beautyApi.servicePaymentQuote, capacity: beautyApi.serviceCapacity };
   let created = 0, payCalls = 0, readCalls = 0;
   beautyApi.createBooking = async () => { created++; return unpaid; };
   beautyApi.serviceCapacity = async (_id, date) => ({ date, qualifiedPractitioners: 1, slots: [{ time: '10:00', availablePractitioners: 1, state: 'AVAILABLE' }], reason: null });
@@ -59,7 +59,7 @@ test('checkout retains booking after provider failure, rereads backend and block
     amount: paymentOption === 'DEPOSIT_05' ? 25000 : 500000, remainingAmount: paymentOption === 'DEPOSIT_05' ? 475000 : 0,
     paymentOption, paymentAvailable: true, unavailableReason: null });
   beautyApi.createPayOSPayment = async () => { payCalls++; throw new Error('Provider timeout'); };
-  beautyApi.myBookings = async () => { readCalls++; return [{ ...unpaid, paymentEligible: false, paymentBlockerReason: 'PAYMENT_REVIEW_REQUIRED' }]; };
+  beautyApi.myBooking = async id => { assert.equal(id, unpaid.id); readCalls++; return { ...unpaid, paymentEligible: false, paymentBlockerReason: 'PAYMENT_REVIEW_REQUIRED' }; };
   const service: BackendService = { id: 1, name: 'Test service', supplierId: 1, supplierName: 'Test supplier', supplierAddress: '', supplierBusinessType: 'SPA', supplierReviewCount: 0, imageUrl: '', price: 500000, durationMinutes: 60, categorySlug: 'spa', rating: 0, practitioners: [] };
   const user = { id: 1, name: 'Customer', role: 'CUSTOMER', phone: '0900000001', email: 'test@example.test', bookingContactConfirmed: true } as CurrentUser;
   try {
@@ -71,5 +71,5 @@ test('checkout retains booking after provider failure, rereads backend and block
     await click('Mở thanh toán QR');
     assert.equal(created, 1); assert.equal(payCalls, 1); assert.equal(readCalls, 1);
     assert.match(document.body.textContent ?? '', /chưa được máy chủ cho phép/);
-  } finally { await act(async () => root.unmount()); beautyApi.createBooking = originals.create; beautyApi.createPayOSPayment = originals.pay; beautyApi.myBookings = originals.load; beautyApi.servicePaymentQuote = originals.quote; beautyApi.serviceCapacity = originals.capacity; dom.window.close(); }
+  } finally { await act(async () => root.unmount()); beautyApi.createBooking = originals.create; beautyApi.createPayOSPayment = originals.pay; beautyApi.myBooking = originals.load; beautyApi.servicePaymentQuote = originals.quote; beautyApi.serviceCapacity = originals.capacity; dom.window.close(); }
 });

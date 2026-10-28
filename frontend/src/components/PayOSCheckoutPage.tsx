@@ -4,7 +4,7 @@ import { ArrowLeft, CheckCircle2, Clock3, Copy, Download, QrCode, RefreshCw, Shi
 import QRCode from 'qrcode';
 import { beautyApi, getAccessToken } from '../services/beautyApi';
 import { safeCheckout } from '../lib/bookingPolicy';
-import { payableAttempt, retryDelay, samePayment, usableProviderQr, type QRCheckoutState } from '../lib/payosCheckout';
+import { payableAttempt, freshObservation, recordCheckoutDuration, retryDelay, samePayment, usableProviderQr, type QRCheckoutState } from '../lib/payosCheckout';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { subscribeSession } from '../lib/authSession';
 import type { BackendBooking, PayOSPayment } from '../types/beauty';
@@ -18,11 +18,12 @@ export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initial
   const [feedback, setFeedback] = useState('');
   const [now, setNow] = useState(Date.now());
   const [revision, setRevision] = useState(0);
-  const [checking, setChecking] = useState(true);
-  const [verified, setVerified] = useState(false);
   const [session] = useState(getAccessToken);
+  const [verified, setVerified] = useState(() => freshObservation(initialPayment, session) && payableAttempt(initialPayment, initialPayment.bookingId) && usableProviderQr(initialPayment.qrCode, initialPayment.amount));
+  const [checking, setChecking] = useState(!verified);
   const title = useRef<HTMLHeadingElement>(null);
   const autoRetryAllowed = useRef(true), reportedStatus = useRef('');
+  const verifiedByStatus = useRef(false);
   useBodyScrollLock(true);
   useEffect(() => subscribeSession(() => {
     if (session !== getAccessToken()) { setError('Phiên đăng nhập đã thay đổi. Vui lòng quay lại lịch hẹn.'); setQr(''); }
@@ -47,6 +48,7 @@ export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initial
         }
         setPayment(fresh); setVerified(true);
         if (fresh.verificationPending && !fresh.requiresManualReview && fresh.status !== 'REVIEW_REQUIRED') throw new Error('Provider verification deferred');
+        verifiedByStatus.current = true;
         setError(''); failures = 0;
         if (fresh.status !== 'PENDING' || fresh.requiresManualReview) {
           const key = `${fresh.status}:${fresh.requiresManualReview}`;
@@ -65,7 +67,11 @@ export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initial
       finally { if (active) setChecking(false); }
       if (active) timer = window.setTimeout(verify, delay);
     };
-    void verify(); return () => { active = false; controller.abort(); if (timer !== undefined) window.clearTimeout(timer); };
+    if (revision === 0 && freshObservation(initialPayment, session) && payableAttempt(initialPayment, initialPayment.bookingId)
+        && usableProviderQr(initialPayment.qrCode, initialPayment.amount)) {
+      setChecking(false); timer = window.setTimeout(verify, 5000);
+    } else void verify();
+    return () => { active = false; controller.abort(); if (timer !== undefined) window.clearTimeout(timer); };
   }, [initialPayment.bookingId, initialPayment.orderCode, initialPayment.paymentLinkId, session, revision]);
   useEffect(() => {
     const reconnect = () => { if (autoRetryAllowed.current && session === getAccessToken()) setRevision(value => value + 1); };
@@ -77,7 +83,8 @@ export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initial
   const seconds = Number.isFinite(expiry) ? Math.max(0, Math.ceil((expiry - now) / 1000)) : 0;
   const manual = payment.requiresManualReview || payment.status === 'REVIEW_REQUIRED';
   const paid = verified && payment.status === 'PAID' && !manual && session === getAccessToken() && !error;
-  const pending = verified && !error && session === getAccessToken() && payableAttempt(payment, initialPayment.bookingId, now);
+  const pending = verified && !error && session === getAccessToken() && payableAttempt(payment, initialPayment.bookingId, now)
+    && (verifiedByStatus.current || payment.instructionsFreshForMs === undefined || freshObservation(payment, session));
   const ready = pending && usableProviderQr(payment.qrCode, payment.amount);
   const state: QRCheckoutState = error || session !== getAccessToken() ? 'NETWORK_ERROR' : !verified ? 'INITIALIZING' : manual ? 'REVIEW_REQUIRED' : paid ? 'PAID'
     : payment.status === 'EXPIRED' ? 'EXPIRED' : payment.status === 'CANCELLED' || payment.status === 'FAILED' ? 'CANCELLED' : !pending ? 'VERIFYING' : ready ? 'PENDING' : 'QR_UNAVAILABLE';
@@ -85,7 +92,7 @@ export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initial
   useEffect(() => {
     let active = true; setQr('');
     const qrStarted = performance.now();
-    if (ready && payment.qrCode) QRCode.toDataURL(payment.qrCode, { width: 720, margin: 4, errorCorrectionLevel: 'M' }).then(v => { if (active) { performance.measure('beautylink-qr-render', { start: qrStarted, end: performance.now() }); setQr(v); } }).catch(() => { if (active) setError('Không thể hiển thị QR. Vui lòng kiểm tra lại trạng thái.'); });
+    if (ready && payment.qrCode) QRCode.toDataURL(payment.qrCode, { width: 720, margin: 4, errorCorrectionLevel: 'M' }).then(v => { if (active) { recordCheckoutDuration('beautylink-qr-render', qrStarted); setQr(v); } }).catch(() => { if (active) setError('Không thể hiển thị QR. Vui lòng kiểm tra lại trạng thái.'); });
     return () => { active = false; };
   }, [ready, payment.qrCode]);
   const copy = async (label: string, value: string) => {

@@ -27,6 +27,7 @@ public final class CheckoutTrace {
     public static <T> T measure(String stage, Supplier<T> action) {
         long start = System.nanoTime(); try { return action.get(); } finally { add(stage, System.nanoTime() - start); }
     }
+    public static void record(String stage, long ns) { add(stage, ns); }
     private static void add(String stage, long ns) { var s = CURRENT.get(); if (s != null) s.timings.merge(stage, ns / 1_000_000d, Double::sum); }
     public static void sqlStart() { var s = CURRENT.get(); if (s != null) s.jdbcStarted = System.nanoTime(); }
     public static void sqlEnd() { var s = CURRENT.get(); if (s != null && s.jdbcStarted != 0) { s.statements++; add("jdbc", System.nanoTime() - s.jdbcStarted); s.jdbcStarted = 0; } }

@@ -25,7 +25,9 @@ public class CheckoutTimingFilter extends OncePerRequestFilter {
         // Generated here, not taken from arbitrary client input or a booking identifier.
         buffered.setHeader("X-Checkout-Request-ID", sample.id);
         buffered.addHeader("Access-Control-Expose-Headers", "X-Checkout-Request-ID, Server-Timing, X-Checkout-SQL-Count");
-        String operation = request.getMethod().equals("POST") ? "post" : "get";
+        String path = request.getRequestURI();
+        String operation = path.endsWith("/webhook") ? "webhook" : path.endsWith("/current") ? "recovery"
+                : path.endsWith("/quote") ? "quote" : request.getMethod().equals("POST") ? "create" : "status";
         try { chain.doFilter(request, buffered); }
         finally {
             CheckoutTrace.finish();
