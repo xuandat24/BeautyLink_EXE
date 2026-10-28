@@ -31,4 +31,22 @@ class PayOSQrMigrationTest {
             } finally {sql.execute("DROP TABLE qr_transfer_migration_probe");}
         }
     }
+
+    @Test void reviewAdditionsKeepLegacyRowsAndSupportBothReminderTypes() throws Exception {
+        try(var connection=DriverManager.getConnection(System.getenv("REVIEW_TEST_JDBC_URL"),System.getenv("REVIEW_TEST_USERNAME"),System.getenv("REVIEW_TEST_PASSWORD"));var sql=connection.createStatement()) {
+            sql.execute("CREATE TABLE review_photo_probe (id BIGINT PRIMARY KEY, rating INT NOT NULL)");
+            sql.execute("CREATE TABLE review_email_probe (id BIGINT PRIMARY KEY, notification_type ENUM('BOOKING_PAYMENT_CONFIRMED') NOT NULL)");
+            try {
+                sql.execute("INSERT INTO review_photo_probe VALUES(1,5)"); sql.execute("INSERT INTO review_email_probe VALUES(1,'BOOKING_PAYMENT_CONFIRMED')");
+                String migration;
+                try(var stream=getClass().getResourceAsStream("/db/migration/mysql/V20261028_01__review_photos_midpoint.sql")) {
+                    migration=new String(stream.readAllBytes(),StandardCharsets.UTF_8).replaceAll("(?m)^--.*$","").replace("booking_reviews","review_photo_probe").replace("email_notification_outbox","review_email_probe");
+                }
+                for(String statement:migration.split(";")) if(!statement.isBlank()) sql.execute(statement.strip());
+                try(var rows=sql.executeQuery("SELECT rating,eligible_at,images_json FROM review_photo_probe")) {assertTrue(rows.next());assertEquals(5,rows.getInt(1));assertNull(rows.getObject(2));assertNull(rows.getString(3));}
+                sql.execute("INSERT INTO review_email_probe VALUES(2,'REVIEW_MIDPOINT'),(3,'REVIEW_COMPLETED')");
+                try(var rows=sql.executeQuery("SELECT COUNT(*) FROM review_email_probe")) {assertTrue(rows.next());assertEquals(3,rows.getInt(1));}
+            } finally { sql.execute("DROP TABLE review_photo_probe"); sql.execute("DROP TABLE review_email_probe"); }
+        }
+    }
 }

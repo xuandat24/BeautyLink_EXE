@@ -39,7 +39,6 @@ import static com.example.backend.model.DomainEnums.*;
 @Service
 public class PaymentService {
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
-    private static final long CHECKOUT_TTL_SECONDS = 15 * 60;
 
     private final PaymentTransactionRepository payments;
     private final BookingRepository bookings;
@@ -145,6 +144,8 @@ public class PaymentService {
         }
         if (BookingPaymentPolicy.unresolved(attempts) || isPaid(booking))
             return new Creation(bookingId, null, null, BookingPaymentPolicy.manual(attempts) ? manualError() : isPaid(booking) ? paidCancellationError() : reconcilingError());
+        if (!BookingCompletionPolicy.holdUntil(booking).isAfter(time.now()))
+            return new Creation(bookingId, null, null, conflict("BOOKING_HOLD_EXPIRED", "Lịch hẹn đã hết thời gian giữ chỗ. Vui lòng đặt lịch mới."));
         BookingContactPolicy.requireReady(customer);
         if (booking.getStatus() == BookingStatus.CANCELLED) reopenReleasedSlot(booking);
         PaymentQuoteResponse quote = paymentQuotes.calculate(booking.getTotalAmount(), request.paymentOption(), voucherCode);
@@ -159,7 +160,7 @@ public class PaymentService {
         transaction.setPaymentOption(request.paymentOption());
         transaction.setVoucherCode(voucherCode);
         transaction.setStatus(PaymentTransactionStatus.PENDING);
-        Instant expiry = time.now().plusSeconds(CHECKOUT_TTL_SECONDS);
+        Instant expiry = BookingCompletionPolicy.holdUntil(booking);
         transaction.setExpiresAt(expiry.isBefore(BookingCompletionPolicy.startsAt(booking)) ? expiry : BookingCompletionPolicy.startsAt(booking));
         payments.saveAndFlush(transaction);
 
@@ -291,7 +292,10 @@ public class PaymentService {
         PaymentTransaction payment = payments.findByIdForUpdate(paymentId).orElse(null);
         if (payment != null && !bookingId.equals(payment.getBooking().getId())) throw notFound();
         if (payment == null || !needsReconciliation(payment)) return;
-        reconcileLocked(payment);
+        boolean verified = reconcileLocked(payment);
+        if (verified && payment.getStatus() == PaymentTransactionStatus.PENDING
+                && !BookingCompletionPolicy.holdUntil(payment.getBooking()).isAfter(time.now()))
+            cancelUnpaidLocked(payment.getBooking()); // uncertainty commits its manual flag; never release on timeout
     }
 
     // Every writer serializes on the booking before touching any of its payment attempts.
@@ -438,7 +442,7 @@ public class PaymentService {
                 && !BookingPaymentPolicy.unresolved(payments.findAllByBookingIdForUpdate(booking.getId()))) {
             booking.setStatus(BookingStatus.CANCELLED);
             booking.setPaymentStatus(PaymentStatus.UNPAID);
-            booking.setPaymentRetryAllowed(true);
+            booking.setPaymentRetryAllowed(BookingCompletionPolicy.holdUntil(booking).isAfter(time.now()));
         }
         log.info("PayOS payment closed orderCode={} status={} source={}", payment.getOrderCode(), status, source);
     }
@@ -551,9 +555,9 @@ public class PaymentService {
                         else requireManualReview(p, "cancel-raced-with-payment");
                         return BookingPaymentPolicy.manual(attempts) ? manualError() : paidCancellationError();
                     }
-                    if (closed.getStatus() != PaymentLinkStatus.CANCELLED || closed.getAmountPaid() == null) return uncertainCancellation(p);
+                    if ((closed.getStatus() != PaymentLinkStatus.CANCELLED && closed.getStatus() != PaymentLinkStatus.EXPIRED && closed.getStatus() != PaymentLinkStatus.FAILED) || closed.getAmountPaid() == null) return uncertainCancellation(p);
                     if (closed.getAmountPaid() != 0) { requireManualReview(p, "cancel-link-received-money"); return manualError(); }
-                    p.setStatus(PaymentTransactionStatus.CANCELLED); p.setLastReconciledAt(time.now());
+                    p.setStatus(PaymentTransactionStatus.valueOf(closed.getStatus().name())); p.setLastReconciledAt(time.now());
                 } catch (ApiException error) { return uncertainCancellation(p); }
             }
         }
@@ -572,7 +576,7 @@ public class PaymentService {
         boolean manual = payment.isRequiresManualReview() || BookingPaymentPolicy.manual(attempts);
         boolean checkoutAllowed = payment.getStatus() == PaymentTransactionStatus.PENDING && !isExpired(payment)
                 && booking.getStatus() != BookingStatus.CANCELLED && booking.getStatus() != BookingStatus.COMPLETED
-                && booking.getPaymentStatus() == PaymentStatus.UNPAID && !manual && time.beforeStart(booking)
+                && booking.getPaymentStatus() == PaymentStatus.UNPAID && !manual && time.beforeStart(booking) && BookingCompletionPolicy.holdUntil(booking).isAfter(time.now())
                 && !verificationPending && payment.getPaymentLinkId() != null && !payment.getPaymentLinkId().isBlank()
                 && attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).count() <= 1;
         long freshForMs = checkoutAllowed && payment.getLastReconciledAt() != null

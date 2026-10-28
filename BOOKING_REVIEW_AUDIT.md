@@ -1,5 +1,31 @@
 # BeautyLink booking and verified-review audit
 
+## Current change — 2026-10-28: history synchronization, 12-minute hold, midpoint/photo feedback
+
+This section supersedes the older COMPLETED-only review policy below. Base: `53e292af4cb51fc90f328870b0865cca2cc4845a`.
+No production data, mail, payments, DDL, merge or deployment is performed by this change.
+
+| Requirement | Code / invariant | Regression evidence |
+| --- | --- | --- |
+| Paid history cannot invite a duplicate payment | BookingsPage + bookingHistorySync use GET current attempt then reload the owned booking; max two concurrent requests, no POST. Withhold checkout while checking or inconclusive; account/credential-epoch and load-generation guards. Poll visible history every 30s and on visibility/return; keep cards mounted. | bookingHistorySync.test.ts, bookingActions.test.ts; existing real Spring/JWT/fake-gateway browser smoke |
+| 12-minute unpaid hold | One deadline = booking.createdAt + 720s, capped by appointment start. No-attempt expiry locks/rechecks; attempts release only after verified terminal zero. Older provider links are safely cancelled by reconciliation after the deadline; unknown/timeout/manual cases retain slot/blocker. A timed-out cancellation receiving later PAID retains manual evidence. | PaymentCancellationSafetyTest exact boundary, timeout, late receipt and normal paid cases |
+| No expired checkout/retry | Shared deadline gates booking capabilities, QR response, new attempts and ADMIN zero-money retry proposal. Early, provider-verified closure can retain the previously supported retry inside the original hold; customer-cancelled bookings never reopen. | Existing retry/slot/concurrency matrix plus deadline tests |
+| Midpoint reviews | CONFIRMED paid/deposit-paid owner can review from scheduled midpoint (Vietnam time), including overnight appointments. COMPLETED eligibility remains compatible. Pending/manual secondary attempts still block write/public aggregates. Completion itself still requires scheduled end. | BookingLifecycleTest, BookingReviewReleaseTest, existing cancellation/manual matrix |
+| Public photos + reload/edit | Up to 3 raster JPG/PNG/WEBP images. Existing image preparer, content validator and Cloudinary rollback cleanup. Only own stored review images can be retained; new arbitrary URLs/SVG/invalid content rejected. Two review targets remain unique. | reviewPhotos.test.ts, public list/rating/count + persisted-image integration and browser upload/reload |
+| Two feedback reminders maximum | Existing durable outbox, unique per booking/type/customer. Midpoint queued on canonical PAID, completion queued on actual COMPLETED. No old midpoint replay after end, no historical backfill. Any feedback target suppresses both further reminders. | Real payment/completion entrypoint tests, duplicate webhook, scheduled job tests |
+| Feedback/send race | Read-committed booking-first lock serializes review commit with pre-send eligibility/feedback check. Suppressed jobs remain auditable SKIPPED. An email already accepted by provider cannot be recalled; stable provider idempotency key handles ambiguous acknowledgement. | Real database row-lock feedback/reminder concurrency test |
+
+Schema necessity: existing booking_reviews has no image list or persisted authorization instant for public
+mid-service reviews. Add only nullable `images_json` and `eligible_at`; legacy completed reviews stay visible.
+The authorization instant keeps public lists/counts/ratings aligned without MySQL/session-timezone arithmetic.
+Widen existing outbox type storage to VARCHAR(50) if Hibernate originally generated a native ENUM.
+Migration: `backend/src/main/resources/db/migration/mysql/V20261028_01__review_photos_midpoint.sql`.
+The existing MySQL migration probe suite tests preservation of legacy rows and new reminder types.
+
+Frontend lint/tests/build, backend Java21 verify, isolated MySQL migration/concurrency and browser jobs
+must pass at the final PR HEAD. Provider/mail tests are simulated and establish no real transfer/mail delivery.
+
+
 ## Final convergence fix (baseline 87409c11, 13 October 2026)
 
 | Verified defect | Minimal correction | Behavioral evidence |

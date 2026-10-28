@@ -33,7 +33,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByPractitionerIdAndAppointmentDateBetweenAndStatusNot(Long practitionerId, LocalDate first, LocalDate last, BookingStatus status);
     List<Booking> findByPractitionerIdAndAppointmentDateGreaterThanEqualAndStatusNot(Long practitionerId, LocalDate date, BookingStatus status);
     @Query("select b.id from Booking b where b.status = :pending and b.paymentStatus = :unpaid " +
-            "and b.createdAt < :before and not exists (select p.id from PaymentTransaction p where p.booking = b) order by b.createdAt, b.id")
+            "and b.createdAt <= :before and not exists (select p.id from PaymentTransaction p where p.booking = b) order by b.createdAt, b.id")
     List<Long> findUnpaidUnstartedHoldIds(@Param("pending") BookingStatus pending,
             @Param("unpaid") PaymentStatus unpaid, @Param("before") Instant before, Pageable pageable);
 

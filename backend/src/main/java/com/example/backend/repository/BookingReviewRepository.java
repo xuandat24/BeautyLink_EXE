@@ -11,12 +11,15 @@ import java.util.Optional;
 import java.util.List;
 
 public interface BookingReviewRepository extends JpaRepository<BookingReview, Long> {
-    String VALID_BOOKING = "r.booking.status = :#{T(com.example.backend.model.DomainEnums.BookingStatus).COMPLETED} "
+    String VALID_BOOKING = "(r.booking.status = :#{T(com.example.backend.model.DomainEnums.BookingStatus).COMPLETED} "
+            + "or (r.booking.status = :#{T(com.example.backend.model.DomainEnums.BookingStatus).CONFIRMED} "
+            + "and r.eligibleAt is not null and r.eligibleAt <= CURRENT_TIMESTAMP and r.createdAt >= r.eligibleAt)) "
             + "and r.booking.paymentStatus in (:#{T(com.example.backend.model.DomainEnums.PaymentStatus).PAID}, "
             + ":#{T(com.example.backend.model.DomainEnums.PaymentStatus).PARTIALLY_PAID}) and r.rating between 1 and 5 "
             + "and not exists (select p.id from PaymentTransaction p where p.booking.id = r.booking.id and "
             + "(p.requiresManualReview = true or p.status in (:#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).PENDING}, "
             + ":#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).REVIEW_REQUIRED})))";
+    boolean existsByBookingId(Long bookingId);
     Optional<BookingReview> findByBookingIdAndTargetType(Long bookingId, ReviewTargetType targetType);
     @Query(value = "select r from BookingReview r join fetch r.supplier join fetch r.service where (:demo = true or r.supplier.demoData = false) and " + VALID_BOOKING + " order by r.createdAt desc, r.id desc",
             countQuery = "select count(r) from BookingReview r where (:demo = true or r.supplier.demoData = false) and " + VALID_BOOKING)

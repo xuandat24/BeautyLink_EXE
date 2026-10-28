@@ -73,3 +73,21 @@ test('checkout retains booking after provider failure, rereads backend and block
     assert.match(document.body.textContent ?? '', /chưa được máy chủ cho phép/);
   } finally { await act(async () => root.unmount()); beautyApi.createBooking = originals.create; beautyApi.createPayOSPayment = originals.pay; beautyApi.myBooking = originals.load; beautyApi.servicePaymentQuote = originals.quote; beautyApi.serviceCapacity = originals.capacity; dom.window.close(); }
 });
+
+
+test('history keeps checkout hidden until provider reconciliation and shows paid instead of stale unpaid', async () => {
+  const { dom, root } = environment();
+  const originals = { list: beautyApi.myBookings, status: beautyApi.currentBookingPayment, one: beautyApi.myBooking };
+  let finish!: (p: any) => void;
+  beautyApi.myBookings = async () => [{ ...unpaid, paymentOption: 'DEPOSIT_05' }];
+  beautyApi.currentBookingPayment = () => new Promise(resolve => { finish = resolve; });
+  beautyApi.myBooking = async () => ({ ...unpaid, status: 'CONFIRMED', paymentStatus: 'PARTIALLY_PAID', paymentOption: 'DEPOSIT_05', paymentEligible: false });
+  try {
+    await act(async () => root.render(React.createElement(BookingsPage, { onBack() {}, onBookNew() {} })));
+    assert.match(document.body.textContent ?? '', /Đang đối soát/);
+    assert.equal([...document.querySelectorAll('button')].some(b => b.textContent?.includes('Tiếp tục thanh toán')), false);
+    await act(async () => finish({ bookingId: 1, status: 'PAID', requiresManualReview: false }));
+    assert.match(document.body.textContent ?? '', /Đã cọc 5%/);
+    assert.equal([...document.querySelectorAll('button')].some(b => b.textContent?.includes('Tiếp tục thanh toán')), false);
+  } finally { await act(async () => root.unmount()); Object.assign(beautyApi, { myBookings: originals.list, currentBookingPayment: originals.status, myBooking: originals.one }); dom.window.close(); }
+});

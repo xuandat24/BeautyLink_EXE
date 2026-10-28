@@ -96,7 +96,7 @@ public class CatalogService {
     }
     private PublicReviewResponse publicReview(BookingReview review) {
         return new PublicReviewResponse(review.getId(), review.getTargetType(), review.getRating(), review.getComment(),
-                maskedName(review.getCustomer().getFullName()), review.getService().getId(), review.getService().getName(), review.getCreatedAt());
+                maskedName(review.getCustomer().getFullName()), review.getService().getId(), review.getService().getName(), review.getCreatedAt(), review.getImages());
     }
     private LocationResponse location(Location l) { return new LocationResponse(l.getId(), l.getName(), l.getSlug(), l.getType(), l.getParent() == null ? null : l.getParent().getId()); }
     private CategoryResponse category(ServiceCategory c) { return new CategoryResponse(c.getId(), c.getSlug(), c.getName(), c.getDescription(), c.getImageUrl()); }

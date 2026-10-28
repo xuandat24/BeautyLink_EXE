@@ -141,10 +141,10 @@ The historical `last_reconciled_at` value alone is not proof the link was closed
 | PENDING/UNPAID, no attempt | Allowed, idempotent | No | Future valid booking only |
 | PENDING/UNPAID, valid pending link | GET then verified cancel/zero received | No | Same valid attempt only |
 | Unknown cancel/get/create result | No claimed success; no guessed slot release | Blocked | Blocked; reconcile/support |
-| CONFIRMED/PAID or PARTIALLY_PAID | 409, contact support | Owner CUSTOMER after HCM end; review only after completion | No balance/recharge |
+| CONFIRMED/PAID or PARTIALLY_PAID | 409, contact support | Owner completion after HCM end; paid owner review from scheduled midpoint | No balance/recharge |
 | COMPLETED/PAID or PARTIALLY_PAID | No | Idempotent completion; editable SERVICE + SUPPLIER 1–5 reviews | No |
 | CANCELLED by customer | Idempotent confirmed cancellation only | No | Never reuse/retry |
-| CANCELLED after provider expiry/failure | May explicitly cancel instead of retry | No | Retry only verified closed attempts + full valid slot |
+| CANCELLED after provider expiry/failure | May explicitly cancel instead of retry | No | Retry only verified closed attempts + full valid slot + original 12-minute hold still open |
 | REFUNDED | No automatic state change | No review | No |
 | Any unresolved PENDING/manual attempt | Unsafe actions withheld | Blocked, including public review aggregates | No new checkout |
 
@@ -311,3 +311,45 @@ backend. Backend failure: hold frontend and use a reviewed safe image/forward fi
 nor feature baseline 87409c1 is a safe *automatic* rollback for these payment/review bugs. If no safe image
 exists, owner must approve an incident containment plan that keeps webhook receipt running; no silent
 return to unsafe cancellation/review behavior and no production DB restore for a code-only fault.
+
+
+## 2026-10-28 rollout: history, 12-minute hold, midpoint reviews and photos
+
+- Review opening is the **scheduled** midpoint in Asia/Ho_Chi_Minh, not verified attendance. There is no
+  check-in feature. Midpoint does not mark a booking COMPLETED. All-attempt manual/pending blockers remain.
+- Hold starts at booking creation, not first payment click. Reconciliation/expiry scans are bounded batches
+  every minute with existing provider throttling; cancellation may be observed shortly after 12 minutes.
+  Uncertain money/identity/provider failures may retain the slot longer by design. Never clear them by timer.
+- History reads current existing PayOS attempts, reloads authoritative booking status, and stops another
+  checkout while inconclusive. A provider-verified early closure can still retry within the original hold;
+  automatic hold expiry and customer cancellation do not open another checkout on that booking.
+- Customer review images are public (max 3; validated JPEG/PNG/WEBP, prepared <=800KB each). Do not upload
+  identity documents/private information. Existing Cloudinary signed upload/rollback cleanup is reused.
+  Explicit legacy storage mode remains compatible; enable/verify Cloudinary in staging before rollout.
+
+Deployment (separate owner approval; no automatic production action):
+1. Review exact final PR SHA and its four CI jobs. Verify a current backup/isolated restore as usual.
+2. Inspect schema read-only: booking_reviews and email_notification_outbox. If the outbox is absent, apply
+   the existing `backend/src/main/resources/db/booking-email-outbox.sql` first. With explicit DDL approval,
+   apply `V20261028_01__review_photos_midpoint.sql` once; confirm nullable eligible_at/images_json and
+   notification_type VARCHAR(50). The SQL folder is manual; committing a file does not execute it.
+3. Backend first; keep new reminder dispatch disabled during staging validation. Existing
+   BOOKING_EMAIL_ENABLED controls all booking mail; BOOKING_EMAIL_FEEDBACK_ENABLED=false suppresses only
+   the new reminders (default true when booking mail is enabled). Use existing verified sender/domain and
+   FRONTEND_PUBLIC_URL. Do not change secrets automatically. No historical email backfill is performed.
+4. In isolated/staging data validate deposit/full/history refresh, expired zero cancellation vs unknown
+   retained slot, midpoint review/photo reload/public list, and both reminder milestones with a mail sink.
+   The midpoint job must be due at the stored scheduled midpoint, second only after actual completion.
+   Review before a pending send must produce SKIPPED without contacting the sender.
+5. Frontend after backend/schema smoke. Check mobile history, QR return and image selection/save. Do not
+   create production bookings/payments or send test mail to customers. Controlled real PayOS/mail smoke
+   needs separate authorized booking/account/recipient/amount and handling instructions.
+6. Existing signed webhook and server reconciliation remain the sole proof of paid. Do not use the
+   redirect query, countdown, screenshot, customer report or a plain HTTP200 as payment proof.
+
+Rollback: disable feedback reminders and pause the email dispatcher before reverting to code whose enum
+cannot read REVIEW_MIDPOINT/REVIEW_COMPLETED. Preserve outbox rows, new nullable columns, receipts and
+reviews; do not restore production DB or delete jobs to fix code. Prefer a forward fix if rolling back
+would reintroduce a payment safety defect. Mail already accepted by the provider cannot be recalled.
+The new sender serializes against feedback under a booking lock; provider timeouts use the existing
+bounded retry/idempotency mechanism and can delay competing operations on that single booking.

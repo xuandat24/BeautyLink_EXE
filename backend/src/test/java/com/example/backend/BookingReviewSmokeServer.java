@@ -82,6 +82,14 @@ public class BookingReviewSmokeServer {
                 if (i == 5) org.springframework.test.util.ReflectionTestUtils.setField(b, "createdAt", Instant.now().minusSeconds(10 * 86400));
                 bookings.save(b);
             }
+            {
+                var local = ZonedDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+                var start = local.minusMinutes(35); var end = local.plusMinutes(25);
+                Booking b = new Booking(); b.setBookingCode("SMOKE-MIDPOINT"); b.setCustomer(users.findByPhone("0900000001").orElseThrow());
+                b.setService(offering); b.setSupplier(offering.getSupplier()); b.setPractitioner(people.findBySupplierIdAndActiveTrue(offering.getSupplier().getId()).getFirst());
+                b.setAppointmentDate(start.toLocalDate()); b.setStartTime(start.toLocalTime()); b.setEndTime(end.toLocalTime());
+                b.setTotalAmount(offering.getPrice()); b.setStatus(BookingStatus.CONFIRMED); b.setPaymentStatus(PaymentStatus.PARTIALLY_PAID); bookings.save(b);
+            }
             for (int i = 0; i < 5; i++) {
                 Booking b = new Booking(); b.setBookingCode(new String[]{"SMOKE-PENDING-LINK", "SMOKE-MANUAL", "SMOKE-RESUME", "SMOKE-RETRY", "SMOKE-UNCERTAIN-PAID"}[i]);
                 b.setCustomer(users.findByPhone("0900000001").orElseThrow()); b.setService(offering); b.setSupplier(offering.getSupplier());

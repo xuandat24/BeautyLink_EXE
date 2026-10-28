@@ -26,7 +26,7 @@ public class BookingHoldExpiryService {
 
     public List<Long> candidates() {
         return bookings.findUnpaidUnstartedHoldIds(BookingStatus.PENDING, PaymentStatus.UNPAID,
-                time.now().minusSeconds(15 * 60), PageRequest.of(0, 100));
+                time.now().minusSeconds(BookingCompletionPolicy.HOLD_SECONDS), PageRequest.of(0, 100));
     }
 
     @Transactional
@@ -34,7 +34,7 @@ public class BookingHoldExpiryService {
         Booking booking = bookings.findByIdForUpdate(bookingId).orElse(null);
         if (booking == null || booking.getStatus() != BookingStatus.PENDING
                 || booking.getPaymentStatus() != PaymentStatus.UNPAID
-                || !booking.getCreatedAt().isBefore(time.now().minusSeconds(15 * 60))
+                || BookingCompletionPolicy.holdUntil(booking).isAfter(time.now())
                 || payments.findFirstByBookingIdOrderByCreatedAtDesc(bookingId).isPresent()) return;
         booking.setStatus(BookingStatus.CANCELLED);
         booking.setPaymentRetryAllowed(false);

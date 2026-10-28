@@ -18,6 +18,8 @@ import { AppointmentShareModal } from './AppointmentShareModal';
 import { supportReportSchema, FieldErrors, zodFieldErrors } from '../lib/validation';
 import { FieldError } from './FieldError';
 import { ServiceReviewModal } from './ServiceReviewModal';
+import { needsPaymentSync, reconcileHistoryPayment } from '../lib/bookingHistorySync';
+import { sessionCredentialEpoch } from '../lib/authSession';
 import { canCancelBooking, canPayBooking, canCompleteBooking, canReviewBooking, paymentSupportMessage } from '../lib/bookingPolicy';
 import { PaymentContinuationDialog } from './PaymentContinuationDialog';
 import { paymentBookingId, setPaymentBookingId } from '../lib/paymentNavigation';
@@ -71,6 +73,8 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
   const alive = useRef(false);
   const loadVersion = useRef(0);
   const actionBusy = useRef(false);
+  const syncInFlight = useRef(false);
+  const [checkingPayments, setCheckingPayments] = useState<number[]>([]);
 
   // Lock body scroll when report modal is open
   useBodyScrollLock(Boolean(reportBooking || confirmingBooking));
@@ -85,15 +89,32 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [reportBooking, confirmingBooking, completingId]);
 
-  const loadBookings = useCallback(async (keepError = false) => {
+  const loadBookings = useCallback(async (keepError = false, silent = false) => {
+    if (silent && syncInFlight.current) return;
     const version = ++loadVersion.current;
-    const token = getAccessToken();
-    const current = () => alive.current && version === loadVersion.current && token === getAccessToken();
-    setLoading(true);
+    const token = getAccessToken(), epoch = sessionCredentialEpoch();
+    const current = () => alive.current && version === loadVersion.current && token === getAccessToken() && epoch === sessionCredentialEpoch();
+    syncInFlight.current = true;
+    if (!silent) setLoading(true);
     if (!keepError) setError('');
-    try { const data = await beautyApi.myBookings(); if (current()) setBookings(data); }
-    catch (err) { if (current()) { setBookings([]); setError(getApiErrorMessage(err, 'Không thể tải danh sách lịch hẹn.')); } }
-    finally { if (current()) setLoading(false); }
+    try {
+      const data = await beautyApi.myBookings();
+      if (!current()) return;
+      const pending = data.filter(needsPaymentSync);
+      setBookings(data); setCheckingPayments(pending.map(b => b.id)); setLoading(false);
+      let index = 0;
+      const worker = async () => {
+        while (index < pending.length && current()) {
+          const b = pending[index++];
+          const updated = await reconcileHistoryPayment(b, beautyApi.currentBookingPayment, beautyApi.myBooking);
+          if (!current()) return;
+          setBookings(items => items.map(item => item.id === b.id ? updated : item));
+          setCheckingPayments(ids => ids.filter(id => id !== b.id));
+        }
+      };
+      await Promise.all([worker(), worker()]); // Bounded, no overlapping polling or attempt creation.
+    } catch (err) { if (current()) { if (!silent) setBookings([]); setError(getApiErrorMessage(err, 'Không thể cập nhật lịch hẹn. Vui lòng làm mới.')); } }
+    finally { if (current()) { setLoading(false); setCheckingPayments([]); syncInFlight.current = false; } }
   }, []);
 
   useEffect(() => {
@@ -109,9 +130,12 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
     return () => { window.removeEventListener('popstate', pop); window.removeEventListener('storage', changed); };
   }, []);
   useEffect(() => {
-    const refresh = () => { void loadBookings(true); };
+    const refresh = () => { void loadBookings(true, true); };
     window.addEventListener('beautylink-bookings-refresh', refresh);
-    return () => window.removeEventListener('beautylink-bookings-refresh', refresh);
+    const visible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', visible);
+    const timer = window.setInterval(visible, 30_000);
+    return () => { window.removeEventListener('beautylink-bookings-refresh', refresh); document.removeEventListener('visibilitychange', visible); window.clearInterval(timer); };
   }, [loadBookings]);
 
   const handleCancelBooking = async (id: number) => {
@@ -200,7 +224,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
         </p>
         <h1 className="mt-2 text-3xl font-black">Lịch hẹn của tôi</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Sau giờ kết thúc lịch hẹn, xác nhận đã sử dụng dịch vụ để mở đánh giá.
+          Đánh giá mở từ giữa giờ hẹn khi đã thanh toán hoặc đặt cọc. Xác nhận hoàn thành sau giờ kết thúc dịch vụ.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -269,7 +293,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
                             : item.paymentOption === 'DEPOSIT_05'
                               ? 'Đã cọc 5%'
                               : 'Đã đặt cọc'
-                          : item.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : 'Chờ thanh toán'}
+                          : item.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : item.status === 'CANCELLED' ? 'Chưa thanh toán · đã hủy' : checkingPayments.includes(item.id) ? 'Đang đối soát' : 'Chưa thanh toán'}
                     </span>
                   </div>
 
@@ -315,7 +339,8 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
                     </button>
                     {canCompleteBooking(item) && <button type="button" disabled={completingId !== null || cancellingId !== null} onClick={() => setConfirmingBooking(item)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Đã sử dụng dịch vụ</button>}
                     {canReviewBooking(item) && <button type="button" onClick={() => setReviewingBooking(item)} className="rounded-xl bg-pink-600 px-3 py-2 text-xs font-bold text-white">{item.serviceReview || item.supplierReview ? 'Xem / sửa đánh giá' : 'Đánh giá dịch vụ / nhà cung cấp'}</button>}
-                    {canPayBooking(item) && <button type="button" disabled={loading || cancellingId !== null || completingId !== null} onClick={() => { setPaymentBookingId(item.id, true); setPaymentId(item.id); }} className="rounded-xl bg-pink-600 px-3 py-2 text-xs font-bold text-white">Tiếp tục thanh toán</button>}
+                    {checkingPayments.includes(item.id) && <p role="status" className="text-xs text-slate-500">Đang đối soát thanh toán...</p>}
+                    {!checkingPayments.includes(item.id) && canPayBooking(item) && <button type="button" disabled={loading || cancellingId !== null || completingId !== null} onClick={() => { setPaymentBookingId(item.id, true); setPaymentId(item.id); }} className="rounded-xl bg-pink-600 px-3 py-2 text-xs font-bold text-white">Tiếp tục thanh toán</button>}
                     {canCancelBooking(item) && (
                       <button
                         disabled={cancellingId !== null || completingId !== null}

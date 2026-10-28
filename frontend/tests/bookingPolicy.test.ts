@@ -7,7 +7,7 @@ for (const status of ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] as const
     test(`${status}/${paymentStatus}: state and server flags both required`, () => {
       const booking = { status, paymentStatus, reviewEligible: true, completionEligible: true } as BackendBooking;
       const paid = paymentStatus === 'PAID' || paymentStatus === 'PARTIALLY_PAID';
-      assert.equal(canReviewBooking(booking), status === 'COMPLETED' && paid);
+      assert.equal(canReviewBooking(booking), ['CONFIRMED', 'COMPLETED'].includes(status) && paid);
       assert.equal(canCompleteBooking(booking), status === 'CONFIRMED' && paid);
       assert.equal(canReviewBooking({ ...booking, reviewEligible: false }), false);
       assert.equal(canCompleteBooking({ ...booking, completionEligible: false }), false);

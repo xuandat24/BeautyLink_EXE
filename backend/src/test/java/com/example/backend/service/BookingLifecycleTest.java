@@ -27,8 +27,8 @@ class BookingLifecycleTest {
     @ParameterizedTest
     @CsvSource({
         "PENDING,UNPAID,false,false", "PENDING,PARTIALLY_PAID,false,false", "PENDING,PAID,false,false", "PENDING,REFUNDED,false,false",
-        "CONFIRMED,UNPAID,false,false", "CONFIRMED,PARTIALLY_PAID,true,false",
-        "CONFIRMED,PAID,true,false", "CONFIRMED,REFUNDED,false,false", "COMPLETED,UNPAID,false,false",
+        "CONFIRMED,UNPAID,false,false", "CONFIRMED,PARTIALLY_PAID,true,true",
+        "CONFIRMED,PAID,true,true", "CONFIRMED,REFUNDED,false,false", "COMPLETED,UNPAID,false,false",
         "COMPLETED,PARTIALLY_PAID,false,true", "COMPLETED,PAID,false,true",
         "COMPLETED,REFUNDED,false,false", "CANCELLED,UNPAID,false,false",
         "CANCELLED,PARTIALLY_PAID,false,false", "CANCELLED,PAID,false,false", "CANCELLED,REFUNDED,false,false"
@@ -36,10 +36,10 @@ class BookingLifecycleTest {
     void paymentDoesNotReplaceCompletion(BookingStatus status, PaymentStatus payment, boolean canComplete, boolean canReview) {
         Booking booking = booking(status, payment);
         assertEquals(canComplete, policy.canComplete(booking));
-        assertEquals(canReview, ReviewService.isEligible(booking));
+        assertEquals(canReview, ReviewService.isEligible(booking, now));
         if (!canReview) {
             when(bookings.findByIdForUpdate(1L)).thenReturn(Optional.of(booking));
-            ReviewService reviewService = new ReviewService(bookings, reviews, mock(PaymentTransactionRepository.class));
+            ReviewService reviewService = new ReviewService(bookings, reviews, mock(PaymentTransactionRepository.class), policy, new ImageDataValidator(), mock(PublicImageStorage.class));
             for (ReviewTargetType target : ReviewTargetType.values()) {
                 ApiException error = assertThrows(ApiException.class,
                         () -> reviewService.upsert(booking.getCustomer(), 1L, target, new UpsertBookingReviewRequest(5, "Review")));
@@ -98,7 +98,7 @@ class BookingLifecycleTest {
         UserAccount stranger = new UserAccount(); stranger.setId(2L);
         assertEquals("BOOKING_FORBIDDEN", assertThrows(ApiException.class, () -> service.complete(stranger, 1L)).getCode());
         assertEquals("REVIEW_FORBIDDEN", assertThrows(ApiException.class,
-                () -> new ReviewService(bookings, reviews, mock(PaymentTransactionRepository.class)).upsert(stranger, 1L, ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, null))).getCode());
+                () -> new ReviewService(bookings, reviews, mock(PaymentTransactionRepository.class), policy, new ImageDataValidator(), mock(PublicImageStorage.class)).upsert(stranger, 1L, ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, null))).getCode());
         verifyNoInteractions(reviews);
     }
 
@@ -133,5 +133,18 @@ class BookingLifecycleTest {
         booking.setAppointmentDate(LocalDate.of(2026, 10, 12));
         booking.setStartTime(LocalTime.of(15, 0)); booking.setEndTime(LocalTime.of(16, 0));
         return booking;
+    }
+
+    @Test void midpointGateIncludesExactBoundaryAndOvernightInVietnam() {
+        Booking b = booking(BookingStatus.CONFIRMED, PaymentStatus.PARTIALLY_PAID);
+        b.setStartTime(LocalTime.of(16, 0)); b.setEndTime(LocalTime.of(18, 0));
+        assertFalse(ReviewService.isEligible(b, now.minusMillis(1)));
+        assertTrue(ReviewService.isEligible(b, now));
+        b.setStartTime(LocalTime.of(23, 30)); b.setEndTime(LocalTime.of(0, 30));
+        Instant midnight = Instant.parse("2026-10-12T17:00:00Z");
+        assertEquals(midnight, BookingCompletionPolicy.reviewOpensAt(b));
+        assertFalse(ReviewService.isEligible(b, midnight.minusSeconds(1)));
+        assertTrue(ReviewService.isEligible(b, midnight));
+        b.setStatus(BookingStatus.CANCELLED); assertFalse(ReviewService.isEligible(b, midnight));
     }
 }

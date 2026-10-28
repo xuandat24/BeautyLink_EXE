@@ -170,12 +170,15 @@ public final class ApiDtos {
             boolean retryAllowed, Long auditId, boolean alreadyApplied) {}
     public record UpsertBookingReviewRequest(
             @NotNull(message = "Vui lòng chọn số sao") @Min(value = 1, message = "Đánh giá tối thiểu 1 sao") @Max(value = 5, message = "Đánh giá tối đa 5 sao") Integer rating,
-            @Size(max = 1500, message = "Nội dung đánh giá tối đa 1500 ký tự") String comment) {}
+            @Size(max = 1500, message = "Nội dung đánh giá tối đa 1500 ký tự") String comment,
+            @Size(max = 3, message = "Tối đa 3 ảnh đánh giá") List<@NotBlank @Size(max = 1100000) String> images) {
+        public UpsertBookingReviewRequest(Integer rating, String comment) { this(rating, comment, null); }
+    }
     public record BookingReviewResponse(Long id, Long bookingId, ReviewTargetType targetType, int rating,
-                                        String comment, Instant createdAt, Instant updatedAt) {}
+                                        String comment, Instant createdAt, Instant updatedAt, List<String> images) {}
     public record PublicReviewResponse(Long id, ReviewTargetType targetType, int rating, String comment,
                                        String reviewerDisplayName, Long serviceId, String serviceName,
-                                       Instant createdAt) {}
+                                       Instant createdAt, List<String> images) {}
     public record PublicReviewPageResponse(List<PublicReviewResponse> content, long totalElements,
                                           int totalPages, int page, int size, double rating) {}
     public record PublicSupplierShopResponse(Long id, String name, String slug, String businessType,

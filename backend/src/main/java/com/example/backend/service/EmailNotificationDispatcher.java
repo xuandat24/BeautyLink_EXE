@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 public class EmailNotificationDispatcher {
     private static final Logger log = LoggerFactory.getLogger(EmailNotificationDispatcher.class);
     private final BookingConfirmationNotificationService notifications;
+    @org.springframework.beans.factory.annotation.Autowired private FeedbackReminderService feedback;
     private final TransactionalEmailSender emailSender;
     private final String from;
     private final String replyTo;
@@ -31,6 +32,7 @@ public class EmailNotificationDispatcher {
         for (BookingConfirmationNotificationService.ClaimedEmail claim : notifications.claimBatch()) {
             TransactionalEmailSender.DeliveryReceipt receipt;
             try {
+                if (feedback != null && feedback.deliverIfReminder(claim, emailSender, from, replyTo)) continue;
                 receipt = emailSender.send(
                         new TransactionalEmailSender.EmailMessage(from, replyTo, claim.recipientEmail(),
                                 claim.subject(), claim.textBody(), claim.htmlBody(), claim.idempotencyKey()));

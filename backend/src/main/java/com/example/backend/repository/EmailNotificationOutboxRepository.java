@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface EmailNotificationOutboxRepository extends JpaRepository<EmailNotificationOutbox, Long> {
+    @Query("select e.booking.id from EmailNotificationOutbox e where e.id = :id")
+    Optional<Long> findBookingId(@Param("id") Long id);
     boolean existsByBookingIdAndNotificationTypeAndRecipientRole(
             Long bookingId, EmailNotificationType notificationType, EmailRecipientRole recipientRole);
 

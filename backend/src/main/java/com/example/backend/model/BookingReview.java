@@ -23,6 +23,19 @@ public class BookingReview {
     @Enumerated(EnumType.STRING) @Column(name = "target_type", nullable = false, length = 20) private ReviewTargetType targetType;
     @Column(nullable = false) private int rating;
     @Column(length = 1500) private String comment;
+    @Column(name = "eligible_at") private Instant eligibleAt;
+    @Lob @Column(name = "images_json", columnDefinition = "LONGTEXT") private String imagesJson;
+    public Instant getEligibleAt() { return eligibleAt; }
+    public void setEligibleAt(Instant value) { eligibleAt = value; }
+    public java.util.List<String> getImages() {
+        if (imagesJson == null) return java.util.List.of();
+        try { return java.util.List.of(new com.fasterxml.jackson.databind.ObjectMapper().readValue(imagesJson, String[].class)); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException ex) { throw new IllegalStateException("Invalid review image data"); }
+    }
+    public void setImages(java.util.List<String> value) {
+        try { imagesJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(value); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException ex) { throw new IllegalArgumentException("Invalid review images"); }
+    }
     @Column(nullable = false, updatable = false) private Instant createdAt = Instant.now();
     @Column(nullable = false) private Instant updatedAt = Instant.now();
 
