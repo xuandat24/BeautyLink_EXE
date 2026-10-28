@@ -13,6 +13,10 @@ const card = code => page.locator('article').filter({ hasText: code });
 try {
   await page.goto('http://localhost:5173/tests/review-smoke.html');
   await card('SMOKE-UNPAID').waitFor();
+  // Pending local ledger + delayed provider PAID, no webhook: history must reconcile and remove checkout.
+  await card('SMOKE-HISTORY-PAID').getByText('Đã thanh toán đủ', { exact: true }).waitFor();
+  assert.ok((await card('SMOKE-HISTORY-PAID').textContent()).includes('Đã xác nhận'));
+  assert.equal(await card('SMOKE-HISTORY-PAID').getByRole('button', { name: 'Tiếp tục thanh toán', exact: true }).count(), 0);
   for (const code of ['SMOKE-FUTURE-DEPOSIT', 'SMOKE-FUTURE-FULL', 'SMOKE-PAST-DEPOSIT', 'SMOKE-PAST-FULL', 'SMOKE-MANUAL', 'SMOKE-UNCERTAIN-PAID']) {
     assert.equal(await card(code).getByRole('button', { name: 'Hủy lịch', exact: true }).count(), 0);
   }
@@ -179,7 +183,7 @@ try {
   const persisted=await (await page.request.get(`http://localhost:8080/api/v1/payments/payos/${observedPayment.orderCode}`,{headers:{Authorization:`Bearer ${jwt}`}})).json();
   assert.equal(persisted.status,'PAID');assert.equal(persisted.checkoutAllowed,false);assert.equal(persisted.qrCode,null);
   assert.deepEqual(failures, []);
-  console.log('PASS: browser -> Spring/JWT/H2; continuation reload/back navigation/reuse/safe expiry retry without new booking; paid/manual guards, pending cancellation, completion, midpoint review photo upload/reload on desktop/mobile, review upserts/reload, account/appointments/Explore/details, checkout -> fake gateway; no API/page/console errors.');
+  console.log('PASS: browser -> Spring/JWT/H2; paid history reconciliation without webhook, continuation reload/back navigation/reuse/safe expiry retry without new booking; paid/manual guards, pending cancellation, completion, midpoint review photo upload/reload on desktop/mobile, review upserts/reload, account/appointments/Explore/details, checkout -> fake gateway; no API/page/console errors.');
 } catch (error) {
   console.error('Local smoke diagnostic:', failures, await page.locator('[role="alert"]').allTextContents());
   throw error;
