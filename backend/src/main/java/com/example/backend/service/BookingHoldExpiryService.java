@@ -29,7 +29,7 @@ public class BookingHoldExpiryService {
                 time.now().minusSeconds(BookingCompletionPolicy.HOLD_SECONDS), PageRequest.of(0, 100));
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void expire(Long bookingId) {
         Booking booking = bookings.findByIdForUpdate(bookingId).orElse(null);
         if (booking == null || booking.getStatus() != BookingStatus.PENDING
@@ -40,7 +40,7 @@ public class BookingHoldExpiryService {
         booking.setPaymentRetryAllowed(false);
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     @Scheduled(fixedDelayString = "${app.booking-hold.expiry-check-ms:60000}",
                initialDelayString = "${app.booking-hold.expiry-initial-delay-ms:60000}")
     public void expireCandidates() {

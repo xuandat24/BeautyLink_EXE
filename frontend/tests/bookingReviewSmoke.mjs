@@ -55,6 +55,11 @@ try {
   });
   await photoDialog.locator('input[type=file]').setInputFiles({ name: 'experience.png', mimeType: 'image/png', buffer: Buffer.from(imageBytes) });
   await photoDialog.getByAltText('Ảnh trải nghiệm 1', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: 'backend/target/review-midpoint-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.screenshot({ path: 'backend/target/review-midpoint-desktop.png', fullPage: true });
   await photoDialog.getByLabel('Nhận xét (tùy chọn)').fill('SMOKE-MIDPOINT-PHOTO');
   const photoSaved = page.waitForResponse(r => r.url().endsWith('/reviews/SERVICE') && r.request().method() === 'PUT');
   await photoDialog.getByRole('button', { name: 'Lưu đánh giá' }).click();
@@ -174,7 +179,7 @@ try {
   const persisted=await (await page.request.get(`http://localhost:8080/api/v1/payments/payos/${observedPayment.orderCode}`,{headers:{Authorization:`Bearer ${jwt}`}})).json();
   assert.equal(persisted.status,'PAID');assert.equal(persisted.checkoutAllowed,false);assert.equal(persisted.qrCode,null);
   assert.deepEqual(failures, []);
-  console.log('PASS: browser -> Spring/JWT/H2; continuation reload/back navigation/reuse/safe expiry retry without new booking; paid/manual guards, pending cancellation, completion, review upserts/reload, account/appointments/Explore/details, checkout -> fake gateway; no API/page/console errors.');
+  console.log('PASS: browser -> Spring/JWT/H2; continuation reload/back navigation/reuse/safe expiry retry without new booking; paid/manual guards, pending cancellation, completion, midpoint review photo upload/reload on desktop/mobile, review upserts/reload, account/appointments/Explore/details, checkout -> fake gateway; no API/page/console errors.');
 } catch (error) {
   console.error('Local smoke diagnostic:', failures, await page.locator('[role="alert"]').allTextContents());
   throw error;

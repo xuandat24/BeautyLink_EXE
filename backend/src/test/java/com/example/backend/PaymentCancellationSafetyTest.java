@@ -759,7 +759,7 @@ class PaymentCancellationSafetyTest {
         doReturn(BookingCompletionPolicy.holdUntil(bookings.findById(b.getId()).orElseThrow())).when(time).now();
         proof(p, PaymentLinkStatus.PENDING);
         var closed = provider(p, PaymentLinkStatus.CANCELLED); when(gateway.cancel(eq(p.getOrderCode()), any())).thenReturn(closed);
-        paymentService.reconcileById(p.getId()); var result = bookingService.customerBooking(customer(), b.getId());
+        paymentService.statusForBooking(customer(), b.getId()); var result = bookingService.customerBooking(customer(), b.getId());
         assertEquals(BookingStatus.CANCELLED, result.status()); assertFalse(result.paymentEligible()); assertFalse(bookings.findById(b.getId()).orElseThrow().isPaymentRetryAllowed());
         paymentService.handleWebhook(paidWebhook(p)); var saved = payments.findById(p.getId()).orElseThrow();
         assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, saved.getStatus()); assertNotNull(saved.getPaidAt());
@@ -776,5 +776,41 @@ class PaymentCancellationSafetyTest {
         doReturn(BookingCompletionPolicy.holdUntil(bookings.findById(second.getId()).orElseThrow())).when(time).now(); proof(paid, PaymentLinkStatus.PAID); paymentService.reconcileById(paid.getId());
         var status = bookingService.customerBooking(customer(), second.getId());
         assertEquals(BookingStatus.CONFIRMED, status.status()); assertEquals(PaymentStatus.PARTIALLY_PAID, status.paymentStatus()); assertFalse(status.paymentEligible());
+    }
+
+    @Test void legacyFifteenMinuteLinkCannotExposeInstructionsOrFreshLeaseBeyondBookingHold() {
+        Booking b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); PaymentTransaction p = attempt(b, PaymentTransactionStatus.PENDING);
+        Instant deadline = BookingCompletionPolicy.holdUntil(bookings.findById(b.getId()).orElseThrow());
+        doReturn(deadline.minusMillis(500)).when(time).now(); proof(p, PaymentLinkStatus.PENDING);
+        var active = paymentService.statusForBooking(customer(), b.getId());
+        assertTrue(active.checkoutAllowed()); assertEquals(deadline, active.expiresAt());
+        assertTrue(active.instructionsFreshForMs() <= 500);
+        doReturn(deadline).when(time).now();
+        var elapsed = paymentService.statusForBooking(customer(), b.getId());
+        assertFalse(elapsed.checkoutAllowed()); assertNull(elapsed.checkoutUrl()); assertNull(elapsed.qrCode());
+        assertEquals(0, elapsed.instructionsFreshForMs());
+        assertEquals(BookingStatus.PENDING, bookings.findById(b.getId()).orElseThrow().getStatus()); // timer is not closure proof
+    }
+
+    @Test void expiryBatchSeesAnAttemptCommittedWhileWaitingForBookingLock() throws Exception {
+        Booking b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID);
+        doReturn(BookingCompletionPolicy.holdUntil(bookings.findById(b.getId()).orElseThrow())).when(time).now();
+        var locked = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var reservation = pool.submit(() -> tx(() -> {
+                bookings.findByIdForUpdate(b.getId()).orElseThrow(); attempt(b, PaymentTransactionStatus.PENDING); locked.countDown();
+                try { assertTrue(release.await(5, java.util.concurrent.TimeUnit.SECONDS)); } catch (InterruptedException e) { throw new IllegalStateException(e); }
+                return null;
+            }));
+            assertTrue(locked.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            var expiry = pool.submit(() -> holdExpiry.expireCandidates());
+            try { assertThrows(java.util.concurrent.TimeoutException.class, () -> expiry.get(200, java.util.concurrent.TimeUnit.MILLISECONDS)); }
+            finally { release.countDown(); }
+            reservation.get(10, java.util.concurrent.TimeUnit.SECONDS); expiry.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertEquals(BookingStatus.PENDING, bookings.findById(b.getId()).orElseThrow().getStatus());
+        assertEquals(1, payments.findAllByBookingIdOrderByCreatedAtDesc(b.getId()).size());
+        verify(gateway, never()).cancel(any(), any());
     }
 }

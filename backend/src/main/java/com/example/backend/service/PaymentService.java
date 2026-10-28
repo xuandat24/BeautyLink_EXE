@@ -243,7 +243,7 @@ public class PaymentService {
         // Customer polling observes a delayed webhook without hitting PayOS on every five-second UI tick.
         boolean due = BookingPaymentPolicy.manualAttempt(payment) ? shouldReconcile(payment)
                 : payment.getLastReconciledAt() == null || !payment.getLastReconciledAt().isAfter(time.now().minusSeconds(15));
-        boolean uncertain = needsReconciliation(payment) && due && !reconcileLocked(payment);
+        boolean uncertain = needsReconciliation(payment) && due && !reconcileAndExpireLocked(payment);
         return response(payment, uncertain);
     }
 
@@ -292,10 +292,21 @@ public class PaymentService {
         PaymentTransaction payment = payments.findByIdForUpdate(paymentId).orElse(null);
         if (payment != null && !bookingId.equals(payment.getBooking().getId())) throw notFound();
         if (payment == null || !needsReconciliation(payment)) return;
+        reconcileAndExpireLocked(payment);
+    }
+
+    private boolean reconcileAndExpireLocked(PaymentTransaction payment) {
         boolean verified = reconcileLocked(payment);
+        Booking booking = payment.getBooking();
         if (verified && payment.getStatus() == PaymentTransactionStatus.PENDING
-                && !BookingCompletionPolicy.holdUntil(payment.getBooking()).isAfter(time.now()))
-            cancelUnpaidLocked(payment.getBooking()); // uncertainty commits its manual flag; never release on timeout
+                && booking.getStatus() == BookingStatus.PENDING && booking.getPaymentStatus() == PaymentStatus.UNPAID
+                && !BookingCompletionPolicy.holdUntil(booking).isAfter(time.now())) {
+            ApiException outcome = cancelUnpaidLocked(booking);
+            // An API poll and scheduler use the same expiry decision. Frequent observations cannot
+            // postpone closure forever by continually renewing the scheduler's reconciliation interval.
+            return outcome == null || (payment.getStatus() == PaymentTransactionStatus.PAID && !BookingPaymentPolicy.manualAttempt(payment));
+        }
+        return verified;
     }
 
     // Every writer serializes on the booking before touching any of its payment attempts.
@@ -574,18 +585,20 @@ public class PaymentService {
         Booking booking = payment.getBooking();
         List<PaymentTransaction> attempts = payments.findAllByBookingIdOrderByCreatedAtDesc(booking.getId());
         boolean manual = payment.isRequiresManualReview() || BookingPaymentPolicy.manual(attempts);
-        boolean checkoutAllowed = payment.getStatus() == PaymentTransactionStatus.PENDING && !isExpired(payment)
+        Instant checkoutExpiry = java.util.stream.Stream.of(payment.getExpiresAt(), BookingCompletionPolicy.holdUntil(booking), BookingCompletionPolicy.startsAt(booking))
+                .filter(Objects::nonNull).min(Instant::compareTo).orElseThrow();
+        boolean checkoutAllowed = payment.getStatus() == PaymentTransactionStatus.PENDING && payment.getExpiresAt() != null && !isExpired(payment)
                 && booking.getStatus() != BookingStatus.CANCELLED && booking.getStatus() != BookingStatus.COMPLETED
                 && booking.getPaymentStatus() == PaymentStatus.UNPAID && !manual && time.beforeStart(booking) && BookingCompletionPolicy.holdUntil(booking).isAfter(time.now())
                 && !verificationPending && payment.getPaymentLinkId() != null && !payment.getPaymentLinkId().isBlank()
                 && attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).count() <= 1;
         long freshForMs = checkoutAllowed && payment.getLastReconciledAt() != null
                 ? Math.max(0, java.time.Duration.between(time.now(), java.util.stream.Stream.of(
-                    payment.getLastReconciledAt().plusSeconds(15), payment.getExpiresAt(), BookingCompletionPolicy.startsAt(booking))
+                    payment.getLastReconciledAt().plusSeconds(15), checkoutExpiry)
                     .min(Instant::compareTo).orElseThrow()).toMillis()) : 0;
         return new PayOSPaymentResponse(booking.getId(), booking.getBookingCode(), payment.getOrderCode(),
                 payment.getPaymentLinkId(), checkoutAllowed && safeCheckoutUrl(payment.getCheckoutUrl()) ? payment.getCheckoutUrl() : null, payment.getAmount(), payment.getRemainingAmount(),
-                payment.getPaymentOption(), payment.getStatus(), manual, payment.getExpiresAt(),
+                payment.getPaymentOption(), payment.getStatus(), manual, checkoutExpiry,
                 checkoutAllowed && PayOSQrInstructions.usable(payment.getQrCode(), payment.getAmount()) ? payment.getQrCode() : null, checkoutAllowed ? payment.getBankBin() : null,
                 checkoutAllowed ? payment.getBankAccountNumber() : null, checkoutAllowed ? payment.getBankAccountName() : null,
                 checkoutAllowed ? payment.getTransferDescription() : null, checkoutAllowed, verificationPending, freshForMs);
