@@ -84,7 +84,8 @@ export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initial
   const stateTitle: Record<QRCheckoutState, string> = { INITIALIZING: 'Đang tải chỉ dẫn thanh toán', PENDING: 'Chờ thanh toán', VERIFYING: 'Đang đối soát giao dịch', NETWORK_ERROR: 'Cần kiểm tra trạng thái', QR_UNAVAILABLE: 'Chưa có chỉ dẫn QR tại BeautyLink', PAID: 'Thanh toán thành công', EXPIRED: 'PayOS đã xác nhận hết hạn', CANCELLED: 'PayOS đã xác nhận đóng phiên', REVIEW_REQUIRED: 'Giao dịch cần đối soát' };
   useEffect(() => {
     let active = true; setQr('');
-    if (ready && payment.qrCode) QRCode.toDataURL(payment.qrCode, { width: 720, margin: 4, errorCorrectionLevel: 'M' }).then(v => { if (active) setQr(v); }).catch(() => { if (active) setError('Không thể hiển thị QR. Vui lòng kiểm tra lại trạng thái.'); });
+    const qrStarted = performance.now();
+    if (ready && payment.qrCode) QRCode.toDataURL(payment.qrCode, { width: 720, margin: 4, errorCorrectionLevel: 'M' }).then(v => { if (active) { performance.measure('beautylink-qr-render', { start: qrStarted, end: performance.now() }); setQr(v); } }).catch(() => { if (active) setError('Không thể hiển thị QR. Vui lòng kiểm tra lại trạng thái.'); });
     return () => { active = false; };
   }, [ready, payment.qrCode]);
   const copy = async (label: string, value: string) => {
