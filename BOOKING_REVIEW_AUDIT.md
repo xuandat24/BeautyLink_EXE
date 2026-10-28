@@ -17,7 +17,7 @@ No production data, mail, payments, DDL, merge or deployment is performed by thi
 
 Schema necessity: existing booking_reviews has no image list or persisted authorization instant for public
 mid-service reviews. Add only nullable `images_json` and `eligible_at`; legacy completed reviews stay visible.
-The authorization instant keeps public lists/counts/ratings aligned without MySQL/session-timezone arithmetic.
+The authorization instant keeps public lists/counts/ratings aligned without MySQL/session-timezone arithmetic. Public predicates bind the application UTC Instant rather than database CURRENT_TIMESTAMP; the MySQL session-timezone regression covers this.
 Widen existing outbox type storage to VARCHAR(50) if Hibernate originally generated a native ENUM.
 Migration: `backend/src/main/resources/db/migration/mysql/V20261028_01__review_photos_midpoint.sql`.
 The existing MySQL migration probe suite tests preservation of legacy rows and new reminder types.

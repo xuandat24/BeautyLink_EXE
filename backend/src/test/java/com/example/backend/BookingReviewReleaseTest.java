@@ -420,4 +420,21 @@ class BookingReviewReleaseTest {
         verifyNoInteractions(sender);
         assertEquals(EmailNotificationStatus.SKIPPED, emailJobs.findById(claim.id()).orElseThrow().getStatus());
     }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named="REVIEW_TEST_DRIVER", matches="com.mysql.cj.jdbc.Driver")
+    void publicMidpointReviewDoesNotDependOnMysqlSessionTimezone() {
+        Booking b = fixture(BookingStatus.CONFIRMED, PaymentStatus.PAID);
+        var local = ZonedDateTime.now(BookingCompletionPolicy.ZONE);
+        tx(() -> { var row = bookings.findByIdForUpdate(b.getId()).orElseThrow();
+            row.setAppointmentDate(local.minusMinutes(31).toLocalDate()); row.setStartTime(local.minusMinutes(31).toLocalTime()); row.setEndTime(local.plusMinutes(29).toLocalTime()); return null; });
+        var saved = reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, "Timezone-safe midpoint"));
+        tx(() -> {
+            // Only this disposable test connection changes; always restore before returning it to the pool.
+            jdbc.execute("SET time_zone='-07:00'");
+            try { assertTrue(catalog.serviceReviews(b.getService().getId(), 0, 100).content().stream().anyMatch(r -> r.id().equals(saved.id()))); }
+            finally { jdbc.execute("SET time_zone='+00:00'"); }
+            return null;
+        });
+    }
 }

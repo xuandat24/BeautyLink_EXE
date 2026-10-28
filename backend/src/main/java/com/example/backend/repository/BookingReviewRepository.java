@@ -13,7 +13,7 @@ import java.util.List;
 public interface BookingReviewRepository extends JpaRepository<BookingReview, Long> {
     String VALID_BOOKING = "(r.booking.status = :#{T(com.example.backend.model.DomainEnums.BookingStatus).COMPLETED} "
             + "or (r.booking.status = :#{T(com.example.backend.model.DomainEnums.BookingStatus).CONFIRMED} "
-            + "and r.eligibleAt is not null and r.eligibleAt <= CURRENT_TIMESTAMP and r.createdAt >= r.eligibleAt)) "
+            + "and r.eligibleAt is not null and r.eligibleAt <= :#{T(java.time.Instant).now()} and r.createdAt >= r.eligibleAt)) "
             + "and r.booking.paymentStatus in (:#{T(com.example.backend.model.DomainEnums.PaymentStatus).PAID}, "
             + ":#{T(com.example.backend.model.DomainEnums.PaymentStatus).PARTIALLY_PAID}) and r.rating between 1 and 5 "
             + "and not exists (select p.id from PaymentTransaction p where p.booking.id = r.booking.id and "
