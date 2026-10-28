@@ -11,7 +11,7 @@ export async function reconcileHistoryPayment(booking: BackendBooking,
     if (current.id !== booking.id) return blocked;
     if (payment.verificationPending || payment.requiresManualReview) return { ...current, paymentEligible: false,
       paymentBlockerReason: payment.requiresManualReview ? 'PAYMENT_REVIEW_REQUIRED' : 'PAYMENT_RECONCILING' };
-    if (payment.status === 'PAID' && !['PAID', 'PARTIALLY_PAID'].includes(current.paymentStatus)) return blocked;
+    if (payment.status === 'PAID' && !['PAID', 'PARTIALLY_PAID'].includes(current.paymentStatus ?? '')) return blocked;
     return current;
   } catch { return blocked; } // Inconclusive GET is never evidence of unpaid money or permission to pay again.
 }
