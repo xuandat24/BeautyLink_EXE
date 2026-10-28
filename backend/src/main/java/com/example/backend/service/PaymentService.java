@@ -84,18 +84,19 @@ public class PaymentService {
     private record CreationResult(PayOSPaymentResponse response, ApiException error) {}
 
     public PayOSPaymentResponse create(UserAccount customer, Long bookingId, CreatePayOSPaymentRequest request) {
+        CheckoutTrace.enterService();
         gateway.requireConfigured();
         // Commit the order ledger before any irreversible provider create call.
-        Creation creation = checkoutTransactions.execute(s -> reserveCheckout(customer, bookingId, request));
+        Creation creation = CheckoutTrace.measure("reserve_tx", () -> checkoutTransactions.execute(s -> reserveCheckout(customer, bookingId, request)));
         if (creation.error() != null) throw creation.error();
         if (creation.response() != null) return creation.response();
         CreatePaymentLinkResponse provider;
-        try { provider = gateway.create(creation.request()); }
+        try { provider = CheckoutTrace.measure("provider_create", () -> gateway.create(creation.request())); }
         catch (RuntimeException error) {
             // The provider may have created the link despite a timeout. Never erase/reuse this order.
             throw conflict("PAYMENT_RECONCILING", "Giao dịch đang được đối soát. Vui lòng kiểm tra lịch hẹn, không thanh toán lại.");
         }
-        CreationResult result = checkoutTransactions.execute(s -> finishCheckout(customer, creation, provider));
+        CreationResult result = CheckoutTrace.measure("persist_tx", () -> checkoutTransactions.execute(s -> finishCheckout(customer, creation, provider)));
         if (result.error() != null) throw result.error(); // outside committed transaction
         return result.response();
     }
@@ -201,6 +202,9 @@ public class PaymentService {
         transaction.setBankAccountNumber(provider.getAccountNumber());
         transaction.setBankAccountName(provider.getAccountName());
         transaction.setTransferDescription(provider.getDescription());
+        // Signed PENDING create identity/amount + committed instructions are a successful observation.
+        // The existing fifteen-second freshness policy still bounds reuse; unknown GETs never renew it.
+        transaction.setLastReconciledAt(time.now());
         return new CreationResult(response(transaction), null);
     }
 
@@ -212,6 +216,7 @@ public class PaymentService {
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public PayOSPaymentResponse status(UserAccount customer, Long orderCode) {
+        CheckoutTrace.enterService();
         PaymentTransaction payment = lockByOrderCode(orderCode);
         if (payment == null) throw notFound();
         if (!payment.getBooking().getCustomer().getId().equals(customer.getId())) {
@@ -223,6 +228,7 @@ public class PaymentService {
     /** Recover a lost create response without another provider POST or a replacement attempt. */
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public PayOSPaymentResponse statusForBooking(UserAccount customer, Long bookingId) {
+        CheckoutTrace.enterService();
         ownedBooking(customer, bookingId); // booking lock + ownership before examining attempts
         List<PaymentTransaction> attempts = payments.findAllByBookingIdForUpdate(bookingId);
         if (attempts.isEmpty()) throw notFound();
@@ -303,7 +309,7 @@ public class PaymentService {
         if (BookingPaymentPolicy.manualAttempt(payment)) requireManualReview(payment, "unresolved-provider-observation");
         PaymentLink provider;
         try {
-            provider = gateway.get(payment.getOrderCode());
+            provider = CheckoutTrace.measure("provider_get", () -> gateway.get(payment.getOrderCode()));
         } catch (ApiException exception) {
             log.warn("PayOS reconciliation deferred orderCode={} code={}", payment.getOrderCode(), exception.getCode());
             return false;
@@ -569,11 +575,15 @@ public class PaymentService {
                 && booking.getPaymentStatus() == PaymentStatus.UNPAID && !manual && time.beforeStart(booking)
                 && !verificationPending && payment.getPaymentLinkId() != null && !payment.getPaymentLinkId().isBlank()
                 && attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).count() <= 1;
+        long freshForMs = checkoutAllowed && payment.getLastReconciledAt() != null
+                ? Math.max(0, java.time.Duration.between(time.now(), java.util.stream.Stream.of(
+                    payment.getLastReconciledAt().plusSeconds(15), payment.getExpiresAt(), BookingCompletionPolicy.startsAt(booking))
+                    .min(Instant::compareTo).orElseThrow()).toMillis()) : 0;
         return new PayOSPaymentResponse(booking.getId(), booking.getBookingCode(), payment.getOrderCode(),
                 payment.getPaymentLinkId(), checkoutAllowed && safeCheckoutUrl(payment.getCheckoutUrl()) ? payment.getCheckoutUrl() : null, payment.getAmount(), payment.getRemainingAmount(),
                 payment.getPaymentOption(), payment.getStatus(), manual, payment.getExpiresAt(),
                 checkoutAllowed && PayOSQrInstructions.usable(payment.getQrCode(), payment.getAmount()) ? payment.getQrCode() : null, checkoutAllowed ? payment.getBankBin() : null,
                 checkoutAllowed ? payment.getBankAccountNumber() : null, checkoutAllowed ? payment.getBankAccountName() : null,
-                checkoutAllowed ? payment.getTransferDescription() : null, checkoutAllowed, verificationPending);
+                checkoutAllowed ? payment.getTransferDescription() : null, checkoutAllowed, verificationPending, freshForMs);
     }
 }

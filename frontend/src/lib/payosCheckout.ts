@@ -1,3 +1,4 @@
+import { sessionCredentialEpoch } from './authSession';
 import type { PayOSPayment } from '../types/beauty';
 
 export type QRCheckoutState = 'INITIALIZING' | 'PENDING' | 'VERIFYING' | 'NETWORK_ERROR' | 'QR_UNAVAILABLE' | 'PAID' | 'EXPIRED' | 'CANCELLED' | 'REVIEW_REQUIRED';
@@ -41,4 +42,25 @@ export function usableProviderQr(value: string | null | undefined, amount: numbe
 export function retryDelay(error: unknown, failures: number): number {
   const seconds = Number((error as { response?: { headers?: Record<string, unknown> } })?.response?.headers?.['retry-after']);
   return Number.isFinite(seconds) && seconds > 0 ? Math.min(60000, Math.max(5000, seconds * 1000)) : Math.min(30000, 5000 * 2 ** (failures - 1));
+}
+
+// Live HTTP responses only: this lease is never serialized or restored from browser storage.
+const liveObservations = new WeakMap<PayOSPayment, { until: number; token: string; epoch: number }>();
+export function rememberPaymentObservation(payment: PayOSPayment, started: number, token: string | null, epoch: number, now = performance.now()): void {
+  const duration = payment.instructionsFreshForMs;
+  const elapsed = now - started;
+  if (!token || !Number.isFinite(duration) || duration! <= 0 || elapsed < 0 || !Number.isFinite(elapsed)) { liveObservations.delete(payment); return; }
+  const remaining = Math.min(15000, duration!) - elapsed; // deduct the WHOLE request, including transit/commit
+  if (remaining <= 0) { liveObservations.delete(payment); return; }
+  liveObservations.set(payment, { until: now + remaining, token, epoch });
+}
+export function freshObservation(payment: PayOSPayment, token: string | null, now = performance.now()): boolean {
+  const lease = liveObservations.get(payment);
+  return Boolean(token && lease && lease.token === token && lease.epoch === sessionCredentialEpoch() && lease.until > now);
+}
+
+/** Diagnostics must never prevent QR rendering on browsers without User Timing Level 3. */
+export function recordCheckoutDuration(name: 'beautylink-qr-render', started: number): void {
+  try { performance.clearMeasures(name); performance.measure(name, { start: started, end: performance.now() }); }
+  catch { /* Numeric diagnostics only; payment behavior does not depend on User Timing support. */ }
 }

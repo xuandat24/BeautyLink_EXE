@@ -23,15 +23,17 @@ public class BookingReviewSmokeServer {
         @Bean @Primary PayOSGateway smokeGateway() {
             var gateway = mock(PayOSGateway.class); // no SDK or outbound requests in this test server
             when(gateway.create(any())).thenAnswer(i -> {
+                if (System.getenv("SMOKE_PERF_MODE") != null) java.util.concurrent.locks.LockSupport.parkNanos(350_000_000L);
                 CreatePaymentLinkRequest request = i.getArgument(0);
                 var link = new PaymentLink(); link.setId("smoke-" + request.getOrderCode()); link.setOrderCode(request.getOrderCode());
                 link.setAmount(request.getAmount()); link.setAmountPaid(0L); link.setStatus(PaymentLinkStatus.PENDING); links.put(request.getOrderCode(), link);
                 var result = new CreatePaymentLinkResponse(); result.setQrCode(TestPayOSQr.payload(request.getAmount())); result.setBin("970422");
                 result.setAccountNumber("TEST-ACCOUNT"); result.setDescription("TEST ONLY"); // accountName deliberately absent
                 result.setOrderCode(request.getOrderCode()); result.setAmount(request.getAmount());
-                result.setPaymentLinkId(link.getId()); result.setStatus(link.getStatus()); result.setCheckoutUrl("https://pay.payos.vn/web/" + link.getId()); failFirstStatus.add(link.getOrderCode()); return result;
+                result.setPaymentLinkId(link.getId()); result.setStatus(link.getStatus()); result.setCheckoutUrl("https://pay.payos.vn/web/" + link.getId()); if (System.getenv("SMOKE_PERF_MODE") == null) failFirstStatus.add(link.getOrderCode()); return result;
             });
             when(gateway.get(any())).thenAnswer(i -> {
+                if (System.getenv("SMOKE_PERF_MODE") != null) java.util.concurrent.locks.LockSupport.parkNanos(250_000_000L);
                 Long order=i.getArgument(0);
                 if(failFirstStatus.remove(order))throw new com.example.backend.exception.ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,"PAYOS_RECONCILIATION_FAILED","Synthetic provider timeout");
                 return links.get(order);
@@ -95,6 +97,13 @@ public class BookingReviewSmokeServer {
                 p.setStatus(i == 1 ? PaymentTransactionStatus.REVIEW_REQUIRED : i == 3 ? PaymentTransactionStatus.EXPIRED : PaymentTransactionStatus.PENDING); p.setRequiresManualReview(i == 1 || i == 4); payments.save(p);
                 var link = new PaymentLink(); link.setId(p.getPaymentLinkId()); link.setOrderCode(p.getOrderCode()); link.setAmount(p.getAmount().longValueExact());
                 link.setAmountPaid(i == 4 ? p.getAmount().longValueExact() : 0L); link.setStatus(i == 4 ? PaymentLinkStatus.PAID : i == 3 ? PaymentLinkStatus.EXPIRED : PaymentLinkStatus.PENDING); links.put(p.getOrderCode(), link);
+            }
+            if (System.getenv("SMOKE_PERF_MODE") != null) for (int i = 0; i < 35; i++) {
+                Booking b = new Booking(); b.setBookingCode("PERF-" + i); b.setCustomer(users.findByPhone("0900000001").orElseThrow());
+                b.setService(offering); b.setSupplier(offering.getSupplier()); b.setPractitioner(people.findBySupplierIdAndActiveTrue(offering.getSupplier().getId()).getFirst());
+                b.setAppointmentDate(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusDays(3 + i / 8));
+                b.setStartTime(LocalTime.of(9 + i % 8, 0)); b.setEndTime(b.getStartTime().plusMinutes(offering.getDurationMinutes()));
+                b.setTotalAmount(offering.getPrice()); b.setStatus(BookingStatus.PENDING); b.setPaymentStatus(PaymentStatus.UNPAID); bookings.save(b);
             }
             return null;
         });

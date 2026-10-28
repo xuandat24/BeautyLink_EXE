@@ -1,3 +1,4 @@
+import { CheckoutPreparation, type PreparationStage } from './CheckoutPreparation';
 import { CheckoutBrand } from './CheckoutBrand';
 import { PayOSCheckoutPage } from './PayOSCheckoutPage';
 import type { BackendBooking, PayOSPayment } from '../types/beauty';
@@ -88,6 +89,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 }) => {
   const { cartItems, updateCartQuantity, setCurrentUser } = useBeautyStore();
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [preparationStage, setPreparationStage] = useState<PreparationStage>('VALIDATING');
   const [activePayment, setActivePayment] = useState<PayOSPayment | null>(null);
   const [activeBooking, setActiveBooking] = useState<BackendBooking | null>(null);
 
@@ -342,6 +344,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
 
+    setActiveBooking(null); setPreparationStage('VALIDATING');
     setSubmitting(true);
     submissionBusy.current = true;
     const token = getAccessToken();
@@ -365,7 +368,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           throw new Error('Khung giờ này vừa được đặt. Vui lòng chọn khung giờ khác.');
         }
       }
-      const booking = existingId ? (await beautyApi.myBookings()).find(b => b.id === existingId) : await beautyApi.createBooking({
+      const booking = existingId ? await beautyApi.myBooking(existingId) : await beautyApi.createBooking({
         serviceId: firstItem.deal.serviceId,
         practitionerId: preselectedPractitionerId,
         appointmentDate: selectedDate,
@@ -377,10 +380,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       reservedBooking.current = { context, id: booking.id };
       setPaymentBookingId(booking.id); // identity only; reload still fetches ownership/capabilities from server
       if (!canPayBooking(booking)) throw new Error('Lịch hẹn chưa được máy chủ cho phép thanh toán hoặc đang cần đối soát. Vui lòng kiểm tra Lịch hẹn của tôi; không thanh toán lại.');
+      setActiveBooking(booking); setPreparationStage('PROVIDER');
       const payment = await beautyApi.createPayOSPayment(booking.id, {
         paymentOption: depositOption === 'deposit05' ? 'DEPOSIT_05' : 'FULL_100',
         voucherCode: appliedVoucher?.code,
-      });
+      }, () => { if (current()) setPreparationStage('RECOVERING'); });
       if (!current()) return;
       if (payment.paymentOption !== verifiedQuote.paymentOption || payment.amount !== verifiedQuote.amount
           || payment.remainingAmount !== verifiedQuote.remainingAmount) {
@@ -411,6 +415,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // VIEW: EMPTY CART
   // =========================================================================
   if (activePayment) return <PayOSCheckoutPage key={String(activePayment.orderCode)} initialPayment={activePayment} booking={activeBooking} onBack={() => { setActivePayment(null); onViewBookings(); }} />;
+  if (submitting && !contactDialogOpen) return <CheckoutPreparation serviceName={activeBooking?.serviceName ?? items[0]?.deal.title ?? 'Dịch vụ đã chọn'}
+    supplierName={activeBooking?.supplierName ?? items[0]?.deal.brandName} bookingCode={activeBooking?.bookingCode}
+    amount={verifiedQuote?.amount} option={selectedPaymentOption} stage={preparationStage} onBack={onViewBookings} />;
   if (resumeId !== null) return <PaymentContinuationDialog bookingId={resumeId} onClose={() => { setPaymentBookingId(null); setResumeId(null); onViewBookings(); }} />;
   if (items.length === 0) {
     return (

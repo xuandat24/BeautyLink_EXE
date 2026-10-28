@@ -22,6 +22,10 @@ jobs:
           java-version: '21'
           cache: maven
       - run: mvn --batch-mode --no-transfer-progress verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checkout-backend-performance
+          path: backend/target/payos-*-performance*.json
       - name: Build backend Docker image
         run: docker build -t beautylink-backend-review-fix .
 
@@ -53,7 +57,11 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: mvn --batch-mode --no-transfer-progress -Dtest=BookingReviewReleaseTest,PaymentCancellationSafetyTest,GoogleSigninMigrationTest,WorkforceMigrationTest,AuthenticationSessionMigrationTest,CustomerAvatarMigrationTest,PayOSQrMigrationTest,AdminDashboardV2IntegrationTest,AdminProfileConcurrencyTest verify
+      - run: mvn --batch-mode --no-transfer-progress -Dtest=BookingReviewReleaseTest,PaymentCancellationSafetyTest,GoogleSigninMigrationTest,WorkforceMigrationTest,AuthenticationSessionMigrationTest,CustomerAvatarMigrationTest,PayOSQrMigrationTest,CheckoutPerformanceIntegrationTest,AdminDashboardV2IntegrationTest,AdminProfileConcurrencyTest verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checkout-mysql-performance
+          path: backend/target/payos-jdbc-performance-MySQL8.4.json
 
   frontend:
     runs-on: ubuntu-latest
@@ -113,6 +121,25 @@ jobs:
           node frontend/tests/bookingReviewSmoke.mjs
           node frontend/tests/authMobileSmoke.mjs
           node frontend/tests/adminDashboardSmoke.mjs
+      - name: Checkout performance and two-context race (isolated fake provider)
+        env:
+          PLAYWRIGHT_MODULE_PATH: ${{ runner.temp }}/beautylink-browser/node_modules/playwright
+          SMOKE_PERF_MODE: '1'
+          PERF_LABEL: after
+          PERF_SAMPLES: '30'
+        run: |
+          java -cp "backend/target/test-classes:backend/target/classes:$(cat backend/target/test-classpath.txt)" com.example.backend.BookingReviewSmokeServer > backend/target/perf-ci-server.log 2>&1 &
+          backend_pid=$!
+          (cd frontend && npm run dev -- --host=127.0.0.1) > backend/target/perf-ci-vite.log 2>&1 &
+          frontend_pid=$!
+          trap 'kill "$backend_pid" "$frontend_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 90); do
+            if grep -q BOOKING_REVIEW_SMOKE_READY backend/target/perf-ci-server.log && curl --fail --silent http://localhost:5173/tests/payos-performance.html > /dev/null; then break; fi
+            sleep 1
+          done
+          grep -q BOOKING_REVIEW_SMOKE_READY backend/target/perf-ci-server.log
+          node frontend/tests/payosPerformance.mjs
+          node frontend/tests/payosConcurrencySmoke.mjs
       - name: Admin V2 screenshots and isolated browser diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -121,5 +148,8 @@ jobs:
           path: |
             backend/target/admin-v2-*.png
             backend/target/payos-qr-*.png
+            backend/target/payos-preparation-*.png
+            backend/target/payos-performance-*.json
+            backend/target/payos-concurrency-smoke.json
             backend/target/browser-server.log
             backend/target/browser-vite.log

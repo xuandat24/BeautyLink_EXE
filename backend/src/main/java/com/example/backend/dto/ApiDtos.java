@@ -223,7 +223,7 @@ public final class ApiDtos {
                                        PaymentOption paymentOption, PaymentTransactionStatus status,
                                        boolean requiresManualReview, Instant expiresAt, String qrCode, String bankBin,
                                        String bankAccountNumber, String bankAccountName, String transferDescription,
-                                       boolean checkoutAllowed, boolean verificationPending) {}
+                                       boolean checkoutAllowed, boolean verificationPending, long instructionsFreshForMs) {}
     public record PayOSWebhookResponse(boolean success) {}
     public record ReportResponse(Long id, ReportTargetType targetType, Long targetId, String reason, String details,
                                  ReportStatus status, String reporterName, String assignedStaffName,

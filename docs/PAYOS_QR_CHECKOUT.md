@@ -74,3 +74,47 @@ Official BeautyLink icon/wordmark/slogan are shared across checkout, continuatio
 The supplied build warnings were checked separately: targeted same-major patches update Vite6.4.3→6.4.5, Zod4.6.5→4.6.7, follow-redirects1.16.0→1.16.2. The resulting npm audit reports0 vulnerabilities at verification time. No blind `npm audit fix`, framework/Java upgrade or production setting change is part of this fix. Node engine/npm environment/install-script notices are warnings, not evidence of a failed deployed checkout. Pinning Vercel's Node major is an owner configuration choice; it is not silently changed here.
 
 Release: approve PR and exact-SHA CI, retain the existing schema, backend first, verify the new recovery route rejects unauthenticated requests, then frontend. Perform any real PayOS smoke only with separately approved account/booking/amount and money handling. Roll back frontend to a compatible approved build if needed; do not restore DB or roll backend to an unsafe payment-policy version. No new schema, credentials or environment variables are required.
+
+
+## Performance follow-up (base60a7399, measured2026-10-28)
+
+Baseline commit14260a5b843ff8202541c2fb2ef34933c56f1f42 preserves prior business code plus numeric timings/test fixtures. Thirty samples before/after used the same350ms create/250ms GET fake provider. See `scripts/payos-perf/README.md` and `docs/PAYOS_CHECKOUT_PERFORMANCE.json` for reproduction and complete P50/P95/P99. No active production payment was read/created. Production read-only metadata: Railway SUCCESS deployment89df9705-11f9-4d6e-8b3f-c13aac51423b at60a7399, SFO; platform tracing off. No region/config changes made.
+
+| Browser boundary (ms) | Before P50/P95/P99 | After P50/P95/P99 |
+|---|---:|---:|
+| Click→visible shell, new | 822.5/839.8/1362.6 | 5.5/7.2/29.5 |
+| Click→visible QR, new | 1028.7/1144.9/1366.1 | 816.8/851.6/908.7 |
+| Click→visible shell, existing | 828.1/845.6/848.0 | 5.5/6.3/7.6 |
+| Click→visible QR, existing | 831.4/849.1/853.4 | 817.6/833.8/834.0 |
+| QR encoding | 13.3/19.9/27.2 | 7.0/9.6/31.2 |
+| Recovery GET | 326.7/340.0/341.5 | 322.9/329.7/329.9 |
+| Create browser/proxy RTT | 679.4/692.0/837.3 | 673.3/687.5/689.7 |
+| JWT/session/account/MVC | 3.1/8.2/85.2 | 3.2/5.8/53.4 |
+| JDBC execution | 0.8/1.2/2.7 | 0.7/1.0/1.0 |
+| Validation/reserve transaction | 2.7/11.5/23.2 | 2.8/5.2/20.9 |
+| Provider create (injected) | 350.7/351.5/365.8 | 350.7/351.0/358.2 |
+| Persist transaction | 3.8/9.7/31.6 | 3.7/5.9/19.5 |
+| Reuse server total | 6.5/15.3/17.9 | 6.0/17.1/17.7 |
+
+Controlled mock targets pass; this does not prove live PayOS latency. First after QR sample includes a screenshot, making P99 conservative. With30 samples P99 is the maximum, not an established production SLO. SQL counts remain11 fresh/6 reuse; small execution times did not justify changing locks/queries. Blocking status requests dropped60→0 across60 opens; ongoing5s polling/server15s throttling remain. Existing QR visible timing improves little; principal gains are instant shell, fewer fresh-create round trips and HTTP connection reuse.
+
+Public categories30 GETs: TTFB230.7/348.7/732.3ms, total243.9/386.2/879.3ms (P50/P95/P99). This is workstation→SFO reference only. Actual authenticated Railway/MySQL-production/PayOS attribution and provider percentiles remain NOT MEASURED. Do not justify a region move from this probe. MySQL CI runs30 real JWT requests through controllers/transactions with20ms synthetic provider input; its numeric artifact is separate from H2/browser data. SDK HTTPS localhost30 cold/30 pooled calls test signed responses, request identity under concurrency, pool shutdown and invalid signatures; not a PayOS internet benchmark.
+
+
+### Fast path and safety
+
+- The payment click opens an official branded preparation shell before validation/provider work. Existing quote/booking labels, a non-payable skeleton and real validation/provider/recovery messages are shown; no fake QR/bank instructions. Closing preserves the ledger. Context/account guards discard late results; cart/booking/payment policies are unchanged.
+- SDK-signed PENDING creation is identity/amount checked and instructions persisted under existing locks, then stamps existing `lastReconciledAt`. Optional response `instructionsFreshForMs` is bounded by the existing15s window, link expiry and Vietnam appointment start. Unknown/failure cannot renew it. Manual/secondary attempts, paid/refunded/cancelled/completed/time guards remain. Exactly15s requires provider verification (injected-clock test).
+- Frontend fast path accepts only a live HTTP-response object in a token+credential-epoch WeakMap, deducting the **whole** HTTP duration. Storage/copied payloads, wrong account, expired lease/incomplete evidence cannot fast-start. Initial evidence expiring while the first check is in-flight locks instructions; after confirmed status, existing polling behavior avoids unnecessary flicker. Errors lock instructions. PAID still requires backend webhook/reconciliation; successful create proves eligible instructions only.
+- One Spring-owned HTTP pool is shared; SDK wrappers/ObjectMapper/crypto stay per-operation instead of assuming full SDK thread-safety. Installed2.0.1 `ClientOptions.httpClient` accepts external resources and `close()` shuts them down, so disposal occurs only at gateway shutdown. Timeouts remain15s SDK/30s browser, retries0, with implicit OkHttp connection retries disabled. No receiving-account/signature/credentials change and no dependency added.
+- No durable async initiation is justified yet: mock targets pass and real provider latency is unmeasured. No untracked worker or in-memory irreversible queue was added.
+
+References inspected alongside installed bytecode: [PayOS Java SDK](https://github.com/payOSHQ/payos-lib-java), [OkHttp reuse guidance](https://github.com/square/okhttp/blob/master/okhttp/src/commonJvmAndroid/kotlin/okhttp3/OkHttpClient.kt). Numeric tracing omits all customer/booking/order IDs, payloads, QR, bank/transfer fields, credentials and URLs. `X-Checkout-Request-ID` is generated server-side (client input ignored), `Server-Timing` and `X-Checkout-SQL-Count` are numeric; context is cleared after each request. Missing browser User Timing support cannot break rendering.
+
+### Rollout and monitoring
+
+No DDL/new variables. Owner-approved exact-SHA CI/staging then backend→frontend; old frontend ignores optional freshness, new frontend falls back to status checking without a live lease. Keep production frontend promotion held until backend/API smoke succeeds. Do not merge/deploy as part of benchmarking.
+
+Group `checkout_timing` by fixed operation(create/status/recovery/quote/webhook), status and correlation; inspect total/pre_service/JDBC/reserve_tx/provider_create-get/persist_tx and provider_connect/tls/ttfb. Connection time includes TLS (do not sum overlapping metrics); zero completed TLS on failed calls does not prove reuse. Separate failures/manual409 from successful percentiles and collect adequate real samples before claiming live P99. Correlate browser response ID with log line; never enable SDK body logging. Watch DB lock waits, provider calls/poll frequency and existing authorized operator audit evidence.
+
+Live smoke needs separately approved account/booking/amount/channel and money disposition. Owner performs transfer; validate only authorized evidence. No fabricated webhook/manual paid. Roll back code/image compatibly, retain nullable schema/history/manual policy; never restore production DB for this fix.

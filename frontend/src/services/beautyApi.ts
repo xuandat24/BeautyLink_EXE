@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createWithRecovery, PAYMENT_HTTP_TIMEOUT } from '../lib/paymentCreation';
+import { rememberPaymentObservation } from '../lib/payosCheckout';
 import {
   BackendCategory,
   BackendService,
@@ -850,13 +851,19 @@ export const beautyApi = {
 
   async createPayOSPayment(
     bookingId: number,
-    data: { paymentOption: PaymentOption; voucherCode?: string }
+    data: { paymentOption: PaymentOption; voucherCode?: string },
+    onRecovery?: () => void,
   ): Promise<PayOSPayment> {
     const token = getAccessToken(), epoch = sessionCredentialEpoch();
+    const observe = async (request: () => Promise<{ data: PayOSPayment }>) => {
+      const started = performance.now(); const payment = await unwrap(request());
+      if (token === getAccessToken() && epoch === sessionCredentialEpoch()) rememberPaymentObservation(payment, started, token, epoch);
+      return payment;
+    };
     return createWithRecovery(bookingId,
-      () => unwrap(apiClient.post(`/v1/payments/payos/bookings/${bookingId}`, data, { timeout: PAYMENT_HTTP_TIMEOUT })),
-      () => unwrap(apiClient.get(`/v1/payments/payos/bookings/${bookingId}/current`, { timeout: PAYMENT_HTTP_TIMEOUT })),
-      () => token === getAccessToken() && epoch === sessionCredentialEpoch());
+      () => observe(() => apiClient.post(`/v1/payments/payos/bookings/${bookingId}`, data, { timeout: PAYMENT_HTTP_TIMEOUT })),
+      () => observe(() => apiClient.get(`/v1/payments/payos/bookings/${bookingId}/current`, { timeout: PAYMENT_HTTP_TIMEOUT })),
+      () => token === getAccessToken() && epoch === sessionCredentialEpoch(), undefined, onRecovery);
   },
 
   async servicePaymentQuote(serviceId: number, paymentOption: Exclude<PaymentOption, 'DEPOSIT_50'>, voucherCode?: string): Promise<PaymentQuote> {
@@ -868,7 +875,10 @@ export const beautyApi = {
   },
 
   async payOSPaymentStatus(orderCode: string, signal?: AbortSignal): Promise<PayOSPayment> {
-    return unwrap(apiClient.get(`/v1/payments/payos/${encodeURIComponent(orderCode)}`, { signal, timeout: PAYMENT_HTTP_TIMEOUT }));
+    const token = getAccessToken(), epoch = sessionCredentialEpoch(), started = performance.now();
+    const payment = await unwrap<PayOSPayment>(apiClient.get(`/v1/payments/payos/${encodeURIComponent(orderCode)}`, { signal, timeout: PAYMENT_HTTP_TIMEOUT }));
+    if (token === getAccessToken() && epoch === sessionCredentialEpoch()) rememberPaymentObservation(payment, started, token, epoch);
+    return payment;
   },
 
   // ==========================================

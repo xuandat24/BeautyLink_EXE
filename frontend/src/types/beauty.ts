@@ -153,6 +153,7 @@ export interface BookingReview {
 }
 
 export interface PayOSPayment {
+    instructionsFreshForMs?: number;
   checkoutAllowed?: boolean;
   verificationPending?: boolean;
   qrCode?: string | null;
