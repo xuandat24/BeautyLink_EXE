@@ -30,7 +30,7 @@ function Smoke() {
       <button onClick={() => setOpen(true)}>Mở giỏ</button>
     </main>
     <CartDrawer isOpen={open} items={store.cartItems} onClose={() => setOpen(false)} onRemoveItem={store.removeFromCart}
-      onClearCart={store.clearCart} onCheckout={() => { throw new Error('No checkout allowed in cart smoke'); }} />
+      onCheckout={() => { throw new Error('No checkout allowed in cart smoke'); }} />
   </>;
 }
 createRoot(document.getElementById('root')!).render(<Smoke />);

@@ -1,20 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { X, Trash2, ShoppingBag, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { HotDeal } from '../data/mockData';
+import type { CartItem } from '../types';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
-import { voucherCodeSchema } from '../lib/validation';
-
-export interface CartItem {
-  deal: HotDeal;
-  quantity: number;
-}
 
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   items: CartItem[];
   onRemoveItem: (id: string) => void;
-  onClearCart: () => void;
   onCheckout: () => void;
 }
 
@@ -25,10 +18,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onCheckout,
 }) => {
-  const [voucherCode, setVoucherCode] = useState('');
-  const [discountApplied, setDiscountApplied] = useState(0);
-  const [voucherMessage, setVoucherMessage] = useState('');
-
   // Lock body scroll when cart is open
   useBodyScrollLock(isOpen);
 
@@ -48,30 +37,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     (sum, item) => sum + item.deal.salePrice * item.quantity,
     0
   );
-
-  const applyVoucher = () => {
-    const validation = voucherCodeSchema.safeParse(voucherCode);
-    if (!validation.success) {
-      setDiscountApplied(0);
-      setVoucherMessage(validation.error.issues[0].message);
-      return;
-    }
-    if (validation.data === 'BEAUTY50' && subtotal >= 200000) {
-      setDiscountApplied(50000);
-      setVoucherMessage('Áp dụng thành công: Giảm 50.000đ!');
-    } else if (validation.data === 'BEAUTY100' && subtotal >= 500000) {
-      setDiscountApplied(100000);
-      setVoucherMessage('Áp dụng thành công: Giảm 100.000đ!');
-    } else if (validation.data === 'PINK15') {
-      setDiscountApplied(Math.min(Math.round(subtotal * 0.15), 150000));
-      setVoucherMessage('Áp dụng thành công: Giảm 15%, tối đa 150.000đ!');
-    } else {
-      setDiscountApplied(0);
-      setVoucherMessage('Mã voucher không hợp lệ hoặc đã hết hạn.');
-    }
-  };
-
-  const finalTotal = Math.max(0, subtotal - discountApplied);
 
   const formatVND = (price: number) => {
     return new Intl.NumberFormat('vi-VN').format(price) + 'đ';
@@ -167,34 +132,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           {items.length > 0 && (
             <div className="p-4 sm:p-5 border-t border-pink-100 bg-white space-y-3">
               {/* Voucher Apply */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Nhập mã voucher (vd: BEAUTY50)"
-                  value={voucherCode}
-                  onChange={(e) => { setVoucherCode(e.target.value.toUpperCase()); setVoucherMessage(''); }}
-                  maxLength={40}
-                  aria-invalid={Boolean(voucherMessage && discountApplied === 0)}
-                  className="flex-1 px-3 py-2 text-xs rounded-xl border border-pink-200 uppercase focus:outline-none focus:border-[#e1146c]"
-                />
-                <button
-                  type="button"
-                  onClick={applyVoucher}
-                  className="px-4 py-2 rounded-xl bg-pink-100 text-[#be185d] text-xs font-bold hover:bg-pink-200 transition-colors"
-                >
-                  Áp dụng
-                </button>
-              </div>
-
-              {voucherMessage && (
-                <p
-                  className={`text-[11px] font-semibold ${
-                    discountApplied > 0 ? 'text-emerald-600' : 'text-red-500'
-                  }`}
-                >
-                  {voucherMessage}
-                </p>
-              )}
+              <p className="text-xs leading-relaxed text-slate-500">Chọn lịch và áp dụng mã giảm giá tại bước thanh toán. Giá cuối cùng do máy chủ xác nhận.</p>
 
               {/* Price Breakdown */}
               <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-pink-50">
@@ -202,15 +140,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span>Tạm tính ({items.length} dịch vụ):</span>
                   <span>{formatVND(subtotal)}</span>
                 </div>
-                {discountApplied > 0 && (
-                  <div className="flex justify-between text-[#e1146c] font-semibold">
-                    <span>Voucher giảm giá:</span>
-                    <span>-{formatVND(discountApplied)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between text-sm font-extrabold text-slate-800 pt-1 border-t border-pink-100">
-                  <span>Tổng thanh toán:</span>
-                  <span className="text-base text-[#e1146c]">{formatVND(finalTotal)}</span>
+                  <span>Tổng giá tham khảo:</span>
+                  <span className="text-base text-[#e1146c]">{formatVND(subtotal)}</span>
                 </div>
               </div>
 

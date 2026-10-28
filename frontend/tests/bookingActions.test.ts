@@ -5,7 +5,8 @@ import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { BookingsPage } from '../src/components/BookingsPage';
 import { CheckoutPage } from '../src/components/CheckoutPage';
-import { beautyApi } from '../src/services/beautyApi';
+import { beautyApi, setAccessToken } from '../src/services/beautyApi';
+import { sessionToken } from './sessionFixtures';
 import type { BackendBooking, BackendService, CurrentUser } from '../src/types';
 
 const unpaid = { id: 1, bookingCode: 'TEST-UNPAID', serviceName: 'Test service', supplierName: 'Test supplier', practitionerName: 'Test',
@@ -52,6 +53,7 @@ test('bookings hide paid/manual/legacy cancellation, guard double submit and rej
 });
 test('checkout retains booking after provider failure, rereads backend and blocks manual checkout', async () => {
   const { dom, root } = environment();
+  setAccessToken(sessionToken());
   const originals = { create: beautyApi.createBooking, pay: beautyApi.createPayOSPayment, load: beautyApi.myBooking, quote: beautyApi.servicePaymentQuote, capacity: beautyApi.serviceCapacity };
   let created = 0, payCalls = 0, readCalls = 0;
   beautyApi.createBooking = async () => { created++; return unpaid; };
@@ -66,12 +68,12 @@ test('checkout retains booking after provider failure, rereads backend and block
   try {
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 7);
     await act(async () => root.render(React.createElement(CheckoutPage, { currentUser: user, directService: service, preselectedDate: tomorrow.toISOString().slice(0, 10), preselectedTime: '10:00', onBack() {}, onViewBookings() {}, onNeedLogin() {} })));
-    await click('Tiếp tục: Chọn hình thức'); await click('Tiếp tục: Tóm tắt');
+    await click('Tiếp tục: Chọn hình thức');
     await click('Mở thanh toán QR', true);
-    assert.equal(created, 1); assert.equal(payCalls, 1); assert.match(document.body.textContent ?? '', /Provider timeout/);
-    await click('Mở thanh toán QR');
+    assert.match(window.location.search, /bookingPayment=1/);
+    assert.equal([...document.querySelectorAll('button')].some(b => !b.disabled && b.textContent?.includes('Mở thanh toán QR')), false);
     assert.equal(created, 1); assert.equal(payCalls, 1); assert.equal(readCalls, 1);
-    assert.match(document.body.textContent ?? '', /chưa được máy chủ cho phép/);
+    assert.match(document.body.textContent ?? '', /chưa thể mở PayOS/);
   } finally { await act(async () => root.unmount()); beautyApi.createBooking = originals.create; beautyApi.createPayOSPayment = originals.pay; beautyApi.myBooking = originals.load; beautyApi.servicePaymentQuote = originals.quote; beautyApi.serviceCapacity = originals.capacity; dom.window.close(); }
 });
 

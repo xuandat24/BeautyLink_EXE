@@ -4,7 +4,8 @@ import type { PayOSPayment } from '../types/beauty';
 export type QRCheckoutState = 'INITIALIZING' | 'PENDING' | 'VERIFYING' | 'NETWORK_ERROR' | 'QR_UNAVAILABLE' | 'PAID' | 'EXPIRED' | 'CANCELLED' | 'REVIEW_REQUIRED';
 
 export function samePayment(a: PayOSPayment, b: PayOSPayment): boolean {
-  return a.bookingId === b.bookingId && String(a.orderCode) === String(b.orderCode) && a.paymentLinkId === b.paymentLinkId
+  return a.bookingId === b.bookingId && String(a.orderCode) === String(b.orderCode)
+    && (a.paymentLinkId === b.paymentLinkId || (!b.paymentLinkId && typeof a.paymentLinkId === 'string' && Boolean(a.paymentLinkId.trim())))
     && a.amount === b.amount && a.remainingAmount === b.remainingAmount && a.paymentOption === b.paymentOption;
 }
 

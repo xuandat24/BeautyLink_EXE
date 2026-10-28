@@ -119,6 +119,7 @@ jobs:
           grep -q BOOKING_REVIEW_SMOKE_READY backend/target/browser-server.log
           node frontend/tests/chatWidgetSmoke.mjs
           node frontend/tests/bookingReviewSmoke.mjs
+          node frontend/tests/checkoutEntrySmoke.mjs
           node frontend/tests/authMobileSmoke.mjs
           node frontend/tests/adminDashboardSmoke.mjs
       - name: Checkout performance and two-context race (isolated fake provider)
@@ -150,6 +151,7 @@ jobs:
             backend/target/payos-qr-*.png
             backend/target/review-midpoint-*.png
             backend/target/payos-preparation-*.png
+            backend/target/checkout-shared-*.png
             backend/target/payos-performance-*.json
             backend/target/payos-concurrency-smoke.json
             backend/target/browser-server.log

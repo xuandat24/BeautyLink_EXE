@@ -17,12 +17,12 @@ test('normal create needs only one POST; scoped HTTP deadline exceeds old 10 sec
  } finally {apiClient.defaults.adapter=adapter;}
 });
 
-test('lost create response recovers by GET only; pending ledger can finish later without another click',async()=>{
+test('lost create response opens the existing pending observer without waiting for another POST',async()=>{
  let posts=0,reads=0;const delays:number[]=[];
  const result=await createWithRecovery(42,async()=>{posts++;throw timeout;},async()=>{
   reads++;return reads===1?{...payment,paymentLinkId:null,verificationPending:true}:payment;
  },()=>true,async ms=>{delays.push(ms);});
- assert.equal(result,payment);assert.equal(posts,1);assert.equal(reads,2);assert.deepEqual(delays,[2000]);
+ assert.equal(result.paymentLinkId,null);assert.equal(result.verificationPending,true);assert.equal(posts,1);assert.equal(reads,1);assert.deepEqual(delays,[]);
 });
 
 test('network, 429, 5xx and reconciling recover the existing attempt, never repeat POST',async()=>{

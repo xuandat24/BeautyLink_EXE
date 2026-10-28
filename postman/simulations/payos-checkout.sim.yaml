@@ -1,0 +1,5 @@
+simulation: beautylink-payos-checkout-local
+routing: path
+mocks:
+  - routeKey: payos
+    path: ../mocks/payos-checkout/config.yaml

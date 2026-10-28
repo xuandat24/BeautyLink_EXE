@@ -21,10 +21,13 @@ try {
  for(let i=0;i<n;i++){
   for(const mode of ['fresh','reuse']){
    phase=mode;
+   if(mode==='reuse')await page.evaluate(()=>{window.__perfClick=0;document.addEventListener('click',()=>{window.__perfClick=performance.now();},{once:true,capture:true});});
    await page.getByText(`PERF-${i}`,{exact:true}).click();
-   const open=page.getByRole('button',{name:'Mở thanh toán QR',exact:true});await open.waitFor();await page.waitForFunction(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Mở thanh toán QR'));return b&&!b.disabled;});
-   await page.evaluate(()=>{performance.clearMeasures('beautylink-qr-render');window.__perfClick=0;document.addEventListener('click',()=>{window.__perfClick=performance.now();},{once:true,capture:true});});
-   await open.click();
+   if(mode==='fresh') {
+    const open=page.getByRole('button',{name:'Mở thanh toán QR',exact:true});await open.waitFor();await page.waitForFunction(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Mở thanh toán QR'));return b&&!b.disabled;});
+    await page.evaluate(()=>{performance.clearMeasures('beautylink-qr-render');window.__perfClick=0;document.addEventListener('click',()=>{window.__perfClick=performance.now();},{once:true,capture:true});});
+    await open.click();
+   }
    await page.locator('[data-checkout-state]').waitFor();
    add(`${mode}_shell_ms`,await page.evaluate(()=>performance.now()-window.__perfClick));
    if(label==='after'&&i===0&&mode==='fresh')await page.screenshot({path:'backend/target/payos-preparation-desktop.png'});

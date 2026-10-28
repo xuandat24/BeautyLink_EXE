@@ -35,15 +35,21 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
   useEffect(() => { const changed = (event: StorageEvent) => { if (isAuthStorageEvent(event)) setSessionRevision(n => n + 1); }; window.addEventListener('storage', changed); return () => window.removeEventListener('storage', changed); }, []);
   useEffect(() => {
     const version = ++generation.current, token = getAccessToken();
-    setBooking(null); setError(''); setLoading(true); focus.current?.focus();
+    setBooking(null); setActivePayment(null); setError(''); setLoading(true); focus.current?.focus();
     setBusy(submitting.current);
     if (!token) { setLoading(false); setError('Vui lòng đăng nhập lại để tiếp tục thanh toán.'); return; }
-    beautyApi.myBooking(bookingId).then(data => {
+    beautyApi.myBooking(bookingId).then(async data => {
       if (version !== generation.current || token !== getAccessToken()) return;
       if (data.id !== bookingId) throw new Error('Máy chủ trả về lịch hẹn không khớp.');
       setBooking(data);
       setOption(data.paymentAttemptActive && data.paymentOption ? data.paymentOption : 'DEPOSIT_05');
       setVoucher(data.paymentAttemptActive ? data.paymentVoucherCode ?? '' : '');
+      if (data.paymentAttemptActive) {
+        const payment = await beautyApi.currentBookingPayment(bookingId);
+        if (version !== generation.current || token !== getAccessToken()) return;
+        if (payment.bookingId !== bookingId || !Number.isSafeInteger(payment.orderCode)) throw new Error('Thông tin giao dịch không khớp. Không chuyển tiền.');
+        setActivePayment(payment); // read/observe the existing ledger; no replacement POST
+      }
     }).catch(err => { if (version === generation.current && token === getAccessToken()) setError(getApiErrorMessage(err, 'Không tải được lịch hẹn.')); })
       .finally(() => { if (version === generation.current) setLoading(false); });
     return () => { generation.current++; };
