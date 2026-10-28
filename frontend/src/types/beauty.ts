@@ -143,6 +143,7 @@ export interface BackendBooking {
 }
 
 export interface BookingReview {
+  images?: string[];
   id: number;
   bookingId: number;
   targetType: 'SERVICE' | 'SUPPLIER';

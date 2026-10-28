@@ -13,6 +13,10 @@ const card = code => page.locator('article').filter({ hasText: code });
 try {
   await page.goto('http://localhost:5173/tests/review-smoke.html');
   await card('SMOKE-UNPAID').waitFor();
+  // Pending local ledger + delayed provider PAID, no webhook: history must reconcile and remove checkout.
+  await card('SMOKE-HISTORY-PAID').getByText('Đã thanh toán đủ', { exact: true }).waitFor();
+  assert.ok((await card('SMOKE-HISTORY-PAID').textContent()).includes('Đã xác nhận'));
+  assert.equal(await card('SMOKE-HISTORY-PAID').getByRole('button', { name: 'Tiếp tục thanh toán', exact: true }).count(), 0);
   for (const code of ['SMOKE-FUTURE-DEPOSIT', 'SMOKE-FUTURE-FULL', 'SMOKE-PAST-DEPOSIT', 'SMOKE-PAST-FULL', 'SMOKE-MANUAL', 'SMOKE-UNCERTAIN-PAID']) {
     assert.equal(await card(code).getByRole('button', { name: 'Hủy lịch', exact: true }).count(), 0);
   }
@@ -45,6 +49,30 @@ try {
       await dialog.waitFor({ state: 'hidden' });
     }
   }
+  // Mid-service public review, image validation/preparation/storage and reload, without completing the booking.
+  await card('SMOKE-MIDPOINT').getByRole('button', { name: /đánh giá/i }).click();
+  const photoDialog = page.getByRole('dialog');
+  const imageBytes = await page.evaluate(async () => {
+    const canvas = document.createElement('canvas'); canvas.width = 40; canvas.height = 40;
+    const ctx = canvas.getContext('2d'); ctx.fillStyle = '#ec4899'; ctx.fillRect(0, 0, 40, 40);
+    return Array.from(new Uint8Array(await (await fetch(canvas.toDataURL('image/png'))).arrayBuffer()));
+  });
+  await photoDialog.locator('input[type=file]').setInputFiles({ name: 'experience.png', mimeType: 'image/png', buffer: Buffer.from(imageBytes) });
+  await photoDialog.getByAltText('Ảnh trải nghiệm 1', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: 'backend/target/review-midpoint-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.screenshot({ path: 'backend/target/review-midpoint-desktop.png', fullPage: true });
+  await photoDialog.getByLabel('Nhận xét (tùy chọn)').fill('SMOKE-MIDPOINT-PHOTO');
+  const photoSaved = page.waitForResponse(r => r.url().endsWith('/reviews/SERVICE') && r.request().method() === 'PUT');
+  await photoDialog.getByRole('button', { name: 'Lưu đánh giá' }).click();
+  assert.equal((await photoSaved).status(), 200); assert.equal((await (await photoSaved).json()).images.length, 1);
+  await photoDialog.waitFor({ state: 'hidden' });
+  assert.ok((await card('SMOKE-MIDPOINT').textContent()).includes('Đã xác nhận'));
+  await page.reload(); await card('SMOKE-MIDPOINT').getByRole('button', { name: /đánh giá/i }).click();
+  await page.getByRole('dialog').getByAltText('Ảnh trải nghiệm 1', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByRole('button', { name: 'Đóng đánh giá' }).click();
   await page.reload(); await card('SMOKE-PAST-DEPOSIT').waitFor();
   await card('SMOKE-PAST-DEPOSIT').getByRole('button', { name: /đánh giá/i }).click();
   let dialog = page.getByRole('dialog');
@@ -155,7 +183,7 @@ try {
   const persisted=await (await page.request.get(`http://localhost:8080/api/v1/payments/payos/${observedPayment.orderCode}`,{headers:{Authorization:`Bearer ${jwt}`}})).json();
   assert.equal(persisted.status,'PAID');assert.equal(persisted.checkoutAllowed,false);assert.equal(persisted.qrCode,null);
   assert.deepEqual(failures, []);
-  console.log('PASS: browser -> Spring/JWT/H2; continuation reload/back navigation/reuse/safe expiry retry without new booking; paid/manual guards, pending cancellation, completion, review upserts/reload, account/appointments/Explore/details, checkout -> fake gateway; no API/page/console errors.');
+  console.log('PASS: browser -> Spring/JWT/H2; paid history reconciliation without webhook, continuation reload/back navigation/reuse/safe expiry retry without new booking; paid/manual guards, pending cancellation, completion, midpoint review photo upload/reload on desktop/mobile, review upserts/reload, account/appointments/Explore/details, checkout -> fake gateway; no API/page/console errors.');
 } catch (error) {
   console.error('Local smoke diagnostic:', failures, await page.locator('[role="alert"]').allTextContents());
   throw error;

@@ -48,7 +48,7 @@ public class BookingReviewSmokeServer {
                 "--spring.config.import=", "--server.address="+System.getenv().getOrDefault("SMOKE_BIND_ADDRESS","127.0.0.1"), "--server.port=8080",
                 "--spring.datasource.url=jdbc:h2:mem:review-browser;MODE=MySQL;DB_CLOSE_DELAY=-1",
                 "--app.payos.client-id=", "--app.payos.api-key=", "--app.payos.checksum-key=",
-                "--app.otp.resend.api-key=");
+                "--app.otp.resend.api-key=", "--app.payos.reconciliation-initial-delay-ms=3600000");
         String url = context.getEnvironment().getProperty("spring.datasource.url", "");
         if (!url.startsWith("jdbc:h2:mem:review-browser")) throw new IllegalStateException("Unsafe smoke-test datasource");
         var bookings = context.getBean(BookingRepository.class);
@@ -82,12 +82,20 @@ public class BookingReviewSmokeServer {
                 if (i == 5) org.springframework.test.util.ReflectionTestUtils.setField(b, "createdAt", Instant.now().minusSeconds(10 * 86400));
                 bookings.save(b);
             }
-            for (int i = 0; i < 5; i++) {
-                Booking b = new Booking(); b.setBookingCode(new String[]{"SMOKE-PENDING-LINK", "SMOKE-MANUAL", "SMOKE-RESUME", "SMOKE-RETRY", "SMOKE-UNCERTAIN-PAID"}[i]);
+            {
+                var local = ZonedDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+                var start = local.minusMinutes(35); var end = local.plusMinutes(25);
+                Booking b = new Booking(); b.setBookingCode("SMOKE-MIDPOINT"); b.setCustomer(users.findByPhone("0900000001").orElseThrow());
+                b.setService(offering); b.setSupplier(offering.getSupplier()); b.setPractitioner(people.findBySupplierIdAndActiveTrue(offering.getSupplier().getId()).getFirst());
+                b.setAppointmentDate(start.toLocalDate()); b.setStartTime(start.toLocalTime()); b.setEndTime(end.toLocalTime());
+                b.setTotalAmount(offering.getPrice()); b.setStatus(BookingStatus.CONFIRMED); b.setPaymentStatus(PaymentStatus.PARTIALLY_PAID); bookings.save(b);
+            }
+            for (int i = 0; i < 6; i++) {
+                Booking b = new Booking(); b.setBookingCode(new String[]{"SMOKE-PENDING-LINK", "SMOKE-MANUAL", "SMOKE-RESUME", "SMOKE-RETRY", "SMOKE-UNCERTAIN-PAID", "SMOKE-HISTORY-PAID"}[i]);
                 b.setCustomer(users.findByPhone("0900000001").orElseThrow()); b.setService(offering); b.setSupplier(offering.getSupplier());
                 b.setPractitioner(people.findBySupplierIdAndActiveTrue(offering.getSupplier().getId()).get(0));
                 b.setAppointmentDate(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusDays(7).with(java.time.temporal.TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY)));
-                if (i == 4) b.setAppointmentDate(b.getAppointmentDate().plusDays(1));
+                if (i == 4 || i == 5) b.setAppointmentDate(b.getAppointmentDate().plusDays(i == 4 ? 1 : 2));
                 b.setStartTime(LocalTime.of(i == 2 ? 9 : i == 3 ? 17 : 15, 0)); b.setEndTime(b.getStartTime().plusMinutes(offering.getDurationMinutes())); b.setTotalAmount(offering.getPrice());
                 b.setStatus(i == 1 ? BookingStatus.COMPLETED : i == 3 ? BookingStatus.CANCELLED : BookingStatus.PENDING);
                 b.setPaymentRetryAllowed(i == 3); b.setPaymentStatus(i == 1 ? PaymentStatus.PAID : PaymentStatus.UNPAID); bookings.saveAndFlush(b);
@@ -96,7 +104,7 @@ public class BookingReviewSmokeServer {
                 p.setExpiresAt(Instant.now().plusSeconds(i == 3 ? -60 : 900)); p.setCheckoutUrl("https://pay.payos.vn/web/" + p.getPaymentLinkId());
                 p.setStatus(i == 1 ? PaymentTransactionStatus.REVIEW_REQUIRED : i == 3 ? PaymentTransactionStatus.EXPIRED : PaymentTransactionStatus.PENDING); p.setRequiresManualReview(i == 1 || i == 4); payments.save(p);
                 var link = new PaymentLink(); link.setId(p.getPaymentLinkId()); link.setOrderCode(p.getOrderCode()); link.setAmount(p.getAmount().longValueExact());
-                link.setAmountPaid(i == 4 ? p.getAmount().longValueExact() : 0L); link.setStatus(i == 4 ? PaymentLinkStatus.PAID : i == 3 ? PaymentLinkStatus.EXPIRED : PaymentLinkStatus.PENDING); links.put(p.getOrderCode(), link);
+                link.setAmountPaid(i == 4 || i == 5 ? p.getAmount().longValueExact() : 0L); link.setStatus(i == 4 || i == 5 ? PaymentLinkStatus.PAID : i == 3 ? PaymentLinkStatus.EXPIRED : PaymentLinkStatus.PENDING); links.put(p.getOrderCode(), link);
             }
             if (System.getenv("SMOKE_PERF_MODE") != null) for (int i = 0; i < 35; i++) {
                 Booking b = new Booking(); b.setBookingCode("PERF-" + i); b.setCustomer(users.findByPhone("0900000001").orElseThrow());

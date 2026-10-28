@@ -26,21 +26,21 @@ public class BookingHoldExpiryService {
 
     public List<Long> candidates() {
         return bookings.findUnpaidUnstartedHoldIds(BookingStatus.PENDING, PaymentStatus.UNPAID,
-                time.now().minusSeconds(15 * 60), PageRequest.of(0, 100));
+                time.now().minusSeconds(BookingCompletionPolicy.HOLD_SECONDS), PageRequest.of(0, 100));
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void expire(Long bookingId) {
         Booking booking = bookings.findByIdForUpdate(bookingId).orElse(null);
         if (booking == null || booking.getStatus() != BookingStatus.PENDING
                 || booking.getPaymentStatus() != PaymentStatus.UNPAID
-                || !booking.getCreatedAt().isBefore(time.now().minusSeconds(15 * 60))
+                || BookingCompletionPolicy.holdUntil(booking).isAfter(time.now())
                 || payments.findFirstByBookingIdOrderByCreatedAtDesc(bookingId).isPresent()) return;
         booking.setStatus(BookingStatus.CANCELLED);
         booking.setPaymentRetryAllowed(false);
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     @Scheduled(fixedDelayString = "${app.booking-hold.expiry-check-ms:60000}",
                initialDelayString = "${app.booking-hold.expiry-initial-delay-ms:60000}")
     public void expireCandidates() {

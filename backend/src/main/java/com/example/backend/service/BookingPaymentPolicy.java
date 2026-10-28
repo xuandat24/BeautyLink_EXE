@@ -28,10 +28,11 @@ public final class BookingPaymentPolicy {
         if (attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PAID)) return "PAYMENT_STATE_CONFLICT";
         if (b.getStatus() == BookingStatus.COMPLETED) return "BOOKING_COMPLETED";
         if (b.getStatus() == BookingStatus.CANCELLED && !b.isPaymentRetryAllowed()) return "BOOKING_CANCELLED";
+        if (!now.isBefore(BookingCompletionPolicy.holdUntil(b))) return unresolved(attempts) ? "PAYMENT_RECONCILING" : "BOOKING_HOLD_EXPIRED";
         if (!now.isBefore(BookingCompletionPolicy.startsAt(b))) return "SLOT_UNAVAILABLE";
         if (unresolved(attempts) && (b.getStatus() == BookingStatus.CANCELLED
                 || attempts.stream().filter(p -> p.getStatus() == PaymentTransactionStatus.PENDING).count() > 1
-                || attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PENDING && (p.getCheckoutUrl() == null
+                || attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PENDING && ((p.getCheckoutUrl() == null && !PayOSQrInstructions.usable(p.getQrCode(), p.getAmount()))
                     || (p.getExpiresAt() != null && !p.getExpiresAt().isAfter(now)))))) return "PAYMENT_RECONCILING";
         return null;
     }

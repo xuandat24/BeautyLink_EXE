@@ -148,6 +148,7 @@ jobs:
           path: |
             backend/target/admin-v2-*.png
             backend/target/payos-qr-*.png
+            backend/target/review-midpoint-*.png
             backend/target/payos-preparation-*.png
             backend/target/payos-performance-*.json
             backend/target/payos-concurrency-smoke.json

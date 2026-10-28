@@ -22,6 +22,9 @@ import static com.example.backend.model.DomainEnums.*;
 @Service
 public class BookingConfirmationNotificationService {
     private final EmailNotificationOutboxRepository outbox;
+    private FeedbackReminderService feedback;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setFeedback(FeedbackReminderService feedback) { this.feedback = feedback; }
     private final BookingConfirmationEmailTemplate templates;
     private final boolean enabled;
     private final int maxAttempts;
@@ -56,6 +59,7 @@ public class BookingConfirmationNotificationService {
         }
         enqueue(payment, templates.customer(payment));
         enqueue(payment, templates.supplier(payment));
+        if (feedback != null) feedback.enqueueMidpoint(payment);
     }
 
     private void enqueue(PaymentTransaction payment, BookingConfirmationEmailTemplate.RenderedEmail rendered) {

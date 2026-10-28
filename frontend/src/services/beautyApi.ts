@@ -45,7 +45,7 @@ import { clearSession, getSessionToken, installToken, peekAccessToken, sessionSn
 
 
 export interface PublicReviewPage {
-  content: Array<{ id: number; targetType: 'SERVICE' | 'SUPPLIER'; rating: number; comment: string | null; reviewerDisplayName: string; serviceId: number; serviceName: string; createdAt: string }>;
+  content: Array<{ id: number; targetType: 'SERVICE' | 'SUPPLIER'; rating: number; comment: string | null; reviewerDisplayName: string; serviceId: number; serviceName: string; createdAt: string; images?: string[] }>;
   totalElements: number;
   totalPages: number;
   page: number;
@@ -841,8 +841,8 @@ export const beautyApi = {
     return unwrap(apiClient.patch(`/v1/bookings/${id}/complete`));
   },
 
-  async upsertBookingReview(id: number, target: 'SERVICE' | 'SUPPLIER', data: { rating: number; comment: string }): Promise<BookingReview> {
-    return unwrap(apiClient.put(`/v1/bookings/${id}/reviews/${target}`, data));
+  async upsertBookingReview(id: number, target: 'SERVICE' | 'SUPPLIER', data: { rating: number; comment: string; images?: string[] }): Promise<BookingReview> {
+    return unwrap(apiClient.put(`/v1/bookings/${id}/reviews/${target}`, data, { timeout: 60000 }));
   },
 
   async cancelBooking(id: number): Promise<BackendBooking> {
@@ -872,6 +872,10 @@ export const beautyApi = {
 
   async bookingPaymentQuote(bookingId: number, paymentOption: Exclude<PaymentOption, 'DEPOSIT_50'>, voucherCode?: string): Promise<PaymentQuote> {
     return unwrap(apiClient.get(`/v1/payments/payos/bookings/${bookingId}/quote`, { params: { paymentOption, voucherCode } }));
+  },
+
+  async currentBookingPayment(bookingId: number): Promise<PayOSPayment> {
+    return unwrap(apiClient.get(`/v1/payments/payos/bookings/${bookingId}/current`, { timeout: PAYMENT_HTTP_TIMEOUT }));
   },
 
   async payOSPaymentStatus(orderCode: string, signal?: AbortSignal): Promise<PayOSPayment> {

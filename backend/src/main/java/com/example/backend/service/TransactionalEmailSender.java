@@ -3,6 +3,10 @@ package com.example.backend.service;
 public interface TransactionalEmailSender {
     DeliveryReceipt send(EmailMessage message);
     boolean isConfigured();
+    /** Reminder sends hold a booking lock: require bounded, provider-idempotent delivery. */
+    default DeliveryReceipt sendReminder(EmailMessage message) {
+        throw new EmailDeliveryException(FailureKind.PERMANENT, "EMAIL_REMINDER_TRANSPORT_UNSUPPORTED");
+    }
 
     record EmailMessage(String from, String replyTo, String to, String subject, String textBody,
                         String htmlBody, String idempotencyKey) {}

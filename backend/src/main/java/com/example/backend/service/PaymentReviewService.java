@@ -112,7 +112,7 @@ public class PaymentReviewService {
         });
     }
     private boolean retrySlotValid(Booking b) {
-        if (!time.validBookingDate(b.getAppointmentDate()) || !time.hasBookingLead(b.getAppointmentDate().atTime(b.getStartTime()))
+        if (!BookingCompletionPolicy.holdUntil(b).isAfter(time.now()) || !time.validBookingDate(b.getAppointmentDate()) || !time.hasBookingLead(b.getAppointmentDate().atTime(b.getStartTime()))
                 || !b.getPractitioner().isActive() || !b.getService().isActive()) return false;
         try { return availability.availability(b.getService().getId(), b.getPractitioner().getId(), b.getAppointmentDate(), b.getId()).availableSlots().contains(b.getStartTime()); }
         catch (ApiException error) { return false; }

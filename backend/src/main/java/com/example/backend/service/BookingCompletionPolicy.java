@@ -13,6 +13,13 @@ public class BookingCompletionPolicy {
     public BookingCompletionPolicy() { this(Clock.systemUTC()); }
     public BookingCompletionPolicy(Clock clock) { this.clock = clock; }
     public static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    public static final long HOLD_SECONDS = 12 * 60;
+    public static Instant holdUntil(Booking booking) { return booking.getCreatedAt().plusSeconds(HOLD_SECONDS); }
+    public static Instant reviewOpensAt(Booking booking) {
+        Instant start = startsAt(booking);
+        Instant end = appointmentEnd(booking).atZone(ZONE).toInstant();
+        return start.plusMillis(Duration.between(start, end).toMillis() / 2);
+    }
     public Instant now() { return clock.instant(); }
     public LocalDate today() { return now().atZone(ZONE).toLocalDate(); }
     public static Instant startsAt(Booking booking) { return booking.getAppointmentDate().atTime(booking.getStartTime()).atZone(ZONE).toInstant(); }

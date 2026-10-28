@@ -17,6 +17,7 @@ import static com.example.backend.model.DomainEnums.*;
 @Service
 public class BookingService {
     private final PaymentService payments;
+    @org.springframework.beans.factory.annotation.Autowired private FeedbackReminderService feedback;
     private final PaymentTransactionRepository paymentTransactions;
     private final TransactionTemplate cancellationTransactions;
     private final BookingCompletionPolicy completion;
@@ -111,6 +112,7 @@ public class BookingService {
                     "Chỉ xác nhận sau khi dịch vụ kết thúc, lịch hẹn đã được xác nhận và có thanh toán hoặc đặt cọc");
         }
         booking.setStatus(BookingStatus.COMPLETED);
+        if (feedback != null) feedback.enqueueCompleted(booking);
         booking.setPaymentRetryAllowed(false);
         return response(booking);
     }
@@ -131,13 +133,13 @@ public class BookingService {
                 b.getService().getImageUrl(), b.getSupplier().getId(), b.getSupplier().getName(),
                 b.getSupplier().getImageUrl(), b.getSupplier().getAddressLine(), b.getPractitioner().getDisplayName(),
                 b.getAppointmentDate(), b.getStartTime(), b.getEndTime(), b.getTotalAmount(), b.getStatus(),
-                b.getPaymentStatus(), !blocked && ReviewService.isEligible(b), serviceReview, supplierReview, !blocked && completion.canComplete(b),
+                b.getPaymentStatus(), !blocked && ReviewService.isEligible(b, completion.now()), serviceReview, supplierReview, !blocked && completion.canComplete(b),
                 BookingPaymentPolicy.canCancel(b, attempts), reason == null && (b.getStatus() != BookingStatus.CANCELLED || b.isPaymentRetryAllowed()), reason,
                 last == null ? null : last.getPaymentOption(), last == null ? null : last.getVoucherCode(),
                 attempts.stream().anyMatch(p -> p.getStatus() == PaymentTransactionStatus.PENDING),
                 last == null ? null : last.getAmount(), last == null ? null : last.getRemainingAmount());
     }
     private BookingReviewResponse reviewResponse(BookingReview review) {
-        return new BookingReviewResponse(review.getId(), review.getBooking().getId(), review.getTargetType(), review.getRating(), review.getComment(), review.getCreatedAt(), review.getUpdatedAt());
+        return new BookingReviewResponse(review.getId(), review.getBooking().getId(), review.getTargetType(), review.getRating(), review.getComment(), review.getCreatedAt(), review.getUpdatedAt(), review.getImages());
     }
 }

@@ -34,7 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.datasource.url=${REVIEW_TEST_JDBC_URL:jdbc:h2:mem:review-release;MODE=MySQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000}",
     "spring.datasource.driver-class-name=${REVIEW_TEST_DRIVER:org.h2.Driver}",
     "spring.datasource.username=${REVIEW_TEST_USERNAME:sa}",
-    "spring.datasource.password=${REVIEW_TEST_PASSWORD:}"
+    "spring.datasource.password=${REVIEW_TEST_PASSWORD:}",
+    "app.booking-email.enabled=true", "app.booking-email.dispatch-initial-delay-ms=36000000"
 })
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
@@ -61,6 +62,12 @@ class BookingReviewReleaseTest {
     @Autowired MockMvc mvc;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @MockitoBean PayOSGateway gateway;
+    @MockitoBean PublicImageStorage imageStorage;
+    @MockitoBean TransactionalEmailSender emailSender;
+    @Autowired EmailNotificationOutboxRepository emailJobs;
+    @Autowired BookingCompletionPolicy clockPolicy;
+    @Autowired FeedbackReminderService reminderDispatcher;
+    @Autowired BookingConfirmationNotificationService notifications;
 
     private <T> T tx(java.util.function.Supplier<T> action) {
         return new TransactionTemplate(transactions).execute(status -> action.get());
@@ -296,6 +303,7 @@ class BookingReviewReleaseTest {
     }
     @Test void staleFrontendFlagsAndLegacyZeroRatingCannotUnlockPublicReviews() throws Exception {
         Booking b = fixture(BookingStatus.CONFIRMED, PaymentStatus.PAID);
+        tx(() -> { var current = bookings.findByIdForUpdate(b.getId()).orElseThrow(); current.setAppointmentDate(clockPolicy.today().plusDays(1)); return null; });
         mvc.perform(put("/api/v1/bookings/" + b.getId() + "/reviews/SERVICE")
                 .header("Authorization", "Bearer " + jwt.createToken(customer())).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"rating\":5,\"reviewEligible\":true,\"status\":\"COMPLETED\"}"))
@@ -305,5 +313,161 @@ class BookingReviewReleaseTest {
         BookingReview legacy = new BookingReview(); legacy.setBooking(b); legacy.setCustomer(customer()); legacy.setSupplier(b.getSupplier());
         legacy.setService(b.getService()); legacy.setTargetType(ReviewTargetType.SERVICE); legacy.setRating(0); reviews.saveAndFlush(legacy);
         assertEquals(count, catalog.serviceReviews(b.getService().getId(), 0, 100).totalElements());
+    }
+
+    @Test void midpointReviewPhotosSurviveReloadAndBothPublicTargetsWithoutCompletingBooking() throws Exception {
+        Booking b = fixture(BookingStatus.CONFIRMED, PaymentStatus.PARTIALLY_PAID);
+        java.io.ByteArrayOutputStream png = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2, 2, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", png);
+        String image = "data:image/png;base64," + Base64.getEncoder().encodeToString(png.toByteArray());
+        String stored = "https://res.cloudinary.com/test/image/upload/v1/review-test.webp";
+        when(imageStorage.storeValidatedImage(eq(image), eq(customer().getId()))).thenReturn(stored);
+        long before = catalog.serviceReviews(b.getService().getId(), 0, 100).totalElements();
+        var saved = reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(4, "Trải nghiệm", List.of(image)));
+        assertEquals(List.of(stored), saved.images());
+        assertEquals(BookingStatus.CONFIRMED, bookings.findById(b.getId()).orElseThrow().getStatus());
+        var reloaded = bookingService.customerBooking(customer(), b.getId());
+        assertEquals(List.of(stored), reloaded.serviceReview().images()); assertTrue(reloaded.reviewEligible());
+        assertEquals(before + 1, catalog.serviceReviews(b.getService().getId(), 0, 100).totalElements());
+        assertEquals(List.of(stored), catalog.serviceReviews(b.getService().getId(), 0, 100).content().stream().filter(r -> r.id().equals(saved.id())).findFirst().orElseThrow().images());
+        var edited = reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, "Cập nhật", List.of(stored)));
+        assertEquals(saved.id(), edited.id()); assertEquals(5, edited.rating());
+        verify(imageStorage, times(1)).storeValidatedImage(anyString(), anyLong());
+        reviewService.upsert(customer(), b.getId(), ReviewTargetType.SUPPLIER, new UpsertBookingReviewRequest(5, null, List.of()));
+        assertTrue(catalog.supplierReviews(b.getSupplier().getId(), 0, 100).content().stream().anyMatch(r -> r.serviceId().equals(b.getService().getId())));
+        assertEquals("REVIEW_IMAGE_INVALID", assertThrows(ApiException.class, () -> reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE,
+                new UpsertBookingReviewRequest(5, null, List.of("https://evil.test/image.png")))).getCode());
+        assertEquals("REVIEW_IMAGE_INVALID", assertThrows(ApiException.class, () -> reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE,
+                new UpsertBookingReviewRequest(5, null, List.of("data:image/png;base64,aGVsbG8=")))).getCode());
+        assertEquals(List.of(stored), bookingService.customerBooking(customer(), b.getId()).serviceReview().images());
+    }
+
+    private FeedbackReminderService reminders(java.time.Instant now) {
+        return new FeedbackReminderService(emailJobs, bookings, reviews, payments,
+                new BookingCompletionPolicy(Clock.fixed(now, ZoneOffset.UTC)), true, true, 5, "https://beautylink.test");
+    }
+    private EmailNotificationOutbox reminderJob(Long bookingId, EmailNotificationType type) {
+        return emailJobs.findAll().stream().filter(j -> j.getBooking().getId().equals(bookingId) && j.getNotificationType() == type).findFirst().orElseThrow();
+    }
+    @Test void twoDurableReminderMilestonesAreIdempotentAndReviewSuppressesSecondEmail() {
+        Booking b = fixture(BookingStatus.CONFIRMED, PaymentStatus.PAID);
+        PaymentTransaction p = payment(b);
+        tx(() -> { payments.findById(p.getId()).orElseThrow().setStatus(PaymentTransactionStatus.PAID); return null; });
+        Instant half = BookingCompletionPolicy.reviewOpensAt(b);
+        var reminder = reminders(half);
+        tx(() -> { var paid = payments.findById(p.getId()).orElseThrow(); reminder.enqueueMidpoint(paid); reminder.enqueueMidpoint(paid); return null; });
+        var first = reminderJob(b.getId(), EmailNotificationType.REVIEW_MIDPOINT);
+        assertEquals(half, first.getNextAttemptAt());
+        assertEquals(1, emailJobs.findAll().stream().filter(j -> j.getBooking().getId().equals(b.getId())).count());
+        TransactionalEmailSender sender = mock(TransactionalEmailSender.class);
+        when(sender.sendReminder(any())).thenReturn(new TransactionalEmailSender.DeliveryReceipt("test-only"));
+        var firstClaim = claimReminder(first);
+        tx(() -> reminder.deliverIfReminder(firstClaim, sender, "test@example.com", ""));
+        verify(sender, times(1)).sendReminder(any());
+        reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, "Déjà évalué"));
+        tx(() -> { var row = bookings.findByIdForUpdate(b.getId()).orElseThrow(); row.setStatus(BookingStatus.COMPLETED); reminder.enqueueCompleted(row); return null; });
+        assertEquals(1, emailJobs.findAll().stream().filter(j -> j.getBooking().getId().equals(b.getId())).count());
+        assertEquals(EmailNotificationStatus.SENT, emailJobs.findById(first.getId()).orElseThrow().getStatus());
+    }
+    private BookingConfirmationNotificationService.ClaimedEmail claimReminder(EmailNotificationOutbox row) {
+        return tx(() -> { var j = emailJobs.findById(row.getId()).orElseThrow(); j.setStatus(EmailNotificationStatus.PROCESSING); j.setAttemptCount(j.getAttemptCount() + 1); j.setClaimToken("fixture-claim"); j.setLeaseUntil(Instant.now().plusSeconds(120));
+            return new BookingConfirmationNotificationService.ClaimedEmail(j.getId(), "fixture-claim", j.getRecipientEmail(), j.getSubject(), j.getTextBody(), j.getHtmlBody(), j.getIdempotencyKey()); });
+    }
+    @Test void completedReminderIsCreatedOnlyOnCompletedAndQueuedMidpointIsSuppressedAfterFeedback() {
+        Booking b = fixture(BookingStatus.CONFIRMED, PaymentStatus.PAID); PaymentTransaction p = payment(b);
+        tx(() -> { payments.findById(p.getId()).orElseThrow().setStatus(PaymentTransactionStatus.PAID); return null; });
+        var reminder = reminders(BookingCompletionPolicy.reviewOpensAt(b));
+        tx(() -> { reminder.enqueueCompleted(bookings.findById(b.getId()).orElseThrow()); reminder.enqueueMidpoint(payments.findById(p.getId()).orElseThrow()); return null; });
+        assertFalse(emailJobs.existsByBookingIdAndNotificationTypeAndRecipientRole(b.getId(), EmailNotificationType.REVIEW_COMPLETED, EmailRecipientRole.CUSTOMER));
+        var claim = claimReminder(reminderJob(b.getId(), EmailNotificationType.REVIEW_MIDPOINT));
+        reviewService.upsert(customer(), b.getId(), ReviewTargetType.SUPPLIER, new UpsertBookingReviewRequest(4, "Feedback"));
+        TransactionalEmailSender sender = mock(TransactionalEmailSender.class);
+        tx(() -> reminder.deliverIfReminder(claim, sender, "test@example.com", "")); verifyNoInteractions(sender);
+        assertEquals(EmailNotificationStatus.SKIPPED, emailJobs.findById(claim.id()).orElseThrow().getStatus());
+        // A distinct customer booking with no feedback gets one completion reminder.
+        Booking second = fixture(BookingStatus.COMPLETED, PaymentStatus.PARTIALLY_PAID); PaymentTransaction secondPayment = payment(second);
+        tx(() -> { payments.findById(secondPayment.getId()).orElseThrow().setStatus(PaymentTransactionStatus.PAID); return null; });
+        tx(() -> { reminder.enqueueCompleted(bookings.findById(second.getId()).orElseThrow()); reminder.enqueueCompleted(bookings.findById(second.getId()).orElseThrow()); return null; });
+        assertEquals(1, emailJobs.findAll().stream().filter(j -> j.getBooking().getId().equals(second.getId())).count());
+    }
+
+    @Test void realPaymentAndCompletionEntrypointsEnqueueMilestonesAndDuplicateWebhookCannotDuplicateJobs() {
+        Booking future = fixture(BookingStatus.PENDING, PaymentStatus.UNPAID);
+        tx(() -> { bookings.findByIdForUpdate(future.getId()).orElseThrow().setAppointmentDate(clockPolicy.today().plusDays(1)); return null; });
+        PaymentTransaction pending = payment(future); Webhook paid = webhook(pending);
+        assertTrue(paymentService.handleWebhook(paid)); assertTrue(paymentService.handleWebhook(paid));
+        assertEquals(1, emailJobs.findAll().stream().filter(j -> j.getBooking().getId().equals(future.getId()) && j.getNotificationType() == EmailNotificationType.REVIEW_MIDPOINT).count());
+        assertEquals(BookingCompletionPolicy.reviewOpensAt(bookings.findById(future.getId()).orElseThrow()), reminderJob(future.getId(), EmailNotificationType.REVIEW_MIDPOINT).getNextAttemptAt());
+        assertThrows(ApiException.class, () -> bookingService.complete(customer(), future.getId()));
+        assertFalse(emailJobs.existsByBookingIdAndNotificationTypeAndRecipientRole(future.getId(), EmailNotificationType.REVIEW_COMPLETED, EmailRecipientRole.CUSTOMER));
+        Booking past = fixture(BookingStatus.PENDING, PaymentStatus.UNPAID); PaymentTransaction payment = payment(past);
+        paymentService.handleWebhook(webhook(payment));
+        assertFalse(emailJobs.existsByBookingIdAndNotificationTypeAndRecipientRole(past.getId(), EmailNotificationType.REVIEW_MIDPOINT, EmailRecipientRole.CUSTOMER));
+        bookingService.complete(customer(), past.getId()); bookingService.complete(customer(), past.getId());
+        assertEquals(1, emailJobs.findAll().stream().filter(j -> j.getBooking().getId().equals(past.getId()) && j.getNotificationType() == EmailNotificationType.REVIEW_COMPLETED).count());
+        verifyNoInteractions(emailSender); // Outbox creation is never a synchronous email send.
+    }
+
+    @Test void committedFeedbackWinsAgainstWaitingReminderSenderOnRealDatabaseLock() throws Exception {
+        Booking b = fixture(BookingStatus.COMPLETED, PaymentStatus.PAID); PaymentTransaction p = payment(b);
+        tx(() -> { payments.findById(p.getId()).orElseThrow().setStatus(PaymentTransactionStatus.PAID); return null; });
+        tx(() -> { reminderDispatcher.enqueueCompleted(bookings.findById(b.getId()).orElseThrow()); return null; });
+        var claim = claimReminder(reminderJob(b.getId(), EmailNotificationType.REVIEW_COMPLETED));
+        TransactionalEmailSender sender = mock(TransactionalEmailSender.class);
+        UserAccount c = customer();
+        assertEquals(List.of("OK", "OK"), serialize(b.getId(),
+                () -> reviewService.upsert(c, b.getId(), ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, "Already reviewed")),
+                () -> reminderDispatcher.deliverIfReminder(claim, sender, "test@example.com", "")));
+        verifyNoInteractions(sender);
+        assertEquals(EmailNotificationStatus.SKIPPED, emailJobs.findById(claim.id()).orElseThrow().getStatus());
+    }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named="REVIEW_TEST_DRIVER", matches="com.mysql.cj.jdbc.Driver")
+    void publicMidpointReviewDoesNotDependOnMysqlSessionTimezone() {
+        Booking b = fixture(BookingStatus.CONFIRMED, PaymentStatus.PAID);
+        var local = ZonedDateTime.now(BookingCompletionPolicy.ZONE);
+        tx(() -> { var row = bookings.findByIdForUpdate(b.getId()).orElseThrow();
+            row.setAppointmentDate(local.minusMinutes(31).toLocalDate()); row.setStartTime(local.minusMinutes(31).toLocalTime()); row.setEndTime(local.plusMinutes(29).toLocalTime()); return null; });
+        var saved = reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, "Timezone-safe midpoint"));
+        tx(() -> {
+            // Only this disposable test connection changes; always restore before returning it to the pool.
+            jdbc.execute("SET time_zone='-07:00'");
+            try { assertTrue(catalog.serviceReviews(b.getService().getId(), 0, 100).content().stream().anyMatch(r -> r.id().equals(saved.id()))); }
+            finally { jdbc.execute("SET time_zone='+00:00'"); }
+            return null;
+        });
+    }
+
+    @Test void reminderFailureRollsBackReleasesBookingLockAndRetrySuppressesCommittedFeedback() {
+        Booking b = fixture(BookingStatus.COMPLETED, PaymentStatus.PAID); PaymentTransaction p = payment(b);
+        tx(() -> { payments.findById(p.getId()).orElseThrow().setStatus(PaymentTransactionStatus.PAID); reminderDispatcher.enqueueCompleted(bookings.findById(b.getId()).orElseThrow()); return null; });
+        var claim = claimReminder(reminderJob(b.getId(), EmailNotificationType.REVIEW_COMPLETED));
+        var sender = mock(TransactionalEmailSender.class);
+        var failure = new TransactionalEmailSender.EmailDeliveryException(TransactionalEmailSender.FailureKind.AMBIGUOUS, "EMAIL_PROVIDER_RESULT_AMBIGUOUS");
+        when(sender.sendReminder(any())).thenThrow(failure);
+        assertSame(failure, assertThrows(TransactionalEmailSender.EmailDeliveryException.class, () -> reminderDispatcher.deliverIfReminder(claim, sender, "test@example.test", "")));
+        var after = emailJobs.findById(claim.id()).orElseThrow(); assertEquals(EmailNotificationStatus.PROCESSING, after.getStatus());
+        assertNull(after.getSentAt()); assertEquals(claim.idempotencyKey(), after.getIdempotencyKey());
+        notifications.markFailed(claim, failure); assertEquals(EmailNotificationStatus.RETRY, emailJobs.findById(claim.id()).orElseThrow().getStatus());
+        reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, "submitted after failure"));
+        var retry = claimReminder(after); assertEquals(claim.idempotencyKey(), retry.idempotencyKey());
+        reminderDispatcher.deliverIfReminder(retry, sender, "test@example.test", "");
+        verify(sender, times(1)).sendReminder(any());
+        assertEquals(EmailNotificationStatus.SKIPPED, emailJobs.findById(claim.id()).orElseThrow().getStatus());
+        assertEquals(BookingStatus.COMPLETED, bookings.findById(b.getId()).orElseThrow().getStatus());
+    }
+    @ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(strings={"OLD_KEY", "CHANGED_RECIPIENT", "CRASH_RETRY_LIMIT"})
+    void unsafeReplayNeverCallsProvider(String fault) {
+        Booking b = fixture(BookingStatus.COMPLETED, PaymentStatus.PAID); PaymentTransaction p = payment(b);
+        tx(() -> { payments.findById(p.getId()).orElseThrow().setStatus(PaymentTransactionStatus.PAID); reminderDispatcher.enqueueCompleted(bookings.findById(b.getId()).orElseThrow()); return null; });
+        var job = reminderJob(b.getId(), EmailNotificationType.REVIEW_COMPLETED);
+        if (fault.equals("OLD_KEY")) jdbc.update("update email_notification_outbox set created_at=? where id=?", java.sql.Timestamp.from(Instant.now().minusSeconds(25 * 3600)), job.getId());
+        tx(() -> { var row = emailJobs.findById(job.getId()).orElseThrow();
+            if (fault.equals("CHANGED_RECIPIENT")) row.setRecipientEmail("obsolete@example.test");
+            if (fault.equals("CRASH_RETRY_LIMIT")) row.setAttemptCount(5); return null; });
+        var claim = claimReminder(job); var sender = mock(TransactionalEmailSender.class);
+        assertTrue(reminderDispatcher.deliverIfReminder(claim, sender, "test@example.test", "")); verifyNoInteractions(sender);
+        assertEquals(EmailNotificationStatus.SKIPPED, emailJobs.findById(job.getId()).orElseThrow().getStatus());
     }
 }

@@ -24,7 +24,7 @@ export function useBookingReviews(supplierId?: number, serviceId?: number, refre
         reviews: result.content.map((item) => ({
           id: String(item.id), serviceId: item.serviceId, serviceTitle: item.serviceName, salonName: '',
           authorName: item.reviewerDisplayName, rating: item.rating, date: new Date(item.createdAt).toLocaleDateString('vi-VN'),
-          content: item.comment ?? '', verifiedBooking: true,
+          content: item.comment ?? '', verifiedBooking: true, images: item.images ?? [],
         })),
       });
     }).catch((err) => { if (active) setState({ ...empty, loading: false, error: getApiErrorMessage(err, 'Không thể tải đánh giá.') }); });

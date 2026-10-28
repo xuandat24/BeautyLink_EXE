@@ -43,6 +43,8 @@ class PaymentCancellationSafetyTest {
     @Autowired UserAccountRepository users;
     @Autowired BookingService bookingService;
     @Autowired PaymentService paymentService;
+    @Autowired BookingHoldExpiryService holdExpiry;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired ReviewService reviewService;
     @Autowired CatalogService catalog;
     @Autowired PlatformTransactionManager manager;
@@ -227,7 +229,7 @@ class PaymentCancellationSafetyTest {
         assertFalse(saved.isRequiresManualReview()); assertNotNull(saved.getPaidAt());
         assertTrue(paymentService.handleWebhook(webhook)); paymentService.reconcileById(p.getId());
         var dto = bookingService.customerBooking(customer(), b.getId()); assertEquals(BookingStatus.CONFIRMED, dto.status());
-        assertEquals(paid, dto.paymentStatus()); assertTrue(dto.completionEligible()); assertFalse(dto.reviewEligible());
+        assertEquals(paid, dto.paymentStatus()); assertTrue(dto.completionEligible()); assertTrue(dto.reviewEligible());
         assertEquals(BookingStatus.COMPLETED, bookingService.complete(customer(), b.getId()).status());
         assertEquals(saved.getPaidAt(), payments.findById(p.getId()).orElseThrow().getPaidAt());
     }
@@ -267,6 +269,7 @@ class PaymentCancellationSafetyTest {
             // The full suite also runs in a separate UTC JVM; clock zones must yield the same Instant.
             var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID);
             Instant start = Instant.parse("2030-05-01T03:00:00Z");
+            jdbc.update("update bookings set created_at=? where id=?", java.sql.Timestamp.from(start.minusSeconds(300)), b.getId());
             doReturn(Clock.fixed(start.plusMillis(offset), ZoneId.of(zone)).instant()).when(time).now();
             tx(() -> { bookings.findByIdForUpdate(b.getId()).orElseThrow().setAppointmentDate(LocalDate.of(2030, 5, 1)); return null; });
             var p = attempt(b, PaymentTransactionStatus.PENDING); p.setExpiresAt(start.plusSeconds(300)); p.setProviderCreatedAt(start.minusSeconds(1)); p.setLastReconciledAt(start.minusSeconds(1)); payments.saveAndFlush(p);
@@ -280,6 +283,7 @@ class PaymentCancellationSafetyTest {
     }
     @Test void newLinkExpiryIsCappedAtStartAndLateCreateResponseNeverExposesUrl() {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var start = BookingCompletionPolicy.startsAt(b);
+        jdbc.update("update bookings set created_at=? where id=?", java.sql.Timestamp.from(start.minusSeconds(300)), b.getId());
         doReturn(start.minusSeconds(60)).when(time).now();
         when(gateway.create(any())).thenAnswer(invocation -> {
             CreatePaymentLinkRequest input = invocation.getArgument(0); assertEquals(start.getEpochSecond(), input.getExpiredAt());
@@ -740,4 +744,73 @@ class PaymentCancellationSafetyTest {
         }
     }
     private String outcome(Runnable action) { try { action.run(); return "OK"; } catch (ApiException e) { return e.getCode(); } }
+
+    @Test void unpaidWithoutAttemptExpiresExactlyAtTwelveMinutesAndCannotPayAgain() {
+        Booking b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID);
+        doReturn(BookingCompletionPolicy.holdUntil(bookings.findById(b.getId()).orElseThrow()).minusSeconds(1)).when(time).now();
+        holdExpiry.expire(b.getId()); assertEquals(BookingStatus.PENDING, bookings.findById(b.getId()).orElseThrow().getStatus());
+        doReturn(BookingCompletionPolicy.holdUntil(bookings.findById(b.getId()).orElseThrow())).when(time).now(); holdExpiry.expire(b.getId());
+        var result = bookingService.customerBooking(customer(), b.getId());
+        assertEquals(BookingStatus.CANCELLED, result.status()); assertFalse(result.paymentEligible());
+        assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest())); verify(gateway, never()).create(any());
+    }
+    @Test void holdExpiryCancelsOnlyAfterVerifiedZeroMoneyAndRetainsLatePaidEvidence() {
+        Booking b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); PaymentTransaction p = attempt(b, PaymentTransactionStatus.PENDING);
+        doReturn(BookingCompletionPolicy.holdUntil(bookings.findById(b.getId()).orElseThrow())).when(time).now();
+        proof(p, PaymentLinkStatus.PENDING);
+        var closed = provider(p, PaymentLinkStatus.CANCELLED); when(gateway.cancel(eq(p.getOrderCode()), any())).thenReturn(closed);
+        paymentService.statusForBooking(customer(), b.getId()); var result = bookingService.customerBooking(customer(), b.getId());
+        assertEquals(BookingStatus.CANCELLED, result.status()); assertFalse(result.paymentEligible()); assertFalse(bookings.findById(b.getId()).orElseThrow().isPaymentRetryAllowed());
+        paymentService.handleWebhook(paidWebhook(p)); var saved = payments.findById(p.getId()).orElseThrow();
+        assertEquals(PaymentTransactionStatus.REVIEW_REQUIRED, saved.getStatus()); assertNotNull(saved.getPaidAt());
+        assertEquals(BookingStatus.CANCELLED, bookings.findById(b.getId()).orElseThrow().getStatus());
+    }
+    @Test void holdExpiryTimeoutKeepsSlotAndManualBlockerButVerifiedPaidAtDeadlineConfirmsNormally() {
+        Booking b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); PaymentTransaction p = attempt(b, PaymentTransactionStatus.PENDING);
+        doReturn(b.getCreatedAt().plusSeconds(721)).when(time).now(); proof(p, PaymentLinkStatus.PENDING);
+        when(gateway.cancel(eq(p.getOrderCode()), any())).thenThrow(new ApiException(org.springframework.http.HttpStatus.GATEWAY_TIMEOUT, "PROVIDER_TIMEOUT", "test"));
+        paymentService.reconcileById(p.getId()); assertEquals(BookingStatus.PENDING, bookings.findById(b.getId()).orElseThrow().getStatus());
+        assertTrue(payments.findById(p.getId()).orElseThrow().isRequiresManualReview()); assertFalse(bookingService.customerBooking(customer(), b.getId()).paymentEligible());
+        paymentService.handleWebhook(paidWebhook(p)); assertTrue(payments.findById(p.getId()).orElseThrow().isRequiresManualReview());
+        Booking second = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); PaymentTransaction paid = attempt(second, PaymentTransactionStatus.PENDING);
+        doReturn(BookingCompletionPolicy.holdUntil(bookings.findById(second.getId()).orElseThrow())).when(time).now(); proof(paid, PaymentLinkStatus.PAID); paymentService.reconcileById(paid.getId());
+        var status = bookingService.customerBooking(customer(), second.getId());
+        assertEquals(BookingStatus.CONFIRMED, status.status()); assertEquals(PaymentStatus.PARTIALLY_PAID, status.paymentStatus()); assertFalse(status.paymentEligible());
+    }
+
+    @Test void legacyFifteenMinuteLinkCannotExposeInstructionsOrFreshLeaseBeyondBookingHold() {
+        Booking b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); PaymentTransaction p = attempt(b, PaymentTransactionStatus.PENDING);
+        Instant deadline = BookingCompletionPolicy.holdUntil(bookings.findById(b.getId()).orElseThrow());
+        doReturn(deadline.minusMillis(500)).when(time).now(); proof(p, PaymentLinkStatus.PENDING);
+        var active = paymentService.statusForBooking(customer(), b.getId());
+        assertTrue(active.checkoutAllowed()); assertEquals(deadline, active.expiresAt());
+        assertTrue(active.instructionsFreshForMs() <= 500);
+        doReturn(deadline).when(time).now();
+        var elapsed = paymentService.statusForBooking(customer(), b.getId());
+        assertFalse(elapsed.checkoutAllowed()); assertNull(elapsed.checkoutUrl()); assertNull(elapsed.qrCode());
+        assertEquals(0, elapsed.instructionsFreshForMs());
+        assertEquals(BookingStatus.PENDING, bookings.findById(b.getId()).orElseThrow().getStatus()); // timer is not closure proof
+    }
+
+    @Test void expiryBatchSeesAnAttemptCommittedWhileWaitingForBookingLock() throws Exception {
+        Booking b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID);
+        doReturn(BookingCompletionPolicy.holdUntil(bookings.findById(b.getId()).orElseThrow())).when(time).now();
+        var locked = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var reservation = pool.submit(() -> tx(() -> {
+                bookings.findByIdForUpdate(b.getId()).orElseThrow(); attempt(b, PaymentTransactionStatus.PENDING); locked.countDown();
+                try { assertTrue(release.await(5, java.util.concurrent.TimeUnit.SECONDS)); } catch (InterruptedException e) { throw new IllegalStateException(e); }
+                return null;
+            }));
+            assertTrue(locked.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            var expiry = pool.submit(() -> holdExpiry.expireCandidates());
+            try { assertThrows(java.util.concurrent.TimeoutException.class, () -> expiry.get(200, java.util.concurrent.TimeUnit.MILLISECONDS)); }
+            finally { release.countDown(); }
+            reservation.get(10, java.util.concurrent.TimeUnit.SECONDS); expiry.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertEquals(BookingStatus.PENDING, bookings.findById(b.getId()).orElseThrow().getStatus());
+        assertEquals(1, payments.findAllByBookingIdOrderByCreatedAtDesc(b.getId()).size());
+        verify(gateway, never()).cancel(any(), any());
+    }
 }
