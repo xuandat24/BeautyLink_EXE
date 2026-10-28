@@ -7,7 +7,9 @@ export const canCompleteBooking = (booking: BackendBooking) => !unresolved(booki
 export const canCancelBooking = (booking: BackendBooking) => booking.cancelEligible === true && booking.paymentStatus === 'UNPAID' && !['COMPLETED', 'CANCELLED'].includes(booking.status) && booking.paymentBlockerReason !== 'PAYMENT_REVIEW_REQUIRED';
 export const canPayBooking = (booking: BackendBooking) => booking.paymentEligible === true && booking.paymentStatus === 'UNPAID' && !booking.paymentBlockerReason && ['PENDING', 'CONFIRMED', 'CANCELLED'].includes(booking.status);
 export const paymentSupportMessage = (booking: BackendBooking) => unresolved(booking)
-  ? 'Giao dịch đang cần đối soát. Không thanh toán lại; vui lòng gửi Phản hồi để liên hệ hỗ trợ.'
+  ? booking.paymentBlockerReason === 'PAYMENT_RECONCILING'
+    ? 'Chưa xác minh được kết quả. Bạn có thể mở Xem thanh toán để kiểm tra. Không thanh toán lại khi kết quả chưa rõ.'
+    : 'Giao dịch đang cần đối soát. Không thanh toán lại; vui lòng gửi Phản hồi để liên hệ hỗ trợ.'
   : hasPayment(booking) && booking.status !== 'COMPLETED' ? 'Lịch hẹn đã thanh toán/đặt cọc không thể tự hủy. Cần hỗ trợ, vui lòng gửi Phản hồi.' : null;
 export function safeCheckout(payment: PayOSPayment, bookingId: number): string | null {
   if (payment.bookingId !== bookingId || payment.status !== 'PENDING' || payment.requiresManualReview !== false || payment.checkoutAllowed === false || payment.verificationPending === true || !payment.checkoutUrl) return null;

@@ -169,6 +169,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   useEffect(() => { const pop = () => setResumeId(paymentBookingId()); window.addEventListener('popstate', pop); return () => window.removeEventListener('popstate', pop); }, []);
   const submissionBusy = useRef(false);
   const alive = useRef(false);
+  const exitedCheckout = useRef(false);
   const reservedBooking = useRef<{ context: string; id: number } | null>(null);
   // Payment choices may change after a provider failure; booking identity must not.
   const context = JSON.stringify([currentUser?.id, items[0]?.deal.serviceId, selectedDate, selectedTimeSlot, preselectedPractitionerId]);
@@ -336,10 +337,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
 
     setActiveBooking(null); setPreparationStage('VALIDATING');
+    exitedCheckout.current = false;
     setSubmitting(true);
     submissionBusy.current = true;
     const token = getAccessToken();
-    const current = () => alive.current && context === latestContext.current && token === getAccessToken();
+    const current = () => alive.current && !exitedCheckout.current && context === latestContext.current && token === getAccessToken();
 
     try {
       const firstItem = items[0];
@@ -399,11 +401,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // =========================================================================
   // VIEW: EMPTY CART
   // =========================================================================
-  if (activePayment) return <PayOSCheckoutPage key={String(activePayment.orderCode)} initialPayment={activePayment} booking={activeBooking} onBack={() => { setActivePayment(null); onViewBookings(); }} />;
+  const returnToBookings = () => {
+    exitedCheckout.current = true;
+    // Clear navigation intent before BookingsPage mounts, otherwise it reopens the same QR.
+    setPaymentBookingId(null); setResumeId(null); setActivePayment(null); onViewBookings();
+  };
+  if (activePayment) return <PayOSCheckoutPage key={String(activePayment.orderCode)} initialPayment={activePayment} booking={activeBooking} onBack={returnToBookings} />;
   if (submitting && !contactDialogOpen) return <CheckoutPreparation serviceName={activeBooking?.serviceName ?? items[0]?.deal.title ?? 'Dịch vụ đã chọn'}
     supplierName={activeBooking?.supplierName ?? items[0]?.deal.brandName} bookingCode={activeBooking?.bookingCode}
-    amount={verifiedQuote?.amount} option={selectedPaymentOption} stage={preparationStage} onBack={onViewBookings} />;
-  if (resumeId !== null) return <PaymentContinuationDialog bookingId={resumeId} onClose={() => { setPaymentBookingId(null); setResumeId(null); onViewBookings(); }} />;
+    amount={verifiedQuote?.amount} option={selectedPaymentOption} stage={preparationStage} onBack={returnToBookings} />;
+  if (resumeId !== null) return <PaymentContinuationDialog bookingId={resumeId} onClose={returnToBookings} />;
   if (items.length === 0) {
     return (
       <div className="min-h-screen bg-[#FFF8F9] py-12 px-4 sm:px-6">

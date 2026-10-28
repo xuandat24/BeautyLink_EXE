@@ -87,7 +87,8 @@ test('history keeps checkout hidden until provider reconciliation and shows paid
   beautyApi.myBooking = async () => ({ ...unpaid, status: 'CONFIRMED', paymentStatus: 'PARTIALLY_PAID', paymentOption: 'DEPOSIT_05', paymentEligible: false });
   try {
     await act(async () => root.render(React.createElement(BookingsPage, { onBack() {}, onBookNew() {} })));
-    assert.match(document.body.textContent ?? '', /Đang đối soát/);
+    assert.match(document.body.textContent ?? '', /Đang cập nhật/);
+    assert.equal([...document.querySelectorAll('button')].some(b => b.textContent === 'Xem thanh toán'), true);
     assert.equal([...document.querySelectorAll('button')].some(b => b.textContent?.includes('Tiếp tục thanh toán')), false);
     await act(async () => finish({ bookingId: 1, status: 'PAID', requiresManualReview: false }));
     assert.match(document.body.textContent ?? '', /Đã cọc 5%/);

@@ -15,6 +15,26 @@ try {
   await card('SMOKE-UNPAID').waitFor();
   // Pending local ledger + delayed provider PAID, no webhook: history must reconcile and remove checkout.
   await card('SMOKE-HISTORY-PAID').getByText('Đã thanh toán đủ', { exact: true }).waitFor();
+  // Local filters keep the existing list; payment and booking statuses are separate.
+  await page.getByLabel('Tìm lịch hẹn', { exact: true }).fill('SMOKE-HISTORY-PAID');
+  await page.getByLabel('Trạng thái thanh toán', { exact: true }).selectOption('PAID');
+  await page.getByLabel('Trạng thái lịch hẹn', { exact: true }).selectOption('CONFIRMED');
+  assert.equal(await page.locator('article').count(), 1);
+  for (const width of [1366, 390, 360]) {
+    await page.setViewportSize({ width, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    if (width < 640) {
+      const toggle = page.getByRole('button', { name: /^Bộ lọc/ });
+      await toggle.click(); assert.equal(await page.getByLabel('Trạng thái lịch hẹn', { exact: true }).isVisible(), true);
+      await page.getByRole('button', { name: 'Thu gọn bộ lọc', exact: true }).click();
+    }
+    await page.screenshot({ path: `backend/target/booking-history-${width}.png`, fullPage: true });
+  }
+  await page.getByLabel('Tìm lịch hẹn', { exact: true }).fill('no-matching-booking');
+  await page.getByRole('heading', { name: 'Không có lịch hẹn phù hợp', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Xóa bộ lọc', exact: true }).first().click();
+  await page.setViewportSize({ width: 1366, height: 900 });
+
   assert.ok((await card('SMOKE-HISTORY-PAID').textContent()).includes('Đã xác nhận'));
   assert.equal(await card('SMOKE-HISTORY-PAID').getByRole('button', { name: 'Tiếp tục thanh toán', exact: true }).count(), 0);
   for (const code of ['SMOKE-FUTURE-DEPOSIT', 'SMOKE-FUTURE-FULL', 'SMOKE-PAST-DEPOSIT', 'SMOKE-PAST-FULL', 'SMOKE-MANUAL', 'SMOKE-UNCERTAIN-PAID']) {
@@ -123,7 +143,7 @@ try {
   const trackBookings = request => { if (new URL(request.url()).pathname === '/api/v1/bookings' && request.method() === 'POST') newBookings++; };
   page.on('request', trackBookings);
   for (const [code, oldOrder, reuse] of [['SMOKE-RESUME', 9100002, true], ['SMOKE-RETRY', 9100003, false]]) {
-    await card(code).getByRole('button', { name: 'Tiếp tục thanh toán', exact: true }).click();
+    await card(code).getByRole('button', { name: /^(Tiếp tục thanh toán|Xem thanh toán)$/ }).click();
     const resumeUrl = page.url(); assert.match(resumeUrl, /bookingPayment=\d+/);
     await page.reload();
     if (!reuse) {
@@ -148,9 +168,11 @@ try {
   await page.getByRole('button', { name: /Tiếp tục: Chọn hình thức/ }).click();
   delayNextCreate = true;
   const openingStarted = Date.now();
-  const paymentCreated = page.waitForResponse(r => r.url().includes('/payments/payos') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: /Mở thanh toán QR/ }).click();
-  const paymentResponse = await paymentCreated; assert.equal(paymentResponse.status(), 200);
+  const [paymentResponse] = await Promise.all([
+    page.waitForResponse(r => r.url().includes('/payments/payos') && r.request().method() === 'POST'),
+    page.getByRole('button', { name: /Mở thanh toán QR/ }).click(),
+  ]);
+  assert.equal(paymentResponse.status(), 200);
   assert.ok(Date.now() - openingStarted >= 11000, 'real browser must survive a response slower than the former 10s cutoff');
   assert.equal(delayedCreates, 1);
   assert.equal(observedPayment.status, 'PENDING'); assert.equal(observedPayment.requiresManualReview, false);
@@ -169,12 +191,23 @@ try {
   await page.screenshot({ path: 'backend/target/payos-qr-mobile.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: 'backend/target/payos-qr-desktop.png', fullPage: true });
+  await page.getByRole('button', { name: 'Quay lại lịch hẹn', exact: true }).click();
+  await card('SMOKE-UNPAID').waitFor();
+  assert.doesNotMatch(page.url(), /bookingPayment=/);
+  assert.equal(await page.locator('[data-checkout-state]').count(), 0, 'return must not auto-open QR again');
+  await page.reload(); await card('SMOKE-UNPAID').waitFor();
+  assert.equal(await page.locator('[data-checkout-state]').count(), 0);
   // Actual App router restores the same observer immediately, without another payment POST.
   await page.goto(`http://localhost:5173/?bookingPayment=${observedPayment.bookingId}#account`);
   await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
   await page.reload(); await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
   await page.getByRole('button', { name: 'Quay lại lịch hẹn', exact: true }).click();
   assert.doesNotMatch(page.url(), /bookingPayment=/);
+  assert.equal(new URL(page.url()).hash, '#bookings');
+  await page.reload(); await page.getByRole('heading', { name: 'Lịch hẹn của tôi', exact: true }).waitFor();
+  assert.equal(await page.locator('[data-checkout-state]').count(), 0);
+  await page.goBack(); await card('SMOKE-UNPAID').waitFor();
+  assert.equal(await page.locator('[data-checkout-state]').count(), 0);
   await page.goto(`http://localhost:5173/?bookingPayment=${observedPayment.bookingId}#account`);
   await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
   const callback = { success: true, code: '00', desc: 'SMOKE ONLY', signature: 'FAKE TEST GATEWAY ONLY', data: { code: '00', orderCode: observedPayment.orderCode, paymentLinkId: observedPayment.paymentLinkId, amount: observedPayment.amount, reference: 'SMOKE-VERIFIED', transactionDateTime: '2026-10-28 10:00:00' } };
@@ -188,6 +221,7 @@ try {
   assert.deepEqual(failures, []);
   console.log('PASS: browser -> Spring/JWT/H2; paid history reconciliation without webhook, continuation reload/back navigation/reuse/safe expiry retry without new booking; paid/manual guards, pending cancellation, completion, midpoint review photo upload/reload on desktop/mobile, review upserts/reload, account/appointments/Explore/details, checkout -> fake gateway; no API/page/console errors.');
 } catch (error) {
+  await page.screenshot({ path: 'backend/target/booking-history-failure.png', fullPage: true }).catch(() => {});
   console.error('Local smoke diagnostic:', failures, await page.locator('[role="alert"]').allTextContents());
   throw error;
 } finally { await browser.close(); }
