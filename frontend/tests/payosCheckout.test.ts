@@ -10,7 +10,7 @@ import { sessionToken } from './sessionFixtures';
 import { testQr } from './payosQrFixture';
 import { payableAttempt, retryDelay, usableProviderQr } from '../src/lib/payosCheckout';
 const payment: PayOSPayment = { checkoutAllowed: true, verificationPending: false, bookingId: 42, bookingCode: 'TEST-42', orderCode: 123, paymentLinkId: 'test-link', checkoutUrl: 'https://pay.payos.vn/web/test-link', amount: 11000, remainingAmount: 209000, paymentOption: 'DEPOSIT_05', status: 'PENDING', requiresManualReview: false, expiresAt: new Date(Date.now()+600000).toISOString(), qrCode: testQr(11000), bankBin: '970422', bankAccountNumber: 'TEST-ACCOUNT', bankAccountName: 'TEST MERCHANT', transferDescription: 'TEST ONLY' };
-async function run(status: PayOSPayment | (()=>Promise<PayOSPayment>), check: () => Promise<void> | void, setup?:()=>void) {
+async function run(status: PayOSPayment | (()=>Promise<PayOSPayment>), check: () => Promise<void> | void, setup?:()=>void, initial = payment) {
  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' });
  Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage });
  Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configurable:true});
@@ -18,9 +18,21 @@ async function run(status: PayOSPayment | (()=>Promise<PayOSPayment>), check: ()
  setAccessToken(sessionToken());
  const original = beautyApi.payOSPaymentStatus; beautyApi.payOSPaymentStatus=typeof status==='function'?status:async()=>status;
  const root=createRoot(document.getElementById('root')!);
- try { await act(async()=>root.render(React.createElement(PayOSCheckoutPage,{initialPayment:payment,onBack(){}}))); await check(); }
+ try { await act(async()=>root.render(React.createElement(PayOSCheckoutPage,{initialPayment:initial,onBack(){}}))); await check(); }
  finally { await act(async()=>root.unmount()); beautyApi.payOSPaymentStatus=original; dom.window.close(); }
 }
+test('missing create link can bind a verified recovery once; a later link change fails closed', async () => {
+ let reads=0;
+ await run(async()=> ++reads===1 ? payment : {...payment,paymentLinkId:'different-link'}, async()=>{
+  assert.equal(document.querySelector('[data-checkout-state]')?.getAttribute('data-checkout-state'),'PENDING');
+  const refresh=[...document.querySelectorAll('button')].find(b=>b.textContent?.includes('Kiểm tra trạng thái'))!;
+  await act(async()=>refresh.click());
+  assert.equal(reads,2);
+  assert.equal(document.querySelector('[data-checkout-state]')?.getAttribute('data-checkout-state'),'NETWORK_ERROR');
+  assert.equal(document.querySelector('[aria-label="Sao chép số tài khoản"]'),null);
+ },undefined,{...payment,paymentLinkId:null,qrCode:null,checkoutAllowed:false,verificationPending:true});
+});
+
 test('custom checkout renders exact provider transfer details and copies unformatted amount', async()=> {
  let copied=''; Object.defineProperty(globalThis,'navigator',{configurable:true,value:{clipboard:{writeText:async(v:string)=>{copied=v;}}}});
  await run(payment,async()=>{
@@ -107,7 +119,7 @@ test('local countdown does not assert provider expiry; confirmed terminal states
   assert.equal(document.querySelector('[data-checkout-state]')?.getAttribute('data-checkout-state'),status);
   assert.equal(document.querySelector('[aria-label="Sao chép số tài khoản"]'),null);
  });
- await run({...payment,checkoutAllowed:false,verificationPending:true},()=>assert.equal(document.querySelector('[data-checkout-state]')?.getAttribute('data-checkout-state'),'NETWORK_ERROR'));
+ await run({...payment,checkoutAllowed:false,verificationPending:true},()=>assert.equal(document.querySelector('[data-checkout-state]')?.getAttribute('data-checkout-state'),'VERIFYING'));
 });
 test('QR CRC and fixed amount are validated; eligibility accepts explicit capability independently of hosted URL',()=>{
  assert.equal(usableProviderQr(testQr(11000),11000),true);

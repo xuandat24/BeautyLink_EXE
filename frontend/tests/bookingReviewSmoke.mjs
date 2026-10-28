@@ -125,22 +125,27 @@ try {
   for (const [code, oldOrder, reuse] of [['SMOKE-RESUME', 9100002, true], ['SMOKE-RETRY', 9100003, false]]) {
     await card(code).getByRole('button', { name: 'Tiếp tục thanh toán', exact: true }).click();
     const resumeUrl = page.url(); assert.match(resumeUrl, /bookingPayment=\d+/);
-    await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).waitFor();
-    const continued = page.waitForResponse(r => r.url().includes('/payments/payos/bookings/') && r.request().method() === 'POST');
-    await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).click();
-    assert.equal((await continued).status(), 200); assert.equal(observedPayment.orderCode === oldOrder, reuse);
+    await page.reload();
+    if (!reuse) {
+      await page.getByRole('button', { name: 'Mở thanh toán QR', exact: true }).click();
+    }
     await page.getByRole('heading', { name: 'Thanh toán lịch hẹn', exact: true }).waitFor();
+    const ownedId = new URL(page.url()).searchParams.get('bookingPayment');
+    const recovered = await page.evaluate(async id => {
+      const token = sessionStorage.getItem('beautylink_access_token');
+      return (await fetch(`/api/v1/payments/payos/bookings/${id}/current`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    }, ownedId);
+    assert.equal(recovered.orderCode === oldOrder, reuse);
     if (reuse) await page.getByRole('link', { name: 'Mở phiên trên PayOS' }).waitFor();
     else await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
     assert.equal(newBookings, 0);
-    await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).waitFor();
-    await page.getByRole('dialog').getByRole('button', { name: 'Quay lại', exact: true }).click();
+    await page.reload(); await page.getByRole('heading', { name: 'Thanh toán lịch hẹn', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Quay lại lịch hẹn', exact: true }).click();
     assert.doesNotMatch(page.url(), /bookingPayment=/); assert.equal(newBookings, 0);
   }
   page.off('request', trackBookings);
   await page.getByRole('button', { name: 'Checkout', exact: true }).click();
   await page.getByRole('button', { name: /Tiếp tục: Chọn hình thức/ }).click();
-  await page.getByRole('button', { name: /Tiếp tục: Tóm tắt/ }).click();
   delayNextCreate = true;
   const openingStarted = Date.now();
   const paymentCreated = page.waitForResponse(r => r.url().includes('/payments/payos') && r.request().method() === 'POST');
@@ -149,10 +154,10 @@ try {
   assert.ok(Date.now() - openingStarted >= 11000, 'real browser must survive a response slower than the former 10s cutoff');
   assert.equal(delayedCreates, 1);
   assert.equal(observedPayment.status, 'PENDING'); assert.equal(observedPayment.requiresManualReview, false);
-  await page.locator('[data-checkout-state="NETWORK_ERROR"]').waitFor(); // real Spring marks fake provider timeout uncertain
+  await page.locator('[data-checkout-state="VERIFYING"]').waitFor(); // inconclusive provider observation keeps instructions locked
   assert.equal(await page.getByRole('img', { name: /Mã QR PayOS/ }).count(), 0);
   // No second click: bounded status retry must recover this same attempt automatically.
-  await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor({ timeout: 20000 });
+  await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor({ timeout: 25000 });
   assert.equal(delayedCreates, 1);
   const brand = page.locator('[data-checkout-brand] img');
   assert.equal(await brand.getAttribute('src'), '/beautylink-icon.png');
@@ -164,15 +169,13 @@ try {
   await page.screenshot({ path: 'backend/target/payos-qr-mobile.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: 'backend/target/payos-qr-desktop.png', fullPage: true });
-  // Actual App router (not the harness) restores checkout even from an account/home route.
+  // Actual App router restores the same observer immediately, without another payment POST.
   await page.goto(`http://localhost:5173/?bookingPayment=${observedPayment.bookingId}#account`);
-  await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).waitFor();
-  assert.equal(await page.getByRole('dialog').getByLabel('Hình thức thanh toán').isDisabled(), true);
-  await page.reload(); await page.getByRole('dialog').getByRole('button', { name: 'Mở thanh toán QR', exact: true }).waitFor();
-  await page.getByRole('dialog').getByRole('button', { name: 'Quay lại', exact: true }).click();
+  await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
+  await page.reload(); await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
+  await page.getByRole('button', { name: 'Quay lại lịch hẹn', exact: true }).click();
   assert.doesNotMatch(page.url(), /bookingPayment=/);
   await page.goto(`http://localhost:5173/?bookingPayment=${observedPayment.bookingId}#account`);
-  await page.getByRole('button', { name: 'Mở thanh toán QR', exact: true }).click();
   await page.getByRole('img', { name: /Mã QR PayOS/ }).waitFor();
   const callback = { success: true, code: '00', desc: 'SMOKE ONLY', signature: 'FAKE TEST GATEWAY ONLY', data: { code: '00', orderCode: observedPayment.orderCode, paymentLinkId: observedPayment.paymentLinkId, amount: observedPayment.amount, reference: 'SMOKE-VERIFIED', transactionDateTime: '2026-10-28 10:00:00' } };
   for(let duplicate=0;duplicate<2;duplicate++)assert.equal((await page.request.post('http://localhost:8080/api/v1/payments/payos/webhook',{data:callback})).status(),200);

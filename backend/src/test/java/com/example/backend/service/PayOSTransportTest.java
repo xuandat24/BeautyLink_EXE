@@ -30,6 +30,7 @@ class PayOSTransportTest {
     private final ObjectMapper json = new ObjectMapper();
     private final AtomicInteger requests = new AtomicInteger();
     private final java.util.concurrent.atomic.AtomicBoolean corrupt = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicBoolean trickle = new java.util.concurrent.atomic.AtomicBoolean();
     private static final String KEY = "synthetic-checksum-only";
 
     @BeforeEach void start() throws Exception {
@@ -52,12 +53,17 @@ class PayOSTransportTest {
             String signature = corrupt.get() ? "invalid-test-signature" : new CryptoProviderImpl().createSignatureFromObj(data, KEY);
             byte[] body = json.writeValueAsBytes(Map.of("code", "00", "desc", "synthetic", "data", data, "signature", signature));
             exchange.getRequestBody().close(); exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, body.length); try (var output = exchange.getResponseBody()) { output.write(body); } exchange.close();
+            exchange.sendResponseHeaders(200, body.length); try (var output = exchange.getResponseBody()) {
+                if (trickle.get()) for (byte value : body) {
+                    output.write(value); output.flush();
+                    try { Thread.sleep(40); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); break; }
+                } else output.write(body);
+            } exchange.close();
         }); server.start();
     }
     @AfterEach void stop() { if(server != null) server.stop(0); if(workers != null) workers.shutdownNow(); }
     private ClientOptions options(EventListener listener) {
-        var http = new OkHttpClient.Builder().sslSocketFactory(sockets, trust).retryOnConnectionFailure(false)
+        var http = PayOSGateway.clientOptions("test-client", "test-api", KEY).getHttpClient().newBuilder().sslSocketFactory(sockets, trust).retryOnConnectionFailure(false)
                 .connectTimeout(Duration.ofSeconds(15)).readTimeout(Duration.ofSeconds(15)).writeTimeout(Duration.ofSeconds(15)).eventListener(listener).build();
         return ClientOptions.builder().clientId("test-client").apiKey("test-api").checksumKey(KEY).baseURL("https://localhost:" + server.getAddress().getPort())
                 .timeoutMs(15000).maxRetries(0).httpClient(http).build();
@@ -77,6 +83,20 @@ class PayOSTransportTest {
         }
         assertTrue(options.getHttpClient().dispatcher().executorService().isShutdown());
         assertEquals(22, requests.get());
+    }
+    @Test void wholeCallDeadlineStopsAStreamingResponseEvenWhenEveryReadArrivesInTime() {
+        var normal = options(new EventListener() {});
+        var bounded = ClientOptions.builder().clientId("test-client").apiKey("test-api").checksumKey(KEY)
+                .baseURL("https://localhost:" + server.getAddress().getPort()).timeoutMs(2000).maxRetries(0)
+                .httpClient(normal.getHttpClient().newBuilder().readTimeout(Duration.ofMillis(200))
+                        .callTimeout(Duration.ofMillis(400)).build()).build();
+        try (var warmup = new PayOSGateway(normal); var gateway = new PayOSGateway(bounded)) {
+            warmup.get(1L); // shared pool: establish TLS outside the small scaled test deadline
+            trickle.set(true); long started = System.nanoTime();
+            assertThrows(ApiException.class, () -> gateway.get(2L));
+            assertTrue(Duration.ofNanos(System.nanoTime() - started).toMillis() < 1800);
+            assertEquals(2, requests.get(), "deadline must not cause an implicit provider retry");
+        }
     }
     @Test void pooledTransportStillRejectsInvalidProviderSignaturesWithoutRetry() {
         var options = options(new EventListener() {});

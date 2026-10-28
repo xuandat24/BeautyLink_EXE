@@ -119,7 +119,6 @@ test('unavailable payment quote gives visible feedback instead of a dead button'
       button.click();
     });
     await clickButton('Tiếp tục: Chọn hình thức');
-    await clickButton('Tiếp tục: Tóm tắt');
     const submit = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('Mở thanh toán QR')) as HTMLButtonElement;
     assert.ok(submit);
     assert.equal(submit.disabled, false);

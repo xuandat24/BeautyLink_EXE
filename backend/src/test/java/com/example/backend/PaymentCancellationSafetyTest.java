@@ -528,7 +528,8 @@ class PaymentCancellationSafetyTest {
     @Test void uncertainCreateMustRetainOrderForReconciliation() {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); long before = payments.count();
         when(gateway.create(any())).thenThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY, "PAYOS_CREATE_FAILED", "test timeout"));
-        assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest()));
+        var observing = paymentService.create(customer(), b.getId(), newRequest());
+        assertTrue(observing.verificationPending()); assertFalse(observing.checkoutAllowed()); assertNull(observing.qrCode());
         assertEquals(before + 1, payments.count());
         assertEquals(PaymentTransactionStatus.PENDING, payments.findFirstByBookingIdOrderByCreatedAtDesc(b.getId()).orElseThrow().getStatus());
     }
@@ -628,10 +629,41 @@ class PaymentCancellationSafetyTest {
     }
     @Test void timeoutCannotIssueSecondCheckoutAndVerifiedPendingCanBeReusedOnlyWhenSafe() {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); when(gateway.create(any())).thenThrow(timeout());
-        assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest()));
+        assertTrue(paymentService.create(customer(), b.getId(), newRequest()).verificationPending());
         assertEquals("PAYMENT_RECONCILING", assertThrows(ApiException.class, () -> paymentService.create(customer(), b.getId(), newRequest())).getCode());
         verify(gateway, times(1)).create(any()); assertEquals(1, payments.count());
     }
+    @ParameterizedTest @CsvSource({"PENDING", "PAID", "CANCELLED", "TIMEOUT", "WRONG_ORDER", "WRONG_AMOUNT"})
+    void missingCreateResponseIsObservedWithoutAnotherProviderPost(String outcome) {
+        var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID);
+        when(gateway.create(any())).thenThrow(timeout());
+        var initial = paymentService.create(customer(), b.getId(), newRequest());
+        assertTrue(initial.verificationPending()); assertFalse(initial.checkoutAllowed()); assertNull(initial.paymentLinkId());
+        var p = payments.findFirstByBookingIdOrderByCreatedAtDesc(b.getId()).orElseThrow();
+        // No sleeps; the same order remains reserved while the single provider POST could be in flight.
+        assertTrue(paymentService.statusForBooking(customer(), b.getId()).verificationPending());
+        verify(gateway, never()).get(any());
+        doReturn(p.getCreatedAt().plusSeconds(16)).when(time).now();
+        if (outcome.equals("TIMEOUT")) when(gateway.get(p.getOrderCode())).thenThrow(timeout());
+        else {
+            var state = outcome.equals("PAID") ? PaymentLinkStatus.PAID : outcome.equals("CANCELLED") ? PaymentLinkStatus.CANCELLED : PaymentLinkStatus.PENDING;
+            var proof = provider(p, state); when(proof.getId()).thenReturn("recovered-" + p.getOrderCode());
+            if (outcome.equals("WRONG_ORDER")) when(proof.getOrderCode()).thenReturn(p.getOrderCode() + 1);
+            if (outcome.equals("WRONG_AMOUNT")) when(proof.getAmount()).thenReturn(p.getAmount().longValueExact() + 1);
+            when(gateway.get(p.getOrderCode())).thenReturn(proof);
+        }
+        var result = paymentService.statusForBooking(customer(), b.getId());
+        assertEquals(initial.orderCode(), result.orderCode()); assertEquals(1, payments.count());
+        var saved = bookings.findById(b.getId()).orElseThrow();
+        if (outcome.equals("PAID")) { assertEquals(BookingStatus.CONFIRMED, saved.getStatus()); assertEquals(PaymentStatus.PARTIALLY_PAID, saved.getPaymentStatus()); }
+        else if (outcome.equals("CANCELLED")) assertEquals(BookingStatus.CANCELLED, saved.getStatus());
+        else { assertEquals(BookingStatus.PENDING, saved.getStatus()); assertEquals(PaymentStatus.UNPAID, saved.getPaymentStatus()); }
+        if (outcome.startsWith("WRONG")) { assertTrue(result.requiresManualReview()); assertFalse(result.checkoutAllowed()); }
+        if (outcome.equals("TIMEOUT")) { assertTrue(result.verificationPending()); assertFalse(result.checkoutAllowed()); }
+        assertNull(result.qrCode(), "GET cannot invent a QR lost with the provider create response");
+        verify(gateway, times(1)).create(any()); verify(gateway, times(1)).get(p.getOrderCode());
+    }
+
     @Test void pendingReuseIsIdempotentButExpiredLinksFailClosed() {
         var b = booking(BookingStatus.PENDING, PaymentStatus.UNPAID); var p = attempt(b, PaymentTransactionStatus.PENDING);
         var observed = provider(p, PaymentLinkStatus.PENDING);

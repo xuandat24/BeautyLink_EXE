@@ -1,0 +1,9 @@
+version: 1
+name: BeautyLink PayOS checkout recovery (synthetic signed responses)
+slug: beautylink-payos-checkout
+protocol: http
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

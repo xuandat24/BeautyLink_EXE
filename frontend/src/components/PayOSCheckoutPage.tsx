@@ -13,6 +13,7 @@ const banks: Record<string, string> = { '970422': 'MB Bank', '970436': 'Vietcomb
 
 export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initialPayment: PayOSPayment; booking?: BackendBooking | null; onBack: () => void }) {
   const [payment, setPayment] = useState(initialPayment);
+  const identity = useRef(initialPayment);
   const [qr, setQr] = useState('');
   const [error, setError] = useState('');
   const [feedback, setFeedback] = useState('');
@@ -42,19 +43,20 @@ export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initial
         const fresh = await beautyApi.payOSPaymentStatus(String(initialPayment.orderCode), controller.signal);
         if (!active) return;
         if (session !== getAccessToken()) { setError('Phiên đăng nhập đã thay đổi. Vui lòng quay lại lịch hẹn.'); return; }
-        if (!samePayment(fresh, initialPayment)) { autoRetryAllowed.current = false; setError('Thông tin giao dịch không khớp. Không chuyển tiền; vui lòng liên hệ hỗ trợ.'); return; }
+        if (!samePayment(fresh, identity.current)) { autoRetryAllowed.current = false; setError('Thông tin giao dịch không khớp. Không chuyển tiền; vui lòng liên hệ hỗ trợ.'); return; }
         if (typeof fresh.checkoutAllowed !== 'boolean' || typeof fresh.verificationPending !== 'boolean') {
           autoRetryAllowed.current = false; setError('Máy chủ chưa hỗ trợ xác minh phiên QR này. Vui lòng quay lại lịch hẹn và thử sau khi hệ thống cập nhật.'); return;
         }
+        if (fresh.paymentLinkId) identity.current = fresh;
         setPayment(fresh); setVerified(true);
-        if (fresh.verificationPending && !fresh.requiresManualReview && fresh.status !== 'REVIEW_REQUIRED') throw new Error('Provider verification deferred');
-        verifiedByStatus.current = true;
+        verifiedByStatus.current = !fresh.verificationPending;
         setError(''); failures = 0;
         if (fresh.status !== 'PENDING' || fresh.requiresManualReview) {
           const key = `${fresh.status}:${fresh.requiresManualReview}`;
           if (reportedStatus.current !== key) { reportedStatus.current = key; window.dispatchEvent(new window.Event('beautylink-bookings-refresh')); }
           return;
         }
+        if (fresh.verificationPending) delay = 15000;
       } catch (failure) {
         if (!active) return;
         const status = (failure as { response?: { status?: number } })?.response?.status;
@@ -119,7 +121,7 @@ export function PayOSCheckoutPage({ initialPayment, booking, onBack }: { initial
         <section className="min-w-0 p-6 sm:p-8">
           {booking?.id === payment.bookingId && <div className="mb-5 border-b border-slate-100 pb-4"><h2 className="break-words text-lg font-bold">{booking.serviceName}</h2><p className="mt-1 break-words text-sm text-slate-500">{booking.supplierName}</p><p className="mt-3 text-sm text-slate-600">Giá dịch vụ: <strong className="whitespace-nowrap">{money(booking.totalAmount)}</strong></p></div>}
           <p className="text-sm font-medium text-slate-500">{payment.paymentOption === 'FULL_100' ? 'Thanh toán toàn bộ' : payment.paymentOption === 'DEPOSIT_50' ? 'Đặt cọc 50% · giao dịch cũ' : 'Đặt cọc 5%'}</p><p className="mt-1 whitespace-nowrap text-3xl font-black tracking-tight text-[#bd195c] sm:text-4xl">{money(payment.amount)}</p><p className="mt-2 text-xs text-slate-500">Còn lại tại salon: <strong className="whitespace-nowrap">{money(payment.remainingAmount)}</strong></p><dl className="mt-6 divide-y divide-slate-100">{rows.map(([label, value]) => <div key={label} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><dt className="text-xs text-slate-500">{label}</dt><dd className={`mt-1 break-all text-sm font-bold ${label === 'Nội dung chuyển khoản' ? 'text-[#bd195c]' : 'text-slate-900'}`}>{label === 'Số tiền' ? money(payment.amount) : value || 'PayOS chưa cung cấp thông tin này'}</dd></div>{value && label !== 'Ngân hàng' && <button type="button" aria-label={`Sao chép ${label.toLowerCase()}`} onClick={() => void copy(label, value)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-pink-50 text-[#bd195c] hover:bg-pink-100"><Copy className="h-4 w-4" /></button>}</div>)}</dl><p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">Chuyển đúng số tiền và nội dung do PayOS cung cấp. Nếu thiếu thông tin để chuyển thủ công, hãy dùng QR; không tự đoán nội dung hoặc tài khoản.</p></section>
-      </div> : <section className="rounded-[28px] border border-pink-100 bg-white p-8 text-center shadow-sm"><CheckCircle2 className={`mx-auto mb-4 h-12 w-12 ${paid ? 'text-emerald-600' : 'text-[#bd195c]'}`} /><h2 className="text-xl font-bold">{stateTitle[state]}</h2><p role={error || manual ? 'alert' : 'status'} className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-slate-600">{paid ? `Máy chủ đã xác nhận ${money(payment.amount)} cho lịch hẹn ${payment.bookingCode}.` : manual ? 'Liên hệ hỗ trợ từ lịch hẹn và không thanh toán lại.' : error || (state === 'INITIALIZING' ? 'Đang xác minh phiên hiện có với máy chủ, chưa hiển thị chỉ dẫn chuyển tiền.' : !pending ? 'Nếu đã chuyển tiền, hãy kiểm tra lại trạng thái. Đồng hồ hết giờ không xác định giao dịch thất bại.' : 'Đã kiểm tra phiên hiện có. API tra cứu của PayOS không cung cấp lại QR cho link cũ; không tạo phiên mới để thay thế. Bạn có thể dùng trang PayOS như phương án dự phòng.')}</p>{state === 'QR_UNAVAILABLE' && safeCheckout(payment, payment.bookingId) && <a className="mt-5 inline-flex rounded-full border border-pink-200 px-6 py-3 text-sm font-bold text-[#bd195c]" href={safeCheckout(payment, payment.bookingId)!}>Mở phiên trên PayOS</a>}</section>}
+      </div> : <section className="rounded-[28px] border border-pink-100 bg-white p-8 text-center shadow-sm"><CheckCircle2 className={`mx-auto mb-4 h-12 w-12 ${paid ? 'text-emerald-600' : 'text-[#bd195c]'}`} /><h2 className="text-xl font-bold">{stateTitle[state]}</h2><p role={error || manual ? 'alert' : 'status'} className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-slate-600">{paid ? `Máy chủ đã xác nhận ${money(payment.amount)} cho lịch hẹn ${payment.bookingCode}.` : manual ? 'Liên hệ hỗ trợ từ lịch hẹn và không thanh toán lại.' : error || (state === 'VERIFYING' ? 'PayOS chưa xác nhận đủ chỉ dẫn cho phiên này. BeautyLink đang theo dõi đúng giao dịch hiện có; không tạo đơn hay chuyển tiền lại.' : state === 'INITIALIZING' ? 'Đang xác minh phiên hiện có với máy chủ, chưa hiển thị chỉ dẫn chuyển tiền.' : !pending ? 'Nếu đã chuyển tiền, hãy kiểm tra lại trạng thái. Đồng hồ hết giờ không xác định giao dịch thất bại.' : 'Đã kiểm tra phiên hiện có. API tra cứu của PayOS không cung cấp lại QR cho link cũ; không tạo phiên mới để thay thế. Bạn có thể dùng trang PayOS như phương án dự phòng.')}</p>{state === 'QR_UNAVAILABLE' && safeCheckout(payment, payment.bookingId) && <a className="mt-5 inline-flex rounded-full border border-pink-200 px-6 py-3 text-sm font-bold text-[#bd195c]" href={safeCheckout(payment, payment.bookingId)!}>Mở phiên trên PayOS</a>}</section>}
       <div className="mt-5 flex flex-col items-center justify-between gap-3 rounded-2xl border border-pink-100 bg-white px-5 py-4 sm:flex-row"><p role="status" className="text-sm text-slate-600">{paid ? 'Đã được máy chủ xác minh' : checking ? 'Đang kiểm tra trạng thái…' : error && autoRetryAllowed.current ? 'Đang tự kết nối lại; không cần mở phiên khác' : 'Trạng thái được kiểm tra tự động'}</p><button type="button" disabled={checking} onClick={() => setRevision(n => n + 1)} className="flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-bold text-[#bd195c] hover:bg-pink-50 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${checking ? 'animate-spin' : ''}`} /> Kiểm tra trạng thái</button></div><p role="status" aria-live="polite" className="mt-3 min-h-5 text-center text-sm text-[#bd195c]">{feedback}</p><p className="mt-4 text-center text-xs text-slate-500">Quay lại lịch hẹn không hủy phiên thanh toán. Chỉ máy chủ xác nhận kết quả từ PayOS.</p>
     </main>
   </div>;

@@ -93,7 +93,13 @@ public class PaymentService {
         try { provider = CheckoutTrace.measure("provider_create", () -> gateway.create(creation.request())); }
         catch (RuntimeException error) {
             // The provider may have created the link despite a timeout. Never erase/reuse this order.
-            throw conflict("PAYMENT_RECONCILING", "Giao dịch đang được đối soát. Vui lòng kiểm tra lịch hẹn, không thanh toán lại.");
+            // Return the committed attempt, not a payable QR or a successful payment. The customer
+            // can observe this exact order without another POST or a misleading return to checkout.
+            return checkoutTransactions.execute(s -> {
+                ownedBooking(customer, bookingId);
+                PaymentTransaction payment = payments.findByOrderCodeForUpdate(creation.request().getOrderCode()).orElseThrow(this::notFound);
+                return response(payment, needsReconciliation(payment));
+            });
         }
         CreationResult result = CheckoutTrace.measure("persist_tx", () -> checkoutTransactions.execute(s -> finishCheckout(customer, creation, provider)));
         if (result.error() != null) throw result.error(); // outside committed transaction
@@ -234,12 +240,15 @@ public class PaymentService {
         List<PaymentTransaction> attempts = payments.findAllByBookingIdForUpdate(bookingId);
         if (attempts.isEmpty()) throw notFound();
         PaymentTransaction payment = attempts.getLast(); // repository orders by immutable ledger id
-        if (payment.getStatus() == PaymentTransactionStatus.PENDING && payment.getPaymentLinkId() == null)
-            return response(payment, true); // create is still in flight; do not guess its outcome
         return observe(payment);
     }
 
     private PayOSPaymentResponse observe(PaymentTransaction payment) {
+        // A fresh reservation may still be in the one bounded provider POST. After that grace period,
+        // GET must recover its outcome even when the create response (and link ID) was lost.
+        if (payment.getStatus() == PaymentTransactionStatus.PENDING && payment.getPaymentLinkId() == null
+                && !BookingPaymentPolicy.manualAttempt(payment)
+                && time.now().isBefore(payment.getCreatedAt().plusSeconds(15))) return response(payment, true);
         // Customer polling observes a delayed webhook without hitting PayOS on every five-second UI tick.
         boolean due = BookingPaymentPolicy.manualAttempt(payment) ? shouldReconcile(payment)
                 : payment.getLastReconciledAt() == null || !payment.getLastReconciledAt().isAfter(time.now().minusSeconds(15));

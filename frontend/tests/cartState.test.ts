@@ -28,7 +28,7 @@ test('account carts persist independently without legacy restoration UI or auth 
   function Harness() {
     state = useBeautyStore();
     return React.createElement(CartDrawer, { isOpen: true, items: state.cartItems, onClose() {},
-      onRemoveItem: state.removeFromCart, onClearCart: state.clearCart, onCheckout() { assert.fail('No checkout expected'); } });
+      onRemoveItem: state.removeFromCart, onCheckout() { assert.fail('No checkout expected'); } });
   }
   const root = createRoot(document.getElementById('root')!);
   await act(async () => root.render(React.createElement(Harness)));

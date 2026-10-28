@@ -118,3 +118,21 @@ No DDL/new variables. Owner-approved exact-SHA CI/staging then backend→fronten
 Group `checkout_timing` by fixed operation(create/status/recovery/quote/webhook), status and correlation; inspect total/pre_service/JDBC/reserve_tx/provider_create-get/persist_tx and provider_connect/tls/ttfb. Connection time includes TLS (do not sum overlapping metrics); zero completed TLS on failed calls does not prove reuse. Separate failures/manual409 from successful percentiles and collect adequate real samples before claiming live P99. Correlate browser response ID with log line; never enable SDK body logging. Watch DB lock waits, provider calls/poll frequency and existing authorized operator audit evidence.
 
 Live smoke needs separately approved account/booking/amount/channel and money disposition. Owner performs transfer; validate only authorized evidence. No fabricated webhook/manual paid. Roll back code/image compatibly, retain nullable schema/history/manual policy; never restore production DB for this fix.
+
+
+## 2026-10-28: shared checkout and ambiguous-create recovery
+
+Observed owner log (merge afad1fa): provider_create 15022.624ms, SQL 15.067ms, total 15208.913ms/409.
+This identifies the slow boundary, not the precise upstream/network exception; create diagnostics now log only exception/cause class names, never provider payloads or credentials.
+The HTTP client retains its 15s limit and now bounds the entire call/body (not just each read), with no redirect/implicit retry.
+
+A failed/ambiguous provider create returns the committed attempt with `verificationPending=true`, `checkoutAllowed=false`, no QR. HTTP200 here acknowledges an existing ledger entry, never payment success.
+Customer reads wait through the initial 15s create grace, then GET the same order even if its link ID is missing. No replacement POST. Identity/amount/manual-review, late-money and 12-minute hold rules remain authoritative.
+Provider GET cannot recreate QR/bank instructions lost with a create response. Such attempts remain visibly verifying/QR-unavailable; never invent QR or receiving information. A previously stored safe PayOS link remains an explicit fallback only when server-authorized.
+
+Product/direct and cart now use the same two-step CheckoutPage: schedule, then payment/voucher/confirmation. Removed the unused BookingModal and duplicate cart discount calculation. A booking covers one service; other cart items/quantities are retained, not bulk-booked or silently charged.
+Capacity is refreshed while the schedule is visible, on focus/reconnect and every30s; step changes do not refetch it. Booking creation still validates/locks the actual slot on the backend. Checkout hides the floating chat widget; toast messages do not intercept clicks.
+
+No schema migration or production config change is introduced. Roll out backend then frontend after exact-SHA CI and approval; retain existing PR34 schema prerequisites. Test with isolated data/fake providers first. A controlled real PayOS/booking test needs separate account/amount/disposition authorization. Never use a lost response as permission to retry provider POST or clear manual flags.
+
+Verification artifacts: `backend/target/checkout-sync-mysql.log` (155 PASS), `checkout-sync-transport.log` (SDK HTTPS whole-call deadline/TLS reuse/signature tests), `checkout-sync-browser.log`, `checkout-sync-entry-browser.log`, and `checkout-shared-*.png`. Postman simulation uses synthetic keys only; no real mail/bank/provider writes.

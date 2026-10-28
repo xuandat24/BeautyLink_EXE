@@ -19,6 +19,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import vn.payos.exception.PayOSException;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
@@ -29,6 +31,7 @@ import vn.payos.model.webhooks.WebhookData;
 
 @Component
 public class PayOSGateway implements AutoCloseable {
+    private static final Logger log = LoggerFactory.getLogger(PayOSGateway.class);
     private final String clientId;
     private final String apiKey;
     private final String checksumKey;
@@ -60,6 +63,10 @@ public class PayOSGateway implements AutoCloseable {
         try {
             return payOS.paymentRequests().create(request);
         } catch (RuntimeException ex) {
+            Throwable cause = ex;
+            for (int depth = 0; depth < 4 && cause.getCause() != null; depth++) cause = cause.getCause();
+            // No exception messages, payloads, account details or keys in diagnostics.
+            log.warn("PayOS create result ambiguous exceptionType={} causeType={}", ex.getClass().getSimpleName(), cause.getClass().getSimpleName());
             throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYOS_CREATE_FAILED", "Không thể tạo phiên thanh toán PayOS. Vui lòng thử lại");
         }
     }
@@ -110,6 +117,7 @@ public class PayOSGateway implements AutoCloseable {
                 .timeoutMs(15000).maxRetries(0)
                 .httpClient(new OkHttpClient.Builder().connectTimeout(15000, TimeUnit.MILLISECONDS)
                         .readTimeout(15000, TimeUnit.MILLISECONDS).writeTimeout(15000, TimeUnit.MILLISECONDS)
+                        .callTimeout(15000, TimeUnit.MILLISECONDS).followRedirects(false).followSslRedirects(false)
                         .retryOnConnectionFailure(false).eventListenerFactory(call -> new TransportTiming()).build()).build();
     }
 

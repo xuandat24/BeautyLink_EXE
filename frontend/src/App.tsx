@@ -22,7 +22,6 @@ import { eligibleOnboardingVisit } from './lib/onboarding';
 import type { SessionPhase } from './lib/authSession';
 
 // Modals
-import { BookingModal } from './components/BookingModal';
 import { CartDrawer } from './components/CartDrawer';
 import { VoucherModal } from './components/VoucherModal';
 import { LocationSelectModal } from './components/LocationSelectModal';
@@ -216,7 +215,6 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     cartItems: storedCartItems,
     addToCart,
     removeFromCart,
-    clearCart,
     currentUser: storedCurrentUser,
     setCurrentUser,
     notifications: storedNotifications,
@@ -602,8 +600,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   };
 
   // Booking Modal State
-  const [activeBookingService, setActiveBookingService] = useState<BackendService | null>(null);
-  const eligibleHomeVisit = eligibleOnboardingVisit(currentPage, window.location.search, window.location.hash, Boolean(activeBookingService));
+  const eligibleHomeVisit = eligibleOnboardingVisit(currentPage, window.location.search, window.location.hash, false);
   useEffect(() => {
     if (!eligibleHomeVisit) setIsLocationModalOpen(false);
     else if (isVisitorOnboardingRequired) setIsLocationModalOpen(true);
@@ -644,17 +641,18 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   const handleBookDeal = useCallback(
     (dealTitle: string, salonName: string) => {
       const found =
-        rawServices.find((s) => s.name === dealTitle || s.supplierName === salonName) ||
-        rawServices[0];
+        rawServices.find((s) => s.name === dealTitle && s.supplierName === salonName);
       if (found && found.price <= 0) {
         showToast('Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá.');
       } else if (found) {
-        setActiveBookingService(found);
+        setPaymentBookingId(null);
+        setDirectCheckoutConfig({ service: found });
+        navigateTo('checkout');
       } else {
         showToast('Dịch vụ này chưa sẵn sàng để đặt lịch.');
       }
     },
-    [rawServices, showToast]
+    [rawServices, showToast, navigateTo]
   );
 
   const handleOpenService = useCallback(
@@ -662,10 +660,12 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       if (service.price <= 0) {
         showToast('Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá.');
       } else {
-        setActiveBookingService(service);
+        setPaymentBookingId(null);
+        setDirectCheckoutConfig({ service: service });
+        navigateTo('checkout');
       }
     },
-    [showToast]
+    [showToast, navigateTo]
   );
 
   const handleOpenServiceById = useCallback(
@@ -691,24 +691,6 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       navigateTo('partner-detail');
     },
     [navigateTo, rawServices, showToast]
-  );
-
-  const handleProceedToCheckout = useCallback(
-    (service: BackendService, date: string, slot: string, practitionerId?: number) => {
-      if (service.price <= 0) {
-        showToast('Dịch vụ này cần liên hệ cơ sở để được tư vấn và báo giá.');
-        return;
-      }
-      setActiveBookingService(null);
-      setDirectCheckoutConfig({
-        service,
-        preselectedDate: date,
-        preselectedTime: slot,
-        practitionerId,
-      });
-      navigateTo('checkout');
-    },
-    [navigateTo, showToast]
   );
 
   const handleAdminNavigate = useCallback((section: AdminSection, query?: string) => {
@@ -939,7 +921,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
           onModeChange={(mode) => navigateTo(mode, returnTarget)}
         />
         {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+          <div className="pointer-events-none fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
             <span>{toastMessage}</span>
           </div>
         )}
@@ -968,7 +950,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
           }}
         />
         {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+          <div className="pointer-events-none fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
             <span>{toastMessage}</span>
           </div>
         )}
@@ -996,7 +978,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
           onNeedLogin={() => navigateTo('login', 'checkout')}
         />
         {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+          <div className="pointer-events-none fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
             <span>{toastMessage}</span>
           </div>
         )}
@@ -1022,24 +1004,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
           partners={partners}
           currentUser={currentUser}
         />
-        {activeBookingService && (
-          <BookingModal
-            service={activeBookingService}
-            currentUser={currentUser}
-            onClose={() => setActiveBookingService(null)}
-            onNeedLogin={() => navigateTo('login')}
-            onProceedToCheckout={handleProceedToCheckout}
-            onCreated={(bookingCode) => {
-              showToast(`Đặt lịch thành công · Mã ${bookingCode}. Bạn có thể chia sẻ lịch hẹn ngay.`);
-            }}
-            onViewMyBookings={() => {
-              setActiveBookingService(null);
-              navigateTo('account');
-            }}
-          />
-        )}
         {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+          <div className="pointer-events-none fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
             <span>{toastMessage}</span>
           </div>
         )}
@@ -1110,9 +1076,9 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
           onClose={() => setIsCartOpen(false)}
           items={cartItems}
           onRemoveItem={handleRemoveFromCart}
-          onClearCart={clearCart}
           onCheckout={() => {
             setIsCartOpen(false);
+            setPaymentBookingId(null);
             setDirectCheckoutConfig(null);
             navigateTo('checkout');
           }}
@@ -1131,24 +1097,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
           }}
         />
 
-        {activeBookingService && (
-          <BookingModal
-            service={activeBookingService}
-            currentUser={currentUser}
-            onClose={() => setActiveBookingService(null)}
-            onNeedLogin={() => navigateTo('login')}
-            onProceedToCheckout={handleProceedToCheckout}
-            onCreated={(bookingCode) => {
-              showToast(`Đặt lịch thành công · Mã ${bookingCode}. Bạn có thể chia sẻ lịch hẹn ngay.`);
-            }}
-            onViewMyBookings={() => {
-              setActiveBookingService(null);
-              navigateTo('account');
-            }}
-          />
-        )}
         {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+          <div className="pointer-events-none fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
             <span>{toastMessage}</span>
           </div>
         )}
@@ -1167,7 +1117,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     <div className="min-h-screen bg-[#FFF0F3] flex flex-col selection:bg-pink-200 selection:text-pink-900">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-pink-400/30 flex items-center gap-2.5">
+        <div className="pointer-events-none fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-pink-400/30 flex items-center gap-2.5">
           <CheckCircle2 className="w-5 h-5 text-pink-400 shrink-0" />
           <span className="text-xs font-semibold">{toastMessage}</span>
         </div>
@@ -1335,29 +1285,12 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       <Footer />
 
       {/* Modals & Drawers */}
-      {activeBookingService && (
-        <BookingModal
-          service={activeBookingService}
-          currentUser={currentUser}
-          onClose={() => setActiveBookingService(null)}
-          onNeedLogin={() => navigateTo('login')}
-          onProceedToCheckout={handleProceedToCheckout}
-          onCreated={(bookingCode) => {
-            showToast(`Đặt lịch thành công · Mã ${bookingCode}. Bạn có thể chia sẻ lịch hẹn ngay bên dưới.`);
-          }}
-          onViewMyBookings={() => {
-            setActiveBookingService(null);
-            navigateTo('bookings');
-          }}
-        />
-      )}
 
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         items={cartItems}
         onRemoveItem={handleRemoveFromCart}
-        onClearCart={clearCart}
         onCheckout={() => {
           setIsCartOpen(false);
           setDirectCheckoutConfig(null);

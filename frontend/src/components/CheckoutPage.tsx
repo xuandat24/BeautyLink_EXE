@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   ShieldCheck,
   CheckCircle2,
-  Clock,
   Calendar,
   QrCode,
   Wallet,
@@ -19,8 +18,6 @@ import {
   ChevronRight,
   ChevronLeft,
   Store,
-  Layers,
-  Percent,
 } from 'lucide-react';
 import { useBeautyStore } from '../store/beautyStore';
 import { CurrentUser, BackendService, CartItem, PaymentQuote } from '../types';
@@ -87,7 +84,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   preselectedTime,
   preselectedPractitionerId,
 }) => {
-  const { cartItems, updateCartQuantity, setCurrentUser } = useBeautyStore();
+  const { cartItems, setCurrentUser } = useBeautyStore();
+  const [selectedCartId, setSelectedCartId] = useState<string | null>(null);
+  const [capacityRevision, setCapacityRevision] = useState(0);
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [preparationStage, setPreparationStage] = useState<PreparationStage>('VALIDATING');
   const [activePayment, setActivePayment] = useState<PayOSPayment | null>(null);
@@ -122,15 +121,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         },
       ];
     }
-    return cartItems;
-  }, [directService, cartItems]);
+    const selected = cartItems.find(item => item.deal.id === selectedCartId) ?? cartItems[0];
+    return selected ? [{ ...selected, quantity: 1 }] : [];
+  }, [directService, cartItems, selectedCartId]);
 
-  // Stepper state: 1 = Lịch hẹn & Hồ sơ, 2 = Hình thức thanh toán (5% / 100%), 3 = Tóm tắt dịch vụ & Voucher
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
-
-  // Check if date & slot were preselected from beauty service page (Trường hợp 2)
-  const isPreselected = Boolean(preselectedDate && preselectedTime);
-  const [isChangingSchedule, setIsChangingSchedule] = useState(!isPreselected);
+  // One shared schedule, then payment option/voucher/confirmation.
+  const [currentStep, setCurrentStep] = useState<1 | 2>(1);
 
   // Default Tomorrow's date
   const tomorrow = useMemo(() => {
@@ -149,9 +145,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   useEffect(() => {
     if (preselectedDate) setSelectedDate(preselectedDate);
     if (preselectedTime) setSelectedTimeSlot(preselectedTime);
-    if (preselectedDate || preselectedTime) {
-      setIsChangingSchedule(false);
-    }
   }, [preselectedDate, preselectedTime]);
 
   // New checkouts offer the current 5% policy; legacy 50% exists only in persisted attempts.
@@ -182,7 +175,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const latestContext = useRef(context); latestContext.current = context;
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
-    if (currentStep !== 3 || !errorMsg) return;
+    if (currentStep !== 2 || !errorMsg) return;
     paymentFeedbackRef.current?.focus({ preventScroll: true });
     paymentFeedbackRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
   }, [currentStep, errorMsg]);
@@ -219,7 +212,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         setCapacity(result);
         if (selectedTimeSlot && !result.slots.some(slot => slot.time.slice(0, 5) === selectedTimeSlot && slot.availablePractitioners > 0)) {
           setSelectedTimeSlot('');
-          setIsChangingSchedule(true);
           setCapacityError('Khung giờ vừa chọn không còn chỗ. Vui lòng chọn giờ khác.');
         }
       })
@@ -228,7 +220,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return () => { active = false; };
   // selectedTimeSlot is intentionally checked against a fresh response, not a polling dependency.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceId, selectedDate, currentStep, preselectedPractitionerId]);
+  }, [serviceId, selectedDate, preselectedPractitionerId, capacityRevision]);
   useEffect(() => {
     let active = true;
     setPaymentQuote(null);
@@ -243,6 +235,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       .finally(() => { if (active) setQuoteLoading(false); });
     return () => { active = false; };
   }, [serviceId, depositOption, appliedVoucher?.code]);
+
+  useEffect(() => {
+    if (currentStep !== 1 || submitting || reservedBooking.current) return;
+    const refresh = () => { if (document.visibilityState !== 'hidden') setCapacityRevision(value => value + 1); };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener('focus', refresh); window.addEventListener('online', refresh); document.addEventListener('visibilitychange', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); window.removeEventListener('online', refresh); document.removeEventListener('visibilitychange', refresh); };
+  }, [currentStep, submitting]);
 
   // Definitive checkout amounts come only from the backend quote.
   const selectedPaymentOption = depositOption === 'deposit05' ? 'DEPOSIT_05' : 'FULL_100';
@@ -288,17 +288,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
     if (!serviceId) return;
-    try {
-      const latest = await fetchCapacity(serviceId, selectedDate);
-      setCapacity(latest);
-      if (!latest.slots.some(slot => slot.time.slice(0, 5) === selectedTimeSlot && slot.availablePractitioners > 0)) {
-        setSelectedTimeSlot('');
-        setCapacityError('Khung giờ này vừa được đặt. Vui lòng chọn khung giờ khác.');
-        return;
-      }
-    } catch (error) {
-      setCapacityError(getApiErrorMessage(error, 'Không thể kiểm tra lịch trống.'));
-      return;
+    if (capacityLoading || capacity?.date !== selectedDate || !capacity.slots.some(slot => slot.time.slice(0, 5) === selectedTimeSlot && slot.availablePractitioners > 0)) {
+      setCapacityError('Khung giờ chưa được xác nhận hoặc vừa hết chỗ. Vui lòng chọn lại.'); return;
     }
     setCapacityError('');
     setScheduleErrors({});
@@ -358,16 +349,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       // Retain the booking after a provider error. Retrying must never create another
       // booking simply to bypass an unresolved payment on the first one.
       const existingId = reservedBooking.current?.context === context ? reservedBooking.current.id : null;
-      if (!existingId) {
-        const latest = await fetchCapacity(firstItem.deal.serviceId, selectedDate);
-        if (!latest.slots.some(slot => slot.time.slice(0, 5) === selectedTimeSlot && slot.availablePractitioners > 0)) {
-          setCapacity(latest);
-          setSelectedTimeSlot('');
-          setIsChangingSchedule(true);
-          setCurrentStep(1);
-          throw new Error('Khung giờ này vừa được đặt. Vui lòng chọn khung giờ khác.');
-        }
-      }
       const booking = existingId ? await beautyApi.myBooking(existingId) : await beautyApi.createBooking({
         serviceId: firstItem.deal.serviceId,
         practitionerId: preselectedPractitionerId,
@@ -402,6 +383,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           setContactDialogOpen(true);
           return;
         }
+        if (axios.isAxiosError(err) && err.response?.data?.code === 'SLOT_UNAVAILABLE' && !reservedBooking.current) {
+          setSelectedTimeSlot(''); setCurrentStep(1); setCapacityRevision(value => value + 1);
+        }
+        if (reservedBooking.current?.context === context) setResumeId(reservedBooking.current.id);
         setErrorMsg(getPaymentErrorMessage(err, 'Có lỗi xảy ra khi tạo giao dịch PayOS. Vui lòng kiểm tra lịch hẹn trước khi thử lại.'));
         if (axios.isAxiosError(err) && err.response?.status === 401) onNeedLogin();
       }
@@ -447,7 +432,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // VIEW: REDESIGNED STEPPER CHECKOUT FLOW
   // =========================================================================
   return (
-    <div className="min-h-screen bg-[#FFF8F9] text-slate-900 pb-16">
+    <div data-beautylink-checkout className="min-h-screen bg-[#FFF8F9] text-slate-900 pb-16">
       {contactDialogOpen && currentUser && (
         <BookingContactDialog
           currentUser={currentUser}
@@ -467,7 +452,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             type="button"
             onClick={() => {
               if (currentStep > 1) {
-                setCurrentStep((prev) => (prev - 1) as any);
+                setCurrentStep(1);
               } else {
                 onBack();
               }
@@ -520,56 +505,30 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             {/* Step 2 */}
             <button
               type="button"
-              onClick={() => setCurrentStep(2)}
+              onClick={() => void handleContinueFromSchedule()}
               className="flex items-center gap-2 text-left cursor-pointer group"
             >
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition ${
                   currentStep === 2
                     ? 'bg-[#e1146c] text-white shadow-sm shadow-pink-500/30'
-                    : currentStep > 2
-                    ? 'bg-emerald-500 text-white'
                     : 'bg-pink-100 text-slate-500'
                 }`}
               >
-                {currentStep > 2 ? <Check className="w-4 h-4" /> : '2'}
+                2
               </div>
               <div className="hidden sm:block">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Bước 2</span>
                 <span className={`text-xs font-bold ${currentStep === 2 ? 'text-[#e1146c]' : 'text-slate-700'}`}>
-                  Hình thức thanh toán
+                  Thanh toán & Xác nhận
                 </span>
               </div>
             </button>
 
-            <div className={`h-0.5 flex-1 mx-3 transition-colors ${currentStep === 3 ? 'bg-pink-500' : 'bg-pink-200'}`} />
-
-            {/* Step 3 */}
-            <button
-              type="button"
-              onClick={() => setCurrentStep(3)}
-              className="flex items-center gap-2 text-left cursor-pointer group"
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition ${
-                  currentStep === 3
-                    ? 'bg-[#e1146c] text-white shadow-sm shadow-pink-500/30'
-                    : 'bg-pink-100 text-slate-500'
-                }`}
-              >
-                3
-              </div>
-              <div className="hidden sm:block">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">Bước 3</span>
-                <span className={`text-xs font-bold ${currentStep === 3 ? 'text-[#e1146c]' : 'text-slate-700'}`}>
-                  Tóm tắt & Giảm giá
-                </span>
-              </div>
-            </button>
           </div>
         </div>
 
-        {errorMsg && currentStep !== 3 && (
+        {errorMsg && currentStep !== 2 && (
           <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs sm:text-sm font-semibold text-rose-700 flex items-center gap-2.5">
             <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
             <span>{errorMsg}</span>
@@ -579,6 +538,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         {/* ========================================================================= */}
         {/* STEP 1: HỒ SƠ XÁC THỰC & CHỌN NGÀY / KHUNG GIỜ */}
         {/* ========================================================================= */}
+        {!directService && cartItems.length > 0 && currentStep === 1 && <section aria-label="Chọn dịch vụ đặt lịch" className="mb-5 rounded-3xl border border-pink-100 bg-white p-5">
+          <h2 className="font-bold">Dịch vụ cần đặt lịch</h2><p className="mt-1 text-xs text-slate-500">Mỗi lịch hẹn thanh toán một dịch vụ. Các lựa chọn còn lại vẫn được giữ trong giỏ.</p>
+          <div className="mt-3 flex flex-wrap gap-2">{cartItems.map(item => <button key={item.deal.id} type="button" aria-pressed={items[0]?.deal.id === item.deal.id} onClick={() => { setSelectedCartId(item.deal.id); setSelectedTimeSlot(''); }} className={`min-h-11 rounded-xl border px-3 py-2 text-left text-sm ${items[0]?.deal.id === item.deal.id ? 'border-pink-600 bg-pink-50 font-bold text-pink-800' : 'border-slate-200 text-slate-700'}`}>{item.deal.title}<span className="ml-2 text-xs">{item.deal.brandName}</span></button>)}</div>
+        </section>}
         {currentStep === 1 && (
           <div className="space-y-6 animate-in fade-in duration-200">
             {/* 1. Verified Customer Card - NO INPUT REQUIRED */}
@@ -622,57 +585,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     <span>Ngày & Khung giờ đến làm đẹp</span>
                   </h2>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Khóa lịch riêng không phải xếp hàng chờ đợi
+                    Giờ trống do máy chủ cập nhật; chỗ được giữ sau khi tạo lịch hẹn.
                   </p>
                 </div>
 
-                {/* If preselected, allow toggling edit */}
-                {isPreselected && !isChangingSchedule && (
-                  <button
-                    type="button"
-                    onClick={() => setIsChangingSchedule(true)}
-                    className="text-xs font-bold text-[#e1146c] hover:underline cursor-pointer"
-                  >
-                    Chọn lại giờ khác
-                  </button>
-                )}
               </div>
-
-              {/* CASE 2: Preselected from Beauty Service Page -> Display directly locked */}
-              {isPreselected && !isChangingSchedule ? (
-                <div className="p-4 rounded-2xl bg-gradient-to-r from-pink-50/90 via-rose-50/50 to-pink-50/90 border border-pink-200">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-xl bg-white text-[#e1146c] border border-pink-200 flex items-center justify-center font-bold shrink-0 shadow-2xs">
-                        <Clock className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-black uppercase text-[#be185d]">
-                            Lịch hẹn đã chọn trước tại dịch vụ
-                          </span>
-                          <span className="inline-flex items-center text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.2 rounded-full">
-                            ✓ Sẵn sàng
-                          </span>
-                        </div>
-                        <div className="text-sm sm:text-base font-black text-slate-900 mt-0.5 flex items-center gap-3 flex-wrap">
-                          <span>📅 Ngày hẹn: <strong className="text-[#e1146c]">{selectedDate}</strong></span>
-                          <span>⏰ Khung giờ: <strong className="text-[#e1146c]">{selectedTimeSlot}</strong></span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsChangingSchedule(true)}
-                      className="px-3 py-1.5 rounded-xl bg-white border border-pink-200 hover:border-[#e1146c] text-xs font-bold text-slate-700 hover:text-[#e1146c] transition cursor-pointer self-start sm:self-auto shadow-2xs"
-                    >
-                      Đổi ngày/giờ
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* CASE 1: Selecting inside Checkout Page */
                 <div className="space-y-5 text-xs">
                   <div>
                     <label className="block font-bold text-slate-800 mb-2">
@@ -720,6 +637,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     <label className="block font-bold text-slate-800 mb-2">
                       Chọn khung giờ hẹn phù hợp:
                     </label>
+                    <p className="mb-2 text-[11px] text-slate-500">Số trong ngoặc là chuyên viên còn trống. Giờ hết chỗ không thể chọn.</p>
                     <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                       {capacity?.slots.map(
                         (slot) => {
@@ -729,7 +647,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                             <button
                               key={label}
                               type="button"
-                              disabled={slot.availablePractitioners === 0}
+                              disabled={capacityLoading || capacity?.date !== selectedDate || slot.availablePractitioners === 0}
                               onClick={() => { setSelectedTimeSlot(label); setScheduleErrors((value) => ({ ...value, startTime: '' })); }}
                               className={`py-2 px-1 rounded-xl text-xs font-bold border transition text-center cursor-pointer ${
                                 isSelected
@@ -749,7 +667,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     <FieldError message={scheduleErrors.startTime} />
                   </div>
                 </div>
-              )}
             </div>
 
             {/* Step 1 Next Button */}
@@ -916,34 +833,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
             </div>
 
-            {/* Step 2 Actions */}
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setCurrentStep(1)}
-                className="py-3 px-5 rounded-full bg-white border border-pink-200 text-slate-700 text-xs font-bold hover:bg-pink-50 transition cursor-pointer flex items-center gap-1.5"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Quay lại</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setCurrentStep(3)}
-                className="py-3.5 px-6 rounded-full bg-gradient-to-r from-[#e1146c] to-[#be185d] text-white text-xs sm:text-sm font-black shadow-md hover:opacity-95 transition flex items-center gap-2 cursor-pointer uppercase tracking-wider"
-              >
-                <span>Tiếp tục: Tóm tắt dịch vụ & Mã giảm giá</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* STEP 3: TÓM TẮT DỊCH VỤ & MÃ GIẢM GIÁ (TÁCH RIÊNG KHÔNG GỘP CHUNG) */}
+        {/* PAYMENT SUMMARY AND VOUCHER (SAME CONFIRMATION STEP) */}
         {/* ========================================================================= */}
-        {currentStep === 3 && (
-          <div className="space-y-6 animate-in fade-in duration-200">
+        {currentStep === 2 && (
+          <div className="mt-6 space-y-6 animate-in fade-in duration-200">
             {/* 1. Services Summary List Card */}
             <div className="bg-white rounded-3xl border border-pink-100 p-6 sm:p-7 shadow-xs">
               <div className="pb-4 border-b border-pink-50 mb-4 flex items-center justify-between">
@@ -982,7 +879,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                           <span>{it.deal.duration}</span>
                         </p>
                         <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
-                          Đã xếp chuyên viên & phòng dịch vụ
+                          Chuyên viên được máy chủ xếp khi xác nhận lịch hẹn
                         </p>
                       </div>
                     </div>
@@ -1173,7 +1070,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   className="w-full sm:w-auto py-3 px-5 rounded-full bg-white border border-pink-200 text-slate-700 text-xs font-bold hover:bg-pink-50 transition cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  <span>Sửa phương thức</span>
+                  <span>Sửa lịch hẹn</span>
                 </button>
 
                 <button

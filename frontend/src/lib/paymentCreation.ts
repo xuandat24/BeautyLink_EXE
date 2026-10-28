@@ -27,7 +27,9 @@ export async function createWithRecovery(
         const payment = await read();
         if (!current()) throw new Error('Phiên đăng nhập đã thay đổi.');
         if (payment.bookingId !== bookingId) throw new Error('Thông tin lịch hẹn không khớp. Không chuyển tiền; vui lòng liên hệ hỗ trợ.');
-        if (payment.requiresManualReview || payment.status !== 'PENDING' || payment.paymentLinkId) return payment;
+        // A committed attempt is enough to open the observer, never enough to show payment
+        // instructions. Keep recovery on that page instead of sending the customer back to POST.
+        return payment;
       } catch (failure) {
         const status = (failure as { response?: { status?: number } })?.response?.status;
         if (!current() || (!recoverable(failure) && status !== 404)) throw failure;

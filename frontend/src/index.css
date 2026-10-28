@@ -6,6 +6,12 @@ body > div:has(> iframe[title="TopAiChat Widget"]) {
   z-index: 40 !important;
 }
 
+/* Bank/booking controls must remain usable at the viewport edge, including on mobile. */
+body:has([data-beautylink-checkout], [data-checkout-state]) > div:has(> iframe[title="TopAiChat Widget"]) {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
