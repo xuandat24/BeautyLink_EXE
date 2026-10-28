@@ -293,7 +293,10 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
                             : item.paymentOption === 'DEPOSIT_05'
                               ? 'Đã cọc 5%'
                               : 'Đã đặt cọc'
-                          : item.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : item.status === 'CANCELLED' ? 'Chưa thanh toán · đã hủy' : checkingPayments.includes(item.id) ? 'Đang đối soát' : 'Chưa thanh toán'}
+                          : item.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền'
+                            : ['PAYMENT_REVIEW_REQUIRED', 'PAYMENT_STATE_CONFLICT'].includes(item.paymentBlockerReason ?? '') ? 'Cần đối soát thanh toán'
+                              : checkingPayments.includes(item.id) || item.paymentBlockerReason === 'PAYMENT_RECONCILING' ? 'Đang đối soát'
+                                : item.status === 'CANCELLED' ? 'Chưa thanh toán · đã hủy' : 'Chưa thanh toán'}
                     </span>
                   </div>
 

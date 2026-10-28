@@ -36,6 +36,7 @@ test('bookings hide paid/manual/legacy cancellation, guard double submit and rej
       { ...unpaid, id: 6, paymentStatus: 'PARTIALLY_PAID', paymentOption: 'DEPOSIT_50', cancelEligible: false }]));
     assert.equal([...document.querySelectorAll('button')].filter(b => b.textContent?.includes('Hủy lịch')).length, 1);
     assert.match(document.body.textContent ?? '', /Không thanh toán lại/);
+    assert.match(document.body.textContent ?? '', /Cần đối soát thanh toán/);
     assert.match(document.body.textContent ?? '', /Đã cọc 5%/);
     assert.match(document.body.textContent ?? '', /Đã cọc 50% \(giao dịch cũ\)/);
     await act(async () => window.dispatchEvent(new dom.window.Event('beautylink-bookings-refresh')));

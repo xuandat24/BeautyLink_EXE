@@ -25,3 +25,9 @@ test('paid/refunded and bookings without attempts do not poll PayOS in history',
   assert.equal(needsPaymentSync({ ...booking, paymentOption: undefined }), false);
   assert.equal(needsPaymentSync({ ...booking, paymentOption: undefined, paymentBlockerReason: 'PAYMENT_REVIEW_REQUIRED' }), true);
 });
+
+test('temporary failure cannot downgrade an established manual-review blocker to ordinary unpaid', async () => {
+  const manual = { ...booking, status: 'CANCELLED', paymentBlockerReason: 'PAYMENT_REVIEW_REQUIRED' } as BackendBooking;
+  const result = await reconcileHistoryPayment(manual, async () => { throw new Error('503'); }, async () => manual);
+  assert.equal(result.paymentBlockerReason, 'PAYMENT_REVIEW_REQUIRED'); assert.equal(result.paymentEligible, false);
+});
