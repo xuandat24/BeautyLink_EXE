@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -19,15 +18,15 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.List;
 
 import static com.example.backend.service.TransactionalEmailSender.FailureKind.*;
 
 @Service
-public class ResendTransactionalEmailSender implements TransactionalEmailSender {
+public class ResendTransactionalEmailSender implements TransactionalEmailSender, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(ResendTransactionalEmailSender.class);
     private final RestClient resendClient;
+    private final ClientResources resources;
     private final String resendApiKey;
     private final String mailHost;
     private final ObjectProvider<JavaMailSender> mailSender;
@@ -43,12 +42,13 @@ public class ResendTransactionalEmailSender implements TransactionalEmailSender 
     }
 
     public ResendTransactionalEmailSender(RestClient resendClient, String resendApiKey) {
-        this(resendClient, resendApiKey, "", null);
+        this(new ClientResources(resendClient, null), resendApiKey, "", null);
     }
 
-    private ResendTransactionalEmailSender(RestClient resendClient, String resendApiKey, String mailHost,
+    private ResendTransactionalEmailSender(ClientResources resources, String resendApiKey, String mailHost,
             ObjectProvider<JavaMailSender> mailSender) {
-        this.resendClient = resendClient;
+        this.resources = resources;
+        this.resendClient = resources.client();
         this.resendApiKey = normalize(resendApiKey);
         this.mailHost = normalize(mailHost);
         this.mailSender = mailSender;
@@ -62,6 +62,14 @@ public class ResendTransactionalEmailSender implements TransactionalEmailSender 
         if (StringUtils.hasText(resendApiKey)) return sendWithResend(message);
         if (isSmtpConfigured()) return sendWithSmtp(message);
         throw failure(PERMANENT, "EMAIL_TRANSPORT_NOT_CONFIGURED");
+    }
+
+    @Override
+    public DeliveryReceipt sendReminder(EmailMessage message) {
+        // SMTP fallback has neither this HTTP deadline nor this provider idempotency contract.
+        if (!StringUtils.hasText(resendApiKey)) throw failure(PERMANENT, "EMAIL_REMINDER_RESEND_REQUIRED");
+        if (!StringUtils.hasText(message.idempotencyKey())) throw failure(PERMANENT, "EMAIL_REMINDER_IDEMPOTENCY_REQUIRED");
+        return send(message);
     }
 
     @Override
@@ -128,12 +136,14 @@ public class ResendTransactionalEmailSender implements TransactionalEmailSender 
         return mailSender != null && mailSender.getIfAvailable() != null && StringUtils.hasText(mailHost);
     }
 
-    private static RestClient buildClient(long connectTimeoutMs, long readTimeoutMs) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
-        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
-        return RestClient.builder().baseUrl("https://api.resend.com").requestFactory(requestFactory).build();
+    static ClientResources buildClient(long connectTimeoutMs, long readTimeoutMs) {
+        var transport = new BoundedResendRequestFactory(connectTimeoutMs, readTimeoutMs);
+        return new ClientResources(RestClient.builder().baseUrl("https://api.resend.com").requestFactory(transport).build(), transport);
     }
+    record ClientResources(RestClient client, BoundedResendRequestFactory transport) implements AutoCloseable {
+        @Override public void close() { if (transport != null) transport.close(); }
+    }
+    @jakarta.annotation.PreDestroy @Override public void close() { resources.close(); }
 
     private static EmailDeliveryException failure(FailureKind kind, String code) {
         return new EmailDeliveryException(kind, code);

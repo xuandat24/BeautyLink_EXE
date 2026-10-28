@@ -19,14 +19,16 @@ public class FeedbackReminderService {
     private final PaymentTransactionRepository payments;
     private final BookingCompletionPolicy time;
     private final boolean enabled;
+    private final int maxAttempts;
     private final String frontend;
     public FeedbackReminderService(EmailNotificationOutboxRepository outbox, BookingRepository bookings,
             BookingReviewRepository reviews, PaymentTransactionRepository payments, BookingCompletionPolicy time,
             @Value("${app.booking-email.enabled:false}") boolean emailEnabled,
             @Value("${app.booking-email.feedback-enabled:true}") boolean feedbackEnabled,
+            @Value("${app.booking-email.max-attempts:5}") int maxAttempts,
             @Value("${app.frontend.public-url:http://localhost:5173}") String frontend) {
         this.outbox = outbox; this.bookings = bookings; this.reviews = reviews;
-        this.payments = payments; this.time = time; this.enabled = emailEnabled && feedbackEnabled;
+        this.payments = payments; this.time = time; this.enabled = emailEnabled && feedbackEnabled; this.maxAttempts = Math.max(1, maxAttempts);
         this.frontend = frontend.replaceAll("/+$", "");
     }
     @Transactional(propagation = Propagation.MANDATORY)
@@ -74,15 +76,21 @@ public class FeedbackReminderService {
         Booking booking = bookings.findByIdForUpdate(bookingId).orElseThrow();
         EmailNotificationOutbox job = outbox.findByIdAndClaimTokenAndStatus(claim.id(), claim.claimToken(), EmailNotificationStatus.PROCESSING).orElseThrow();
         if (job.getNotificationType() == EmailNotificationType.BOOKING_PAYMENT_CONFIRMED) return false;
-        boolean ready = enabled && ReviewService.isEligible(booking, time.now())
+        Instant firstPossibleSend = job.getNotificationType() == EmailNotificationType.REVIEW_MIDPOINT
+                ? BookingCompletionPolicy.reviewOpensAt(booking) : job.getCreatedAt();
+        if (firstPossibleSend.isBefore(job.getCreatedAt())) firstPossibleSend = job.getCreatedAt();
+        // Resend retains idempotency keys for 24h. Fail closed after 23h, including recovery after downtime.
+        boolean ready = enabled && job.getAttemptCount() <= maxAttempts
+                && time.now().isBefore(firstPossibleSend.plus(java.time.Duration.ofHours(23)))
+                && ReviewService.isEligible(booking, time.now())
                 && !payments.hasUnresolvedByBookingId(bookingId) && !reviews.existsByBookingId(bookingId)
                 && (job.getNotificationType() != EmailNotificationType.REVIEW_MIDPOINT || time.now().isBefore(end(booking)))
                 && (job.getNotificationType() != EmailNotificationType.REVIEW_COMPLETED || booking.getStatus() == BookingStatus.COMPLETED);
         String recipient = BookingConfirmationNotificationService.normalizeEmail(booking.getCustomer().getEmail());
-        if (!ready || recipient == null) {
+        if (!ready || recipient == null || !recipient.equals(job.getRecipientEmail())) {
             job.setStatus(EmailNotificationStatus.SKIPPED); job.setLastErrorCode("REVIEW_REMINDER_SUPPRESSED");
         } else {
-            var receipt = sender.send(new TransactionalEmailSender.EmailMessage(from, replyTo, recipient,
+            var receipt = sender.sendReminder(new TransactionalEmailSender.EmailMessage(from, replyTo, recipient,
                     job.getSubject(), job.getTextBody(), job.getHtmlBody(), job.getIdempotencyKey()));
             job.setStatus(EmailNotificationStatus.SENT); job.setSentAt(time.now()); job.setProviderMessageId(receipt.providerMessageId());
         }

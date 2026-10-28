@@ -67,6 +67,7 @@ class BookingReviewReleaseTest {
     @Autowired EmailNotificationOutboxRepository emailJobs;
     @Autowired BookingCompletionPolicy clockPolicy;
     @Autowired FeedbackReminderService reminderDispatcher;
+    @Autowired BookingConfirmationNotificationService notifications;
 
     private <T> T tx(java.util.function.Supplier<T> action) {
         return new TransactionTemplate(transactions).execute(status -> action.get());
@@ -343,7 +344,7 @@ class BookingReviewReleaseTest {
 
     private FeedbackReminderService reminders(java.time.Instant now) {
         return new FeedbackReminderService(emailJobs, bookings, reviews, payments,
-                new BookingCompletionPolicy(Clock.fixed(now, ZoneOffset.UTC)), true, true, "https://beautylink.test");
+                new BookingCompletionPolicy(Clock.fixed(now, ZoneOffset.UTC)), true, true, 5, "https://beautylink.test");
     }
     private EmailNotificationOutbox reminderJob(Long bookingId, EmailNotificationType type) {
         return emailJobs.findAll().stream().filter(j -> j.getBooking().getId().equals(bookingId) && j.getNotificationType() == type).findFirst().orElseThrow();
@@ -359,17 +360,17 @@ class BookingReviewReleaseTest {
         assertEquals(half, first.getNextAttemptAt());
         assertEquals(1, emailJobs.findAll().stream().filter(j -> j.getBooking().getId().equals(b.getId())).count());
         TransactionalEmailSender sender = mock(TransactionalEmailSender.class);
-        when(sender.send(any())).thenReturn(new TransactionalEmailSender.DeliveryReceipt("test-only"));
+        when(sender.sendReminder(any())).thenReturn(new TransactionalEmailSender.DeliveryReceipt("test-only"));
         var firstClaim = claimReminder(first);
         tx(() -> reminder.deliverIfReminder(firstClaim, sender, "test@example.com", ""));
-        verify(sender, times(1)).send(any());
+        verify(sender, times(1)).sendReminder(any());
         reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, "Déjà évalué"));
         tx(() -> { var row = bookings.findByIdForUpdate(b.getId()).orElseThrow(); row.setStatus(BookingStatus.COMPLETED); reminder.enqueueCompleted(row); return null; });
         assertEquals(1, emailJobs.findAll().stream().filter(j -> j.getBooking().getId().equals(b.getId())).count());
         assertEquals(EmailNotificationStatus.SENT, emailJobs.findById(first.getId()).orElseThrow().getStatus());
     }
     private BookingConfirmationNotificationService.ClaimedEmail claimReminder(EmailNotificationOutbox row) {
-        return tx(() -> { var j = emailJobs.findById(row.getId()).orElseThrow(); j.setStatus(EmailNotificationStatus.PROCESSING); j.setClaimToken("fixture-claim"); j.setLeaseUntil(Instant.now().plusSeconds(120));
+        return tx(() -> { var j = emailJobs.findById(row.getId()).orElseThrow(); j.setStatus(EmailNotificationStatus.PROCESSING); j.setAttemptCount(j.getAttemptCount() + 1); j.setClaimToken("fixture-claim"); j.setLeaseUntil(Instant.now().plusSeconds(120));
             return new BookingConfirmationNotificationService.ClaimedEmail(j.getId(), "fixture-claim", j.getRecipientEmail(), j.getSubject(), j.getTextBody(), j.getHtmlBody(), j.getIdempotencyKey()); });
     }
     @Test void completedReminderIsCreatedOnlyOnCompletedAndQueuedMidpointIsSuppressedAfterFeedback() {
@@ -436,5 +437,37 @@ class BookingReviewReleaseTest {
             finally { jdbc.execute("SET time_zone='+00:00'"); }
             return null;
         });
+    }
+
+    @Test void reminderFailureRollsBackReleasesBookingLockAndRetrySuppressesCommittedFeedback() {
+        Booking b = fixture(BookingStatus.COMPLETED, PaymentStatus.PAID); PaymentTransaction p = payment(b);
+        tx(() -> { payments.findById(p.getId()).orElseThrow().setStatus(PaymentTransactionStatus.PAID); reminderDispatcher.enqueueCompleted(bookings.findById(b.getId()).orElseThrow()); return null; });
+        var claim = claimReminder(reminderJob(b.getId(), EmailNotificationType.REVIEW_COMPLETED));
+        var sender = mock(TransactionalEmailSender.class);
+        var failure = new TransactionalEmailSender.EmailDeliveryException(TransactionalEmailSender.FailureKind.AMBIGUOUS, "EMAIL_PROVIDER_RESULT_AMBIGUOUS");
+        when(sender.sendReminder(any())).thenThrow(failure);
+        assertSame(failure, assertThrows(TransactionalEmailSender.EmailDeliveryException.class, () -> reminderDispatcher.deliverIfReminder(claim, sender, "test@example.test", "")));
+        var after = emailJobs.findById(claim.id()).orElseThrow(); assertEquals(EmailNotificationStatus.PROCESSING, after.getStatus());
+        assertNull(after.getSentAt()); assertEquals(claim.idempotencyKey(), after.getIdempotencyKey());
+        notifications.markFailed(claim, failure); assertEquals(EmailNotificationStatus.RETRY, emailJobs.findById(claim.id()).orElseThrow().getStatus());
+        reviewService.upsert(customer(), b.getId(), ReviewTargetType.SERVICE, new UpsertBookingReviewRequest(5, "submitted after failure"));
+        var retry = claimReminder(after); assertEquals(claim.idempotencyKey(), retry.idempotencyKey());
+        reminderDispatcher.deliverIfReminder(retry, sender, "test@example.test", "");
+        verify(sender, times(1)).sendReminder(any());
+        assertEquals(EmailNotificationStatus.SKIPPED, emailJobs.findById(claim.id()).orElseThrow().getStatus());
+        assertEquals(BookingStatus.COMPLETED, bookings.findById(b.getId()).orElseThrow().getStatus());
+    }
+    @ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(strings={"OLD_KEY", "CHANGED_RECIPIENT", "CRASH_RETRY_LIMIT"})
+    void unsafeReplayNeverCallsProvider(String fault) {
+        Booking b = fixture(BookingStatus.COMPLETED, PaymentStatus.PAID); PaymentTransaction p = payment(b);
+        tx(() -> { payments.findById(p.getId()).orElseThrow().setStatus(PaymentTransactionStatus.PAID); reminderDispatcher.enqueueCompleted(bookings.findById(b.getId()).orElseThrow()); return null; });
+        var job = reminderJob(b.getId(), EmailNotificationType.REVIEW_COMPLETED);
+        if (fault.equals("OLD_KEY")) jdbc.update("update email_notification_outbox set created_at=? where id=?", java.sql.Timestamp.from(Instant.now().minusSeconds(25 * 3600)), job.getId());
+        tx(() -> { var row = emailJobs.findById(job.getId()).orElseThrow();
+            if (fault.equals("CHANGED_RECIPIENT")) row.setRecipientEmail("obsolete@example.test");
+            if (fault.equals("CRASH_RETRY_LIMIT")) row.setAttemptCount(5); return null; });
+        var claim = claimReminder(job); var sender = mock(TransactionalEmailSender.class);
+        assertTrue(reminderDispatcher.deliverIfReminder(claim, sender, "test@example.test", "")); verifyNoInteractions(sender);
+        assertEquals(EmailNotificationStatus.SKIPPED, emailJobs.findById(job.getId()).orElseThrow().getStatus());
     }
 }

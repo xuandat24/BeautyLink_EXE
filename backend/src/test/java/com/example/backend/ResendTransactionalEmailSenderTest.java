@@ -116,4 +116,15 @@ class ResendTransactionalEmailSenderTest {
                 "<strong>confirmation</strong>",
                 "booking-42-customer");
     }
+
+    @Test void remindersNeverFallBackToUnboundedNonIdempotentSmtpOrSendWithoutAKey() {
+        try (var unconfigured = new ResendTransactionalEmailSender(RestClient.builder().build(), "")) {
+            var error = assertThrows(TransactionalEmailSender.EmailDeliveryException.class, () -> unconfigured.sendReminder(message()));
+            assertEquals(TransactionalEmailSender.FailureKind.PERMANENT, error.getKind());
+            assertEquals("EMAIL_REMINDER_RESEND_REQUIRED", error.getSafeCode());
+        }
+        var missing = new TransactionalEmailSender.EmailMessage("from@example.test", "", "to@example.test", "test", "test", "test", "");
+        assertEquals("EMAIL_REMINDER_IDEMPOTENCY_REQUIRED", assertThrows(TransactionalEmailSender.EmailDeliveryException.class, () -> sender.sendReminder(missing)).getSafeCode());
+        server.verify();
+    }
 }

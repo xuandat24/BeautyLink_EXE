@@ -353,3 +353,31 @@ reviews; do not restore production DB or delete jobs to fix code. Prefer a forwa
 would reintroduce a payment safety defect. Mail already accepted by the provider cannot be recalled.
 The new sender serializes against feedback under a booking lock; provider timeouts use the existing
 bounded retry/idempotency mechanism and can delay competing operations on that single booking.
+
+
+### PR34 release-blocker review: bounded reminder transport
+
+The old connect/read limits were not a total deadline: a loopback response emitting bytes every 40ms
+was accepted after 1668ms even with connect/read set to 100/100ms. The reminder therefore retained its
+booking lock longer than the assumed bound. The HTTP transport now consumes the entire response under
+one cancellable deadline, at most 15 seconds (lower positive configured connect+read values also apply).
+Zero/negative timeout configuration is rejected; no implicit POST retry or redirect is performed.
+The existing OkHttp dependency is reused and its resources are closed at bean shutdown. No OTP/session
+business rules change; OTP/confirmation SMTP fallback stays available outside this reminder path.
+
+Reminders require the Resend API and a nonempty stable idempotency key; they cannot fall back to SMTP.
+Retried payloads retain the stored recipient snapshot: a changed current email suppresses the old job
+rather than sending to the old address or changing the payload under its existing key.
+[Resend retains idempotency keys for 24 hours](https://resend.com/docs/dashboard/emails/idempotency-keys).
+The reminder pre-send gate therefore stops at 23 hours from its earliest possible send, and refuses
+attempts above BOOKING_EMAIL_MAX_ATTEMPTS, including reclaimed jobs after worker crashes. Suppressed
+jobs remain SKIPPED for audit. No old/ambiguous job should be manually replayed with a new key.
+
+The booking-first READ_COMMITTED lock remains held through the bounded call: a review committed before
+that lock is acquired suppresses sending. Exceptions roll back the send transaction and release the
+lock; the dispatcher records RETRY/FAILED separately with the same key. Provider-accepted mail is an
+external effect that cannot be rolled back; a lost acknowledgement is retried only within the safe key
+window. A submission that waits behind an already in-flight send cannot recall that earlier send.
+For production readiness, verify Resend API configuration (without exposing key values), positive
+RESEND_CONNECT_TIMEOUT_MS/RESEND_READ_TIMEOUT_MS, stable sender/reply-to, and the existing backup/schema
+and staged backend-first gates above. This review does not authorize production SQL or deployment.
