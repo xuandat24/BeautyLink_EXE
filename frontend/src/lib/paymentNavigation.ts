@@ -14,3 +14,11 @@ export function continuationDestination(): 'bookings' | null {
   if (['success', 'cancelled'].includes(paymentReturn ?? '') || ['#login', '#register', '#logout'].includes(window.location.hash.toLowerCase())) return null;
   return paymentBookingId() === null ? null : 'bookings';
 }
+
+/** Closing an observer is an explicit exit, not cancellation of the server-side payment. */
+export function closePaymentNavigation(toBookings = false) {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(key);
+  if (toBookings) url.hash = '#bookings';
+  window.history.replaceState(null, '', url);
+}

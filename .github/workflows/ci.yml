@@ -152,6 +152,7 @@ jobs:
             backend/target/review-midpoint-*.png
             backend/target/payos-preparation-*.png
             backend/target/checkout-shared-*.png
+            backend/target/booking-history-*.png
             backend/target/payos-performance-*.json
             backend/target/payos-concurrency-smoke.json
             backend/target/browser-server.log

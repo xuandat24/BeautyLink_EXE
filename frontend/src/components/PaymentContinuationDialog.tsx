@@ -44,7 +44,7 @@ export function PaymentContinuationDialog({ bookingId, onClose }: { bookingId: n
       setBooking(data);
       setOption(data.paymentAttemptActive && data.paymentOption ? data.paymentOption : 'DEPOSIT_05');
       setVoucher(data.paymentAttemptActive ? data.paymentVoucherCode ?? '' : '');
-      if (data.paymentAttemptActive) {
+      if (data.paymentStatus !== 'REFUNDED' && (data.paymentAttemptActive || (!canPayBooking(data) && data.paymentOption != null))) {
         const payment = await beautyApi.currentBookingPayment(bookingId);
         if (version !== generation.current || token !== getAccessToken()) return;
         if (payment.bookingId !== bookingId || !Number.isSafeInteger(payment.orderCode)) throw new Error('Thông tin giao dịch không khớp. Không chuyển tiền.');
