@@ -24,7 +24,7 @@ test('286 fictional accounts and 147 bookings reconcile across paging, histories
   assert.equal(new Set(snapshot.users.map(user => user.fullName)).size, 286);
   assert.equal(new Set(snapshot.users.map(user => user.phone)).size, 286);
   assert.equal(snapshot.users.filter(user => user.role === 'SUPPLIER').length, 14);
-  assert.ok(snapshot.users.every(user => isPresentationUser(user.id) && /^0[35789]\d{8}$/.test(user.phone!)));
+  assert.ok(snapshot.users.every(user => isPresentationUser(user.id) && /^(03[2-9]|07[06789]|08[1-9]|09\d)\d{7}$/.test(user.phone!)));
   assert.ok(snapshot.users.every(user => !/seed|demo|test|\+/.test(user.email!)));
   assert.equal(snapshot.salons.length, 14);
   assert.ok(snapshot.salons.every(salon => salon.active && salon.approvalStatus === 'VERIFIED'));

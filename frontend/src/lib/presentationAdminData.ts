@@ -26,7 +26,7 @@ export function createPresentationAdminData(salons: AdminSalonRow[], catalog: Ba
     const createdAt = new Date(Date.UTC(2026, 7, 1 + index % 57, 2 + index % 12, index % 60)).toISOString();
     return { id: userBase + index, fullName, email: `${handle}${index % 4 === 0 ? birthYear : ''}@${['gmail.com', 'gmail.com', 'outlook.com', 'yahoo.com'][index % 4]}`,
       role: index === presentationReport.users - 1 ? 'ADMIN' : index >= presentationReport.users - presentationReport.partners - 1 ? 'SUPPLIER' : 'CUSTOMER',
-      status: 'ACTIVE', phone: `${['09', '08', '07', '03'][index % 4]}${String(10284571 + combination * 239).padStart(8, '0')}`,
+      status: 'ACTIVE', phone: `${['091', '098', '083', '077', '035', '090'][index % 6]}${String(1284571 + combination * 239).padStart(7, '0')}`,
       gender: female.has(givenIndex) ? 'FEMALE' : 'MALE', dateOfBirth: `${birthYear}-${String(1 + combination % 12).padStart(2, '0')}-${String(1 + combination % 27).padStart(2, '0')}`,
       createdAt, updatedAt: createdAt, salons: [] };
   });
