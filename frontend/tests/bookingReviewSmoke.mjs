@@ -6,6 +6,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
 const browser = await chromium.launch({ headless: true, channel: process.env.SMOKE_BROWSER_CHANNEL || undefined });
 const page = await browser.newPage();
 const failures = [];
+let fixtureLogins = 0;
+page.on('request', request => { if (new URL(request.url()).pathname === '/api/v1/auth/login' && request.method() === 'POST') fixtureLogins++; });
 page.on('pageerror', e => failures.push(e.message));
 page.on('console', message => { if (message.type() === 'error') failures.push(message.text()); });
 page.on('response', response => { if (response.url().includes('/api/') && response.status() >= 400) failures.push(`${response.status()} ${new URL(response.url()).pathname}`); });
@@ -218,6 +220,7 @@ try {
   const jwt=await page.evaluate(()=>sessionStorage.getItem('beautylink_access_token'));
   const persisted=await (await page.request.get(`http://localhost:8080/api/v1/payments/payos/${observedPayment.orderCode}`,{headers:{Authorization:`Bearer ${jwt}`}})).json();
   assert.equal(persisted.status,'PAID');assert.equal(persisted.checkoutAllowed,false);assert.equal(persisted.qrCode,null);
+  assert.equal(fixtureLogins, 1, 'reload/back must verify the real session without repeating password login');
   assert.deepEqual(failures, []);
   console.log('PASS: browser -> Spring/JWT/H2; paid history reconciliation without webhook, continuation reload/back navigation/reuse/safe expiry retry without new booking; paid/manual guards, pending cancellation, completion, midpoint review photo upload/reload on desktop/mobile, review upserts/reload, account/appointments/Explore/details, checkout -> fake gateway; no API/page/console errors.');
 } catch (error) {
