@@ -170,11 +170,11 @@ try {
         await partner.getByRole('button', { name: 'Sửa lịch làm việc', exact: true }).click(); await page.getByLabel('Thứ Hai bắt đầu', { exact: true }).waitFor();
         // The schedule reload replaces SaveForm immediately; assert committed API + persisted readback, not a transient toast.
         const scheduleSaved = page.waitForResponse(r => r.request().method() === 'PUT' && r.url().endsWith('/schedule/edit'));
-        const scheduleReadback = page.waitForResponse(r => r.request().method() === 'GET' && r.url().endsWith('/schedule/edit'));
         await page.getByRole('button', { name: 'Lưu thay đổi đối tác', exact: true }).click();
         const scheduleResponse = await scheduleSaved; assert.equal(scheduleResponse.status(), 200);
         const savedSchedule = await scheduleResponse.json(); assert.ok(Array.isArray(savedSchedule.data)); assert.equal(savedSchedule.data.length, 7);
-        const readbackResponse = await scheduleReadback; assert.equal(readbackResponse.status(), 200); assert.deepEqual((await readbackResponse.json()).data, savedSchedule.data);
+        const testToken = await page.evaluate(() => sessionStorage.getItem('beautylink_access_token'));
+        const readbackResponse = await context.request.get(scheduleResponse.url(), { headers: { Authorization: `Bearer ${testToken}` } }); assert.equal(readbackResponse.status(), 200); assert.deepEqual((await readbackResponse.json()).data, savedSchedule.data);
         await page.getByLabel('Thứ Hai bắt đầu', { exact: true }).waitFor(); await capture('partner-schedule-edit');
         const editUrl = page.url(); await page.reload(); await page.getByLabel('Tên salon', { exact: true }).waitFor(); assert.equal(await page.getByLabel('Tên salon', { exact: true }).inputValue(), 'Lumière Beauty House Updated');
         if (width < 1024) await page.getByRole('button', { name: 'Mở menu quản trị', exact: true }).click();
