@@ -9,6 +9,7 @@ import { AccountPage } from '../src/components/AccountPage';
 import { AppointmentsModal } from '../src/components/AppointmentsModal';
 import { CheckoutPage } from '../src/components/CheckoutPage';
 import { beautyApi, apiClient, getAccessToken } from '../src/services/beautyApi';
+import { setSessionPhase } from '../src/lib/authSession';
 import { serviceReviewSummary, supplierReviewSummary } from '../src/lib/reviewScope';
 import type { BackendService, CurrentUser, HotDeal, NewPartner } from '../src/types';
 import '../src/index.css';
@@ -16,9 +17,13 @@ import '../src/index.css';
 if (!['localhost', '127.0.0.1'].includes(window.location.hostname)) throw new Error('Local test only');
 // Reload/back tests reuse the real session and verify /me instead of consuming
 // another password login on every document load (all CI scripts share one IP).
-const auth = getAccessToken() ? { user: await beautyApi.me() }
+const existingToken = getAccessToken();
+const auth = existingToken ? { user: await beautyApi.me() }
   : await beautyApi.login('0900000001', 'BeautyLinkTest123!');
 if (auth.user.phone !== '0900000001' || auth.user.role !== 'CUSTOMER') throw new Error('Unexpected smoke fixture identity');
+// Same gate as useSessionLifecycle: only a successful real /me for the unchanged
+// credential unlocks authenticated reads. Do not reinstall/refresh the token.
+if (existingToken && !setSessionPhase('verified', existingToken)) throw new Error('Smoke session changed during verification');
 const bookings = await beautyApi.myBookings();
 const fixture = bookings.find(b => b.bookingCode === 'SMOKE-PAST-DEPOSIT');
 if (!fixture) throw new Error('Use BookingReviewSmokeServer, never a production backend');
