@@ -20,6 +20,8 @@ public interface BookingReviewRepository extends JpaRepository<BookingReview, Lo
             + "(p.requiresManualReview = true or p.status in (:#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).PENDING}, "
             + ":#{T(com.example.backend.model.DomainEnums.PaymentTransactionStatus).REVIEW_REQUIRED})))";
     boolean existsByBookingId(Long bookingId);
+    @Query("select r.service.id,count(r),avg(r.rating) from BookingReview r where r.service.id in :ids and r.targetType=:targetType and " + VALID_BOOKING + " group by r.service.id")
+    List<Object[]> publicStatsByServiceIds(@Param("ids") java.util.Collection<Long> ids, @Param("targetType") ReviewTargetType targetType);
     Optional<BookingReview> findByBookingIdAndTargetType(Long bookingId, ReviewTargetType targetType);
     @Query(value = "select r from BookingReview r join fetch r.supplier join fetch r.service where (:demo = true or r.supplier.demoData = false) and " + VALID_BOOKING + " order by r.createdAt desc, r.id desc",
             countQuery = "select count(r) from BookingReview r where (:demo = true or r.supplier.demoData = false) and " + VALID_BOOKING)
