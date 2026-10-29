@@ -57,7 +57,7 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: mvn --batch-mode --no-transfer-progress -Dtest=BookingReviewReleaseTest,PaymentCancellationSafetyTest,GoogleSigninMigrationTest,WorkforceMigrationTest,AuthenticationSessionMigrationTest,CustomerAvatarMigrationTest,PayOSQrMigrationTest,CheckoutPerformanceIntegrationTest,AdminDashboardV2IntegrationTest,AdminProfileConcurrencyTest verify
+      - run: mvn --batch-mode --no-transfer-progress -Dtest=BookingReviewReleaseTest,PaymentCancellationSafetyTest,GoogleSigninMigrationTest,WorkforceMigrationTest,AuthenticationSessionMigrationTest,CustomerAvatarMigrationTest,PayOSQrMigrationTest,CheckoutPerformanceIntegrationTest,AdminDashboardV2IntegrationTest,AdminProfileConcurrencyTest,CommunityIntegrationTest,CommunityMigrationTest verify
       - uses: actions/upload-artifact@v4
         with:
           name: checkout-mysql-performance
@@ -82,7 +82,7 @@ jobs:
 
   booking-browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -109,7 +109,7 @@ jobs:
         run: |
           java -cp "backend/target/test-classes:backend/target/classes:$(cat backend/target/test-classpath.txt)" com.example.backend.BookingReviewSmokeServer > backend/target/browser-server.log 2>&1 &
           backend_pid=$!
-          (cd frontend && npm run dev -- --host=127.0.0.1) > backend/target/browser-vite.log 2>&1 &
+          (cd frontend && exec node node_modules/vite/bin/vite.js --host=127.0.0.1 --strictPort) > backend/target/browser-vite.log 2>&1 &
           frontend_pid=$!
           trap 'kill "$backend_pid" "$frontend_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 60); do
@@ -131,7 +131,7 @@ jobs:
         run: |
           java -cp "backend/target/test-classes:backend/target/classes:$(cat backend/target/test-classpath.txt)" com.example.backend.BookingReviewSmokeServer > backend/target/perf-ci-server.log 2>&1 &
           backend_pid=$!
-          (cd frontend && npm run dev -- --host=127.0.0.1) > backend/target/perf-ci-vite.log 2>&1 &
+          (cd frontend && exec node node_modules/vite/bin/vite.js --host=127.0.0.1 --strictPort) > backend/target/perf-ci-vite.log 2>&1 &
           frontend_pid=$!
           trap 'kill "$backend_pid" "$frontend_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 90); do
@@ -141,6 +141,24 @@ jobs:
           grep -q BOOKING_REVIEW_SMOKE_READY backend/target/perf-ci-server.log
           node frontend/tests/payosPerformance.mjs
           node frontend/tests/payosConcurrencySmoke.mjs
+      - name: Community browser, persistence and server-served social metadata
+        env:
+          PLAYWRIGHT_MODULE_PATH: ${{ runner.temp }}/beautylink-browser/node_modules/playwright
+        run: |
+          (cd frontend && npm run build)
+          java -cp "backend/target/test-classes:backend/target/classes:$(cat backend/target/test-classpath.txt)" com.example.backend.service.CommunitySmokeServer > backend/target/community-server.log 2>&1 &
+          backend_pid=$!
+          (cd frontend && exec node node_modules/vite/bin/vite.js --host=127.0.0.1 --strictPort) > backend/target/community-vite.log 2>&1 &
+          frontend_pid=$!
+          (cd frontend && exec env COMMUNITY_SMOKE=1 node --import tsx tests/communityShareServer.ts) > backend/target/community-share-server.log 2>&1 &
+          share_pid=$!
+          trap 'kill "$backend_pid" "$frontend_pid" "$share_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 90); do
+            if grep -q COMMUNITY_SMOKE_READY backend/target/community-server.log && grep -q COMMUNITY_SHARE_READY backend/target/community-share-server.log && curl --fail --silent http://localhost:5173/community > /dev/null; then break; fi
+            sleep 1
+          done
+          grep -q COMMUNITY_SMOKE_READY backend/target/community-server.log
+          node frontend/tests/communitySmoke.mjs
       - name: Admin V2 screenshots and isolated browser diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -157,3 +175,8 @@ jobs:
             backend/target/payos-concurrency-smoke.json
             backend/target/browser-server.log
             backend/target/browser-vite.log
+            backend/target/community-*.png
+            backend/target/community-browser-results.json
+            backend/target/community-server.log
+            backend/target/community-vite.log
+            backend/target/community-share-server.log

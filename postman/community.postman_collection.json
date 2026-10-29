@@ -1,0 +1,107 @@
+{
+  "info": {
+    "name": "BeautyLink Community isolated read-only contract",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5173/api"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if(pm.variables.get(\"baseUrl\")!==\"http://localhost:5173/api\")throw new Error(\"Isolated loopback server only; never production\");"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Feature configuration",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/v1/community/config"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Community explicitly enabled in isolated server\",()=>{pm.response.to.have.status(200);pm.expect(pm.response.json().enabled).to.eql(true);});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Published keyset feed",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/v1/community/posts?size=2"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Bounded public feed\",()=>{pm.response.to.have.status(200);const b=pm.response.json();pm.expect(b.items.length).to.be.at.most(2);pm.expect(b).to.have.property(\"nextCursor\");for(const p of b.items){pm.expect(p.visibility).to.eql(\"PUBLISHED\");for(const k of [\"email\",\"phone\",\"passwordHash\",\"bookingCode\",\"accessToken\"])pm.expect(p).not.to.have.property(k);}});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authoritative public services",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/v1/community/services?size=2"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Public services bounded\",()=>{pm.response.to.have.status(200);pm.expect(pm.response.json().length).to.be.at.most(2);});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Anonymous post denied",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/v1/community/posts",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Guest write denied\",()=>pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
