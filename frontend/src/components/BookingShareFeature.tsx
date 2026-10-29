@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { publicServiceShare } from '../lib/publicSharing';
 import {
   Share2,
   Copy,
@@ -19,6 +20,7 @@ import {
 
 export interface AppointmentShareData {
   bookingCode: string;
+  serviceId?: number;
   serviceName: string;
   supplierName: string;
   supplierAddress?: string;
@@ -75,57 +77,9 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
   const [shareSuccessFeedback, setShareSuccessFeedback] = useState<string | null>(null);
 
   const formattedDate = formatAppointmentDate(data.appointmentDate);
-  const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}${window.location.pathname}#bookings`
-    : 'https://beautylink.vn#bookings';
-
-  // Generate customized messages based on user's tone
-  const getShareMessage = (type: MessageTone) => {
-    const timeFormatted = `${data.startTime}${data.endTime ? ` - ${data.endTime}` : ''}`;
-    const specialistText = data.practitionerName ? `\n👤 Chuyên viên: ${data.practitionerName}` : '';
-    const addressText = data.supplierAddress ? `\n📍 Địa chỉ: ${data.supplierAddress}` : '';
-
-    if (type === 'busy') {
-      return `🌸 TẶNG / CHIA SẺ LỊCH LÀM ĐẸP (HÔM ĐÓ MÌNH BẬN)\n` +
-        `Chào bạn! Hôm đó mình có lịch bận đột xuất nên muốn chia sẻ lại lịch hẹn làm đẹp này cho bạn trải nghiệm nhé:\n` +
-        `💅 Dịch vụ: ${data.serviceName}\n` +
-        `🏢 Cơ sở: ${data.supplierName}${addressText}\n` +
-        `⏰ Thời gian: ${timeFormatted} · ${formattedDate}${specialistText}\n` +
-        `🎟️ Mã check-in BeautyPass: ${data.bookingCode}\n` +
-        (data.totalAmount ? `💰 Đã thanh toán: ${formatCurrency(data.totalAmount)}\n` : '') +
-        `\nBạn chỉ cần đến đọc mã ${data.bookingCode} tại quầy lễ tân để trải nghiệm trọn vẹn dịch vụ nha!\n` +
-        `Xem chi tiết: ${shareUrl}`;
-    }
-
-    if (type === 'invite') {
-      return `🌸 Cuối tuần này có ai muốn đi làm đẹp cùng mình không nè?\n` +
-        `Mình vừa đặt lịch hẹn làm đẹp tại ${data.supplierName}:\n` +
-        `💅 Dịch vụ: ${data.serviceName}\n` +
-        `⏰ Thời gian: ${timeFormatted} · ${formattedDate}${specialistText}${addressText}\n` +
-        `🔖 Mã lịch hẹn: ${data.bookingCode}\n\n` +
-        `Cùng đặt lịch làm đẹp và thư giãn tại BeautyLink nhé: ${shareUrl}`;
-    }
-
-    if (type === 'excited') {
-      return `Vừa săn được lịch làm đẹp cực ưng ý tại BeautyLink! 💖\n` +
-        `Dịch vụ: ${data.serviceName}\n` +
-        `Cơ sở: ${data.supplierName}\n` +
-        `Lịch hẹn: ${timeFormatted} · ${formattedDate}${specialistText}\n` +
-        `Mã hẹn: ${data.bookingCode}\n\n` +
-        `Háo hức chờ đến ngày hẹn quá đi thôi 🥰 Tham khảo dịch vụ tại: ${shareUrl}`;
-    }
-
-    // Default: 'details'
-    return `📋 Thông tin lịch hẹn làm đẹp tại BeautyLink:\n` +
-      `• Mã lịch hẹn: ${data.bookingCode}\n` +
-      `• Dịch vụ: ${data.serviceName}\n` +
-      `• Cơ sở: ${data.supplierName}${addressText}\n` +
-      `• Thời gian: ${timeFormatted} · ${formattedDate}${specialistText}\n` +
-      (data.totalAmount ? `• Giá thanh toán: ${formatCurrency(data.totalAmount)}\n` : '') +
-      `\nXem chi tiết tại: ${shareUrl}`;
-  };
-
-  const currentMessage = getShareMessage(tone);
+  const { url: shareUrl, text: currentMessage } = publicServiceShare({
+    serviceName: data.serviceName, supplierName: data.supplierName, serviceId: data.serviceId,
+  });
 
   // Copy share message to clipboard
   const handleCopyMessage = async () => {
@@ -141,7 +95,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
         document.body.removeChild(textarea);
       }
       setCopiedText(true);
-      setShareSuccessFeedback('Đã sao chép nội dung lịch hẹn vào bộ nhớ tạm!');
+      setShareSuccessFeedback('Đã sao chép giới thiệu dịch vụ; không kèm mã hay thông tin lịch hẹn.');
       setTimeout(() => {
         setCopiedText(false);
         setShareSuccessFeedback(null);
@@ -232,7 +186,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
   };
 
   const handleShareTwitter = () => {
-    const text = `🌸 Mình vừa đặt lịch làm đẹp tại BeautyLink: ${data.serviceName} ở ${data.supplierName} (${data.startTime} · ${formattedDate})!`;
+    const text = currentMessage;
     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
       text
     )}&url=${encodeURIComponent(shareUrl)}`;
@@ -255,7 +209,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
       }
       const dates = `${cleanDate}T${cleanTime}/${cleanDate}T${endCleanTime}`;
       const title = `Lịch làm đẹp: ${data.serviceName} - BeautyLink`;
-      const details = `Dịch vụ: ${data.serviceName}\nCơ sở: ${data.supplierName}\nĐịa chỉ: ${data.supplierAddress || 'Theo lịch hẹn BeautyLink'}\nChuyên viên: ${data.practitionerName || 'Chuyên viên chỉ định'}\nMã đặt lịch: ${data.bookingCode}\n\nĐặt qua BeautyLink.`;
+      const details = currentMessage; // Explicit private calendar export; no codes/payment/notes.
       const location = `${data.supplierName}, ${data.supplierAddress || 'Việt Nam'}`;
 
       return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
@@ -269,7 +223,8 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6"><p className="rounded-xl bg-pink-50 p-3 text-xs text-pink-900">Chia sẻ chỉ giới thiệu dịch vụ công khai, không chuyển quyền lịch hẹn. Mã và thông tin dưới đây chỉ dành cho bạn; không gửi mã check-in cho người khác.</p>
+      <button type="button" aria-label="Chia sẻ qua thiết bị" onClick={handleNativeShare} className="rounded-xl bg-pink-600 px-4 py-2 text-sm font-bold text-white">Chia sẻ dịch vụ</button>
       {/* Appointment Ticket Card Preview */}
       {showCardPreview && (
         <div className="relative overflow-hidden rounded-3xl border border-pink-200/80 bg-gradient-to-br from-pink-500/10 via-white to-pink-500/5 p-5 sm:p-6 shadow-sm">
@@ -423,7 +378,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
             {/* Facebook */}
             <button
               type="button"
-              onClick={handleShareFacebook}
+              aria-label="Chia sẻ qua Facebook" onClick={handleShareFacebook}
               className="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white p-3 text-left hover:border-[#1877F2] hover:bg-[#1877F2]/5 transition cursor-pointer group"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#1877F2] text-white shadow-xs group-hover:scale-105 transition-transform">
@@ -444,7 +399,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
             {/* Zalo */}
             <button
               type="button"
-              onClick={handleShareZalo}
+              aria-label="Chia sẻ qua Zalo" onClick={handleShareZalo}
               className="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white p-3 text-left hover:border-[#0068FF] hover:bg-[#0068FF]/5 transition cursor-pointer group"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#0068FF] text-white shadow-xs font-black text-xs group-hover:scale-105 transition-transform">
@@ -463,7 +418,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
             {/* Messenger */}
             <button
               type="button"
-              onClick={handleShareMessenger}
+              aria-label="Chia sẻ qua Messenger" onClick={handleShareMessenger}
               className="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white p-3 text-left hover:border-[#0084FF] hover:bg-[#0084FF]/5 transition cursor-pointer group"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-[#00C6FF] to-[#0078FF] text-white shadow-xs group-hover:scale-105 transition-transform">
@@ -482,7 +437,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
             {/* Telegram */}
             <button
               type="button"
-              onClick={handleShareTelegram}
+              aria-label="Chia sẻ qua Telegram" onClick={handleShareTelegram}
               className="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white p-3 text-left hover:border-[#24A1DE] hover:bg-[#24A1DE]/5 transition cursor-pointer group"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#24A1DE] text-white shadow-xs group-hover:scale-105 transition-transform">
@@ -503,7 +458,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
             {/* WhatsApp */}
             <button
               type="button"
-              onClick={handleShareWhatsApp}
+              aria-label="Chia sẻ qua WhatsApp" onClick={handleShareWhatsApp}
               className="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white p-3 text-left hover:border-[#25D366] hover:bg-[#25D366]/5 transition cursor-pointer group"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#25D366] text-white shadow-xs group-hover:scale-105 transition-transform">
@@ -524,7 +479,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
             {/* X / Twitter */}
             <button
               type="button"
-              onClick={handleShareTwitter}
+              aria-label="Chia sẻ qua X" onClick={handleShareTwitter}
               className="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white p-3 text-left hover:border-black hover:bg-slate-50 transition cursor-pointer group"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black text-white shadow-xs group-hover:scale-105 transition-transform">
@@ -603,7 +558,7 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <span>🎁 Nhượng lại (Hôm đó bận)</span>
+                <span>🎁 Giới thiệu (Hôm đó bận)</span>
               </button>
               <button
                 type="button"
