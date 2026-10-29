@@ -75,3 +75,18 @@ test('switching accounts clears pending reaction UI and discards prior-account r
   await act(async()=>old({...fixture(),liked:true,likeCount:99,revision:99}));assert.doesNotMatch(document.body.textContent!,/99 lượt thích/);await click('Thích');assert.equal(likes,2);assert.match(document.body.textContent!,/1 lượt thích/);
  }finally{Object.assign(communityApi,originals);await e.close();}
 });
+
+test('compiled Vercel Node ESM resolves imports and packaged HTML independently of process cwd',async()=>{
+ const {mkdtempSync,writeFileSync,mkdirSync,rmSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {execFileSync}=await import('node:child_process');
+ const folder=mkdtempSync(join(tmpdir(),'beautylink-community-node-'));
+ try{
+  execFileSync(process.execPath,['node_modules/typescript/bin/tsc','api/community-share.ts','server/communityShare.ts','src/types/community.ts','--ignoreConfig','--types','node','--outDir',folder,'--module','NodeNext','--moduleResolution','NodeNext','--target','ES2022','--skipLibCheck'],{stdio:'pipe'});
+  writeFileSync(join(folder,'package.json'),JSON.stringify({type:'module'}));mkdirSync(join(folder,'dist'));writeFileSync(join(folder,'dist/index.html'),'<html><head><title>Old</title></head><body><script src="/assets/real.js"></script></body></html>');
+  const native=`import assert from 'node:assert/strict';import handler from './api/community-share.js';
+    const post=${JSON.stringify(fixture())};globalThis.fetch=async(url,options)=>{assert.equal(url,'https://api.beautylink.cloud/api/v1/community/posts/'+post.id);assert.equal(options.headers.Authorization,undefined);return new Response(JSON.stringify(post));};
+    let status=0,body='';const headers={};const res={setHeader:(k,v)=>headers[k]=v,status:n=>{status=n;return res;},send:value=>{body=value;},end:()=>{}};
+    process.chdir('dist');await handler({method:'GET',query:{id:post.id}},res);assert.equal(status,200);assert.ok(body.includes('property="og:description"'));assert.ok(body.includes('/assets/real.js'));assert.equal(headers['Cache-Control'],'no-store');
+    await handler({method:'GET',query:{id:'invalid'}},res);assert.equal(status,404);console.log('NATIVE_NODE_ESM_PASS');`;
+  assert.match(execFileSync(process.execPath,['--input-type=module','--eval',native],{cwd:folder,encoding:'utf8'}),/NATIVE_NODE_ESM_PASS/);
+ }finally{rmSync(folder,{recursive:true,force:true});}
+});

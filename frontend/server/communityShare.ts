@@ -1,4 +1,4 @@
-import type { CommunityPost } from '../src/types/community';
+import type { CommunityPost } from '../src/types/community.js';
 const origin = 'https://beautylink.cloud';
 export const communityPublicId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const escapeCommunityHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
