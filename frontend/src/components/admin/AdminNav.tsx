@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BarChart3, CalendarDays, CreditCard, FileText, Home, LogOut, Users, Store, Star, Tag, Settings, Menu, X, Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-export type AdminSection = 'overview' | 'customers' | 'salons' | 'bookings' | 'payments' | 'reviews' | 'promotions' | 'reports' | 'settings';
+export type AdminSection = 'community' | 'overview' | 'customers' | 'salons' | 'bookings' | 'payments' | 'reviews' | 'promotions' | 'reports' | 'settings';
 export interface AdminNavProps { active: AdminSection; adminName: string; onNavigate: (section: AdminSection, query?: string) => void; onHome: () => void; onLogout: () => void; controls?: React.ReactNode }
 export const adminItems: Array<{ id: AdminSection; label: string; icon: LucideIcon }> = [
   { id: 'overview', label: 'Tổng quan', icon: BarChart3 }, { id: 'customers', label: 'Người dùng', icon: Users },
   { id: 'salons', label: 'Đối tác/Salon', icon: Store }, { id: 'bookings', label: 'Lịch đặt', icon: CalendarDays },
   { id: 'payments', label: 'Thanh toán', icon: CreditCard }, { id: 'reviews', label: 'Đánh giá', icon: Star },
+  { id: 'community', label: 'Community', icon: Users },
   { id: 'promotions', label: 'Khuyến mãi', icon: Tag }, { id: 'reports', label: 'Báo cáo', icon: FileText }, { id: 'settings', label: 'Cài đặt', icon: Settings },
 ];
 export const AdminNav: React.FC<AdminNavProps> = ({ active, adminName, onNavigate, onHome, onLogout, controls }) => {

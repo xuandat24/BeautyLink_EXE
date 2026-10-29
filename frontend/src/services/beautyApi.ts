@@ -116,6 +116,13 @@ apiClient.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const publicAuth = /\/auth\/(login|google|register|register-supplier|password-reset|registration-verification)(\/|$)/.test(config.url ?? '');
     if (publicAuth) { delete config.headers.Authorization; return config; }
+    const communityRead = config.method === 'get' && /^\/v1\/community\/(config|services|posts(?:\/[^/?]+(?:\/comments)?)?)$/.test((config.url ?? '').split('?')[0]);
+    if (communityRead) {
+      const optional = getAccessToken();
+      if (optional && sessionSnapshot().phase === 'verified') config.headers.Authorization = `Bearer ${optional}`;
+      else delete config.headers.Authorization;
+      return config;
+    }
     const publicRead = config.method === 'get' && /\/(v1\/(locations|categories|catalog|services|suppliers|homepage)|products)(\/|$)/.test(config.url ?? '');
     if (publicRead) { delete config.headers.Authorization; return config; }
     if (config.url?.endsWith('/auth/session/logout') && config.headers.Authorization) return config;

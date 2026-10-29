@@ -43,6 +43,10 @@ public class BookingReviewSmokeServer {
             return gateway;
         }
     }
+    // Future history fixtures must stay inside the seeded workforce's working week.
+    static LocalDate futureFixtureDate(LocalDate today) {
+        return today.plusDays(2).with(java.time.temporal.TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
+    }
     public static void main(String[] args) {
         var context = new SpringApplicationBuilder(BackendApplication.class, LocalGateway.class).profiles("test").run(
                 "--spring.config.import=", "--server.address="+System.getenv().getOrDefault("SMOKE_BIND_ADDRESS","127.0.0.1"), "--server.port=8080",
@@ -75,7 +79,8 @@ public class BookingReviewSmokeServer {
             for (int i = 0; i < codes.length; i++) {
                 Booking b = new Booking(); b.setBookingCode(codes[i]); b.setCustomer(users.findByPhone("0900000001").orElseThrow());
                 b.setService(offering); b.setSupplier(offering.getSupplier()); b.setPractitioner(people.findBySupplierIdAndActiveTrue(offering.getSupplier().getId()).get(0));
-                b.setAppointmentDate(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusDays(i == 1 || i == 2 ? 2 : -2));
+                var today=LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+                b.setAppointmentDate(i == 1 || i == 2 ? futureFixtureDate(today) : today.minusDays(2));
                 b.setStartTime(LocalTime.of(10, 0)); b.setEndTime(LocalTime.of(11, 0)); b.setTotalAmount(offering.getPrice());
                 b.setStatus(i == 0 ? BookingStatus.PENDING : i == 5 ? BookingStatus.CANCELLED : i == 6 ? BookingStatus.COMPLETED : BookingStatus.CONFIRMED);
                 b.setPaymentStatus(i == 0 ? PaymentStatus.UNPAID : i == 6 ? PaymentStatus.REFUNDED : i == 1 || i == 3 ? PaymentStatus.PARTIALLY_PAID : PaymentStatus.PAID);

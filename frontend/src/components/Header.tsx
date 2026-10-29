@@ -19,6 +19,7 @@ import { Star } from 'lucide-react';
 
 interface HeaderProps {
   cartCount: number;
+  onOpenCommunity?: () => void;
   onOpenCart: () => void;
   onOpenPartnerModal: () => void;
   onOpenLocationModal?: () => void;
@@ -51,6 +52,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   cartCount,
+  onOpenCommunity,
   onOpenCart,
   onOpenPartnerModal,
   onOpenLocationModal,
@@ -552,6 +554,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Running Marquee Ticker */}
       <div className="bg-gradient-to-r from-pink-50/95 via-white to-pink-50/95 border-t border-b border-pink-100/90 py-1.5 sm:py-2 px-3 sm:px-6 relative overflow-hidden backdrop-blur-md">
         <div className="max-w-7xl mx-auto flex items-center gap-3">
+          {onOpenCommunity && <button type="button" onClick={onOpenCommunity} className="hidden min-h-8 shrink-0 rounded-full border border-pink-200 bg-white px-3 text-xs font-bold text-pink-700 hover:bg-pink-50 focus-visible:outline-2 focus-visible:outline-pink-600 md:block">Cộng đồng</button>}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider shrink-0 shadow-xs z-10">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-200 opacity-75"></span>
@@ -572,6 +575,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-t border-pink-100 px-4 py-4 space-y-3 shadow-lg">
+          {onOpenCommunity && <button type="button" onClick={() => { setMobileMenuOpen(false); onOpenCommunity(); }} className="min-h-11 w-full rounded-xl bg-pink-50 px-3 text-left text-sm font-bold text-pink-700">Cộng đồng BeautyLink</button>}
           {currentUser && (
             <div className="p-3 rounded-2xl bg-pink-50 border border-pink-100 flex items-center justify-between">
               <button

@@ -26,12 +26,12 @@ test('admin date range validates missing/corrupt/reversed dates and the inclusiv
   assert.equal(adminRangeError({ from: '2026-01-01', to: '2027-01-01' }), null);
   assert.ok(adminRangeError({ from: '2026-01-01', to: '2027-01-02' }));
 });
-test('sidebar exposes nine real module destinations, keyboard menu and booking-scoped search', async () => {
+test('sidebar exposes existing modules and Community moderation, keyboard menu and booking-scoped search', async () => {
   const dom = environment(); const root = createRoot(document.getElementById('root')!); let result: unknown[] = [];
   try {
     await act(async () => root.render(React.createElement(AdminNav, { active: 'overview', adminName: 'Admin', onNavigate: (...args) => { result = args; }, onHome() {}, onLogout() {} })));
-    assert.deepEqual(adminItems.map(i => i.label), ['Tổng quan', 'Người dùng', 'Đối tác/Salon', 'Lịch đặt', 'Thanh toán', 'Đánh giá', 'Khuyến mãi', 'Báo cáo', 'Cài đặt']);
-    assert.equal(document.querySelector('nav')?.querySelectorAll('button').length, 9);
+    assert.deepEqual(adminItems.map(i => i.label), ['Tổng quan', 'Người dùng', 'Đối tác/Salon', 'Lịch đặt', 'Thanh toán', 'Đánh giá', 'Community', 'Khuyến mãi', 'Báo cáo', 'Cài đặt']);
+    assert.equal(document.querySelector('nav')?.querySelectorAll('button').length, 10);
     await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Mở menu quản trị"]')!.click());
     assert.equal(document.querySelector('button[aria-label="Mở menu quản trị"]')?.getAttribute('aria-expanded'), 'true');
     await act(async () => document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));

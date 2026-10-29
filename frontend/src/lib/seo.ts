@@ -11,7 +11,7 @@ export const DEFAULT_SEO: SEOConfig = {
   description:
     'Nền tảng đặt lịch làm đẹp thông minh số 1 Việt Nam. Hơn 5.000+ Spa, Clinic, Nail và Thẩm mỹ viện uy tín cùng hàng ngàn deal giờ vàng giá sốc.',
   image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1200&q=80',
-  url: 'https://beautylink.vn',
+  url: 'https://beautylink.cloud',
   type: 'website',
 };
 
@@ -27,6 +27,13 @@ export function updateMetaTags(config: SEOConfig = {}) {
   const metaDesc = document.querySelector('meta[name="description"]');
   if (metaDesc) {
     metaDesc.setAttribute('content', merged.description!);
+  }
+
+  const canonical = document.querySelector('link[rel="canonical"]') ?? document.head.appendChild(document.createElement('link'));
+  canonical.setAttribute('rel', 'canonical'); canonical.setAttribute('href', merged.url!);
+  for (const [property, value] of [['og:url', merged.url!], ['og:type', merged.type!]]) {
+    const tag = document.querySelector(`meta[property="${property}"]`) ?? document.head.appendChild(document.createElement('meta'));
+    tag.setAttribute('property', property); tag.setAttribute('content', value);
   }
 
   // OG tags

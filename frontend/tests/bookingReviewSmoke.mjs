@@ -167,7 +167,11 @@ try {
   }
   page.off('request', trackBookings);
   await page.getByRole('button', { name: 'Checkout', exact: true }).click();
+  // Do not race the real availability guard with the initial asynchronous capacity request.
+  await page.getByRole('button', { name: /^13:00 \([1-9]\d*\)$/ }).click();
+  await page.getByText('Đang kiểm tra lịch trống...', { exact: true }).waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: /Tiếp tục: Chọn hình thức/ }).click();
+  await page.getByRole('button', { name: /Mở thanh toán QR/ }).waitFor();
   delayNextCreate = true;
   const openingStarted = Date.now();
   const [paymentResponse] = await Promise.all([
