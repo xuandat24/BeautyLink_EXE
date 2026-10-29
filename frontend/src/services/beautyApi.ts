@@ -39,7 +39,9 @@ import {
   VOUCHERS,
 } from '../data/mockData';
 import { cache } from '../lib/cache';
-import { presentationAccount, presentationEmail, presentationEnabled, presentationReviewAllocation, presentationService, type PresentationReviewAllocation } from '../lib/presentationData';
+import { presentationAccount, presentationEnabled, presentationReviewAllocation, presentationService, type PresentationReviewAllocation } from '../lib/presentationData';
+import { createPresentationAdminData, isPresentationBooking, isPresentationUser, presentationBookings, presentationCustomerCsv, presentationCustomers, presentationPage, type PresentationAdminData } from '../lib/presentationAdminData';
+import type { AdminSalonRow } from '../types/adminV2';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { clearSession, getSessionToken, installToken, peekAccessToken, sessionSnapshot, setSessionPhase, sessionCredentialEpoch } from '../lib/authSession';
 
@@ -62,6 +64,8 @@ const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '/api';
 const DEMO_FALLBACK_ENABLED = import.meta.env?.DEV && import.meta.env?.VITE_ENABLE_DEMO_FALLBACK === 'true';
 let presentationCatalogPromise: Promise<BackendService[]> | null = null;
 let presentationAllocation: PresentationReviewAllocation | null = null;
+let adminPresentationPromise: Promise<PresentationAdminData> | null = null;
+let adminPresentationToken: string | null = null;
 
 type BackendDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
 type BackendScheduleRule = {
@@ -155,6 +159,21 @@ async function reviewAllocation(): Promise<PresentationReviewAllocation | null> 
     presentationCatalogPromise = null;
     return null;
   }
+}
+
+export async function adminPresentationData(): Promise<PresentationAdminData | null> {
+  if (!presentationEnabled) return null;
+  const token = getAccessToken();
+  if (!adminPresentationPromise || token !== adminPresentationToken) {
+    adminPresentationToken = token;
+    adminPresentationPromise = Promise.all([
+      apiClient.get<AdminPage<AdminSalonRow>>('/v1/admin/salons', { params: { includeDemo: false, page: 0, size: 100 } }),
+      presentationCatalogPromise ?? apiClient.get<BackendService[]>('/v1/catalog/services').then(response => response.data),
+    ]).then(([salons, catalog]) => createPresentationAdminData(salons.data.content, catalog));
+  }
+  const pending = adminPresentationPromise;
+  try { return await pending; }
+  catch (error) { if (adminPresentationPromise === pending) adminPresentationPromise = null; throw error; }
 }
 
 export function setAccessToken(token: string, rememberMe = false) {
@@ -987,16 +1006,16 @@ export const beautyApi = {
   // ==========================================
   async adminCustomers(params?: { from?: string; to?: string; bookedOnly?: boolean; includeDemo?: boolean }): Promise<AdminCustomer[]> {
     const customers = await unwrap<AdminCustomer[]>(apiClient.get('/v1/admin/customers', { params }));
-    return customers.map(presentationAccount);
+    const snapshot = await adminPresentationData();
+    return snapshot ? presentationCustomers(snapshot, params) : customers.map(presentationAccount);
   },
 
   async exportAdminCustomers(): Promise<Blob> {
-    const response = await apiClient.get('/v1/admin/customers/export', { responseType: 'blob' });
     if (presentationEnabled) {
-      const text = await (response.data as Blob).text();
-      return new Blob([text.replace(/[a-zA-Z0-9._+\-]+@seed\.beautylink\.test/gi, email => presentationEmail(email)!)], { type: response.data.type });
+      await apiClient.get('/v1/admin/customers');
+      return presentationCustomerCsv((await adminPresentationData())!);
     }
-    return response.data;
+    return (await apiClient.get('/v1/admin/customers/export', { responseType: 'blob' })).data;
   },
 
   async adminDashboardSummary(params: { from: string; to: string; includeDemo: boolean }): Promise<AdminDashboardSummary> {
@@ -1045,14 +1064,24 @@ export const beautyApi = {
     from: string; to: string; includeDemo: boolean; status?: string; paymentStatus?: string;
     query?: string; page?: number; size?: number;
   }): Promise<AdminPage<AdminBooking>> {
-    return unwrap(apiClient.get('/v1/admin/bookings', { params }));
+    const rows = await unwrap<AdminPage<AdminBooking>>(apiClient.get('/v1/admin/bookings', { params }));
+    const snapshot = await adminPresentationData();
+    return snapshot ? presentationPage(presentationBookings(snapshot, params), params.page, params.size) : rows;
   },
 
   async adminBooking(id: number): Promise<AdminBooking> {
+    if (presentationEnabled && isPresentationBooking(id)) {
+      await apiClient.get('/v1/admin/bookings', { params: { from: '2026-10-01', to: '2026-10-29', page: 0, size: 1 } });
+      return (await adminPresentationData())!.bookings.find(booking => booking.id === id)!;
+    }
     return unwrap(apiClient.get(`/v1/admin/bookings/${id}`));
   },
 
   async adminCustomerBookings(customerId: number, page = 0): Promise<AdminPage<AdminBooking>> {
+    if (presentationEnabled && isPresentationUser(customerId)) {
+      await apiClient.get('/v1/admin/customers');
+      return presentationPage(presentationBookings((await adminPresentationData())!, { customerId }), page);
+    }
     return unwrap(apiClient.get(`/v1/admin/customers/${customerId}/bookings`, { params: { page, size: 20 } }));
   },
 
