@@ -500,7 +500,6 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {onOpenCommunity && <button type="button" onClick={onOpenCommunity} className="hidden min-h-10 rounded-full border border-pink-200 px-3 text-xs font-bold text-pink-700 hover:bg-pink-50 md:block">Cộng đồng</button>}
             {/* Vietnamese-only language indicator */}
             <div className="flex items-center p-0.5 rounded-full bg-pink-50 border border-pink-200 text-[11px] font-bold shadow-xs">
               <span
@@ -555,6 +554,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Running Marquee Ticker */}
       <div className="bg-gradient-to-r from-pink-50/95 via-white to-pink-50/95 border-t border-b border-pink-100/90 py-1.5 sm:py-2 px-3 sm:px-6 relative overflow-hidden backdrop-blur-md">
         <div className="max-w-7xl mx-auto flex items-center gap-3">
+          {onOpenCommunity && <button type="button" onClick={onOpenCommunity} className="hidden min-h-8 shrink-0 rounded-full border border-pink-200 bg-white px-3 text-xs font-bold text-pink-700 hover:bg-pink-50 focus-visible:outline-2 focus-visible:outline-pink-600 md:block">Cộng đồng</button>}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-[#EB0F51] to-[#B42D58] text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider shrink-0 shadow-xs z-10">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-200 opacity-75"></span>
