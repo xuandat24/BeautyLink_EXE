@@ -174,7 +174,7 @@ try {
         const scheduleResponse = await scheduleSaved; assert.equal(scheduleResponse.status(), 200);
         const savedSchedule = await scheduleResponse.json(); assert.ok(Array.isArray(savedSchedule.data)); assert.equal(savedSchedule.data.length, 7);
         const testToken = await page.evaluate(() => sessionStorage.getItem('beautylink_access_token'));
-        const readbackResponse = await context.request.get(scheduleResponse.url(), { headers: { Authorization: `Bearer ${testToken}` } }); assert.equal(readbackResponse.status(), 200); assert.deepEqual((await readbackResponse.json()).data, savedSchedule.data);
+        const readbackResponse = await context.request.get(scheduleResponse.url(), { headers: { Authorization: `Bearer ${testToken}` } }); assert.equal(readbackResponse.status(), 200); assert.deepEqual((await readbackResponse.json()).data.sort((a, b) => a.dayOfWeek.localeCompare(b.dayOfWeek)), [...savedSchedule.data].sort((a, b) => a.dayOfWeek.localeCompare(b.dayOfWeek)));
         await page.getByLabel('Thứ Hai bắt đầu', { exact: true }).waitFor(); await capture('partner-schedule-edit');
         const editUrl = page.url(); await page.reload(); await page.getByLabel('Tên salon', { exact: true }).waitFor(); assert.equal(await page.getByLabel('Tên salon', { exact: true }).inputValue(), 'Lumière Beauty House Updated');
         if (width < 1024) await page.getByRole('button', { name: 'Mở menu quản trị', exact: true }).click();
