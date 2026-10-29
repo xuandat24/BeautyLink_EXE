@@ -19,6 +19,8 @@ const postPath=()=>new URL(page.url()).pathname;
 const shot=async(name,width,height)=>{await page.setViewportSize({width,height});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:`backend/target/community-${name}-${width}.png`,fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`page overflow ${width}`);};
 try{
  for(let i=0;i<90;i++){try{const r=await context.request.get(api+'/config',{timeout:1000});if(r.ok()&&(await r.json()).enabled)break;}catch{}await new Promise(r=>setTimeout(r,500));}
+ const locations=await(await context.request.get(base+'/api/v1/locations')).json();assert.ok(locations[0]?.id);
+ await context.addInitScript(location=>localStorage.setItem('beautylink_onboarding_v1',JSON.stringify({version:1,completedAt:Date.now(),locationId:location.id,city:location.name,category:'all'})),locations[0]);
  await page.goto(base+'/community');await page.getByText('Chưa có bài viết phù hợp').waitFor();
  assert.equal((await context.request.post(api+'/posts',{data:{}})).status(),401);mark('guest empty feed / private write denied');
  await page.getByRole('button',{name:'Đăng nhập',exact:true}).click();await page.locator('#customer-identifier').fill('0901234500');await page.locator('#customer-password').fill('Synthetic Community123!');await page.getByRole('button',{name:'Đăng nhập ngay'}).click();await page.getByRole('button',{name:'Community customer',exact:true}).waitFor();mark('real BCrypt login / JWT / verified me / return to Community');
@@ -47,7 +49,7 @@ try{
  await page.getByRole('button',{name:'Khôi phục bài viết',exact:true}).click();await page.getByRole('dialog').locator('textarea').fill('Nội dung được khôi phục sau kiểm tra');await page.getByRole('button',{name:'Xác nhận kiểm duyệt',exact:true}).click();await page.getByRole('button',{name:'Ẩn bài viết',exact:true}).waitFor();assert.equal((await context.request.get('http://127.0.0.1:5174'+path)).status(),200);mark('admin reports / hide / restore / real audit / hidden OG 404');
  await page.goto(base+'/community');await page.getByRole('button',{name:'Đăng xuất',exact:true}).click();await page.goto(base+'/community');await page.getByRole('button',{name:'Đăng nhập',exact:true}).waitFor();assert.equal((await context.request.get(base+'/api/v1/auth/me',{headers:{Authorization:'Bearer '+admin.accessToken}})).status(),401);mark('logout / backend session revocation / private UI cleared');
  for(const width of [1366,768,390]){await page.setViewportSize({width,height:900});await page.goto(base+'/#home');
-  await page.waitForFunction(()=>!!document.querySelector('header'));
+  await page.locator('header').getByText('Cộng đồng',{exact:true}).waitFor({state:'attached'});
   assert.equal(await page.locator('header > div').first().evaluate(container=>[...container.firstElementChild.children].some(el=>el.getBoundingClientRect().right>innerWidth+1)),false,`header overflow ${width}`);
   const marker=await page.evaluate(()=>{window.__communityHeaderDoc=Math.random();return window.__communityHeaderDoc;});
   if(width<768){await page.locator('button:has(svg.lucide-menu)').click();await page.getByRole('button',{name:'Cộng đồng BeautyLink',exact:true}).click();}else await page.getByRole('button',{name:'Cộng đồng',exact:true}).click();
