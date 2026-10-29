@@ -173,6 +173,8 @@ jobs:
             backend/target/booking-history-*.png
             backend/target/payos-performance-*.json
             backend/target/payos-concurrency-smoke.json
+            backend/target/payos-concurrency-failure-*.png
+            backend/target/perf-ci-server.log
             backend/target/browser-server.log
             backend/target/browser-vite.log
             backend/target/community-*.png
