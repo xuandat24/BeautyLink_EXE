@@ -19,6 +19,7 @@ import { Star } from 'lucide-react';
 
 interface HeaderProps {
   cartCount: number;
+  onOpenCommunity?: () => void;
   onOpenCart: () => void;
   onOpenPartnerModal: () => void;
   onOpenLocationModal?: () => void;
@@ -51,6 +52,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   cartCount,
+  onOpenCommunity,
   onOpenCart,
   onOpenPartnerModal,
   onOpenLocationModal,
@@ -498,6 +500,7 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
+            {onOpenCommunity && <button type="button" onClick={onOpenCommunity} className="hidden min-h-10 rounded-full border border-pink-200 px-3 text-xs font-bold text-pink-700 hover:bg-pink-50 md:block">Cộng đồng</button>}
             {/* Vietnamese-only language indicator */}
             <div className="flex items-center p-0.5 rounded-full bg-pink-50 border border-pink-200 text-[11px] font-bold shadow-xs">
               <span
@@ -572,6 +575,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-t border-pink-100 px-4 py-4 space-y-3 shadow-lg">
+          {onOpenCommunity && <button type="button" onClick={() => { setMobileMenuOpen(false); onOpenCommunity(); }} className="min-h-11 w-full rounded-xl bg-pink-50 px-3 text-left text-sm font-bold text-pink-700">Cộng đồng BeautyLink</button>}
           {currentUser && (
             <div className="p-3 rounded-2xl bg-pink-50 border border-pink-100 flex items-center justify-between">
               <button

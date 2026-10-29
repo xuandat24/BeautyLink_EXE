@@ -475,6 +475,7 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({ onBack, onBookNew, e
           sharingBooking
             ? {
                 bookingCode: sharingBooking.bookingCode,
+          serviceId: sharingBooking.serviceId,
                 serviceName: sharingBooking.serviceName,
                 supplierName: sharingBooking.supplierName,
                 practitionerName: sharingBooking.practitionerName,

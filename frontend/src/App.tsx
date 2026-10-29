@@ -15,6 +15,8 @@ import { CategoryServicePage } from './components/CategoryServicePage';
 import type { AdminSection } from './components/admin/AdminNav';
 import { AuthPage } from './components/AuthPage';
 import { continuationDestination, setPaymentBookingId } from './lib/paymentNavigation';
+import { communityRoute, goCommunity } from './lib/communityNavigation';
+import { communityApi } from './services/communityApi';
 import type { ExploreContext } from './components/FilterExplorePage';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
 import { useSessionLifecycle } from './hooks/useSessionLifecycle';
@@ -30,6 +32,8 @@ import { ViewAllServicesModal, ViewAllContext } from './components/ViewAllServic
 import { FavoriteToast, FavoriteToastInfo } from './components/FavoriteToast';
 
 import { parseAdminDetailHash, adminDetailHash } from './components/admin/adminRoutes';
+const CommunityPage = React.lazy(() => import('./components/community/CommunityPage').then(m => ({ default: m.CommunityPage })));
+const AdminCommunityModeration = React.lazy(() => import('./components/community/AdminCommunityModeration').then(m => ({ default: m.AdminCommunityModeration })));
 const AdminDetailPage = React.lazy(() => import('./components/admin/AdminDetailPage').then(module => ({ default: module.AdminDetailPage })));
 const AdminDashboardPage = React.lazy(() => import('./components/admin/AdminDashboardPage').then((module) => ({ default: module.AdminDashboardPage })));
 const AdminModulesPage = React.lazy(() => import('./components/admin/AdminModulesPage').then(module => ({ default: module.AdminModulesPage })));
@@ -53,7 +57,7 @@ import {
   CurrentUser,
   SearchFilters,
 } from './types';
-import { beautyApi, DEFAULT_CATEGORIES, getAccessToken } from './services/beautyApi';
+import { beautyApi, DEFAULT_CATEGORIES, getAccessToken, apiClient } from './services/beautyApi';
 import { serviceReviewSummary, supplierReviewSummary } from './lib/reviewScope';
 import { updateMetaTags } from './lib/seo';
 import { CheckCircle2 } from 'lucide-react';
@@ -181,6 +185,7 @@ const mapServiceToPartner = (item: BackendService): NewPartner => ({
 });
 
 type AppView =
+  | 'community' | 'community-moderation' | 'admin-community'
   | 'home'
   | 'service'
   | 'supplier-dashboard'
@@ -280,15 +285,19 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   const [currentPage, setCurrentPage] = useState<AppView>(() => {
     // Resolve the URL before the first paint; hashchange runs only after effects.
     if (continuationDestination()) return 'bookings';
+    if (communityRoute() || window.location.hash === '#community') return 'community';
     const hash = window.location.hash.slice(1).toLowerCase();
     const detail = parseAdminDetailHash(window.location.hash); if (detail) return detail.kind === 'salon' ? 'admin-salons' : 'admin-customers';
     const aliases: Record<string, AppView> = { logout: 'account', schedule: 'supplier-dashboard',
       admin: 'admin-dashboard', 'admin-users': 'admin-customers', filter: 'filter-explore', explore: 'filter-explore' };
     const direct: AppView[] = ['login', 'register', 'account', 'bookings', 'checkout', 'supplier-register',
       'supplier-dashboard', 'reports', 'admin-dashboard', 'admin-bookings', 'admin-customers',
-      'admin-payments', 'admin-salons', 'admin-reviews', 'admin-promotions', 'admin-settings', 'filter-explore', 'partner-detail'];
+      'admin-community', 'community-moderation', 'admin-payments', 'admin-salons', 'admin-reviews', 'admin-promotions', 'admin-settings', 'filter-explore', 'partner-detail'];
     return aliases[hash] ?? (direct.includes(hash as AppView) ? hash as AppView : 'home');
   });
+  const [communityEnabled, setCommunityEnabled] = useState(false);
+  const communityReturn = useRef<string | undefined>(undefined);
+  useEffect(() => { let alive = true; communityApi.config().then(c => { if (alive) setCommunityEnabled(c.enabled); }).catch(() => {}); return () => { alive = false; }; }, []);
   const continuationAccount = useRef(currentUser?.id);
   useEffect(() => {
     if (continuationAccount.current != null && currentUser?.id != null && String(continuationAccount.current) !== String(currentUser.id)) setPaymentBookingId(null);
@@ -326,6 +335,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   useEffect(() => {
     const handleHash = () => {
       if (continuationDestination()) { setCurrentPage('bookings'); return; }
+      if (communityRoute()) { setCurrentPage('community'); return; }
+      if (window.location.hash === '#community') { goCommunity(undefined, true); setCurrentPage('community'); return; }
       const hash = window.location.hash.toLowerCase();
       const detail = parseAdminDetailHash(hash); setAdminDetail(detail);
       if (detail) { setCurrentPage(detail.kind === 'salon' ? 'admin-salons' : 'admin-customers'); return; }
@@ -351,7 +362,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
         setCurrentPage('admin-bookings');
       } else if (hash === '#admin-payments') {
         setCurrentPage('admin-payments');
-      } else if (['#admin-salons', '#admin-reviews', '#admin-promotions', '#admin-settings'].includes(hash)) {
+      } else if (['#admin-salons', '#admin-reviews', '#admin-promotions', '#admin-settings', '#admin-community', '#community-moderation'].includes(hash)) {
         setCurrentPage(hash.slice(1) as AppView);
       } else if (hash === '#checkout') {
         setCurrentPage('checkout');
@@ -373,7 +384,9 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   const navigateTo = useCallback((view: AppView, fallbackReturn = 'home') => {
     setReturnTarget(fallbackReturn);
     setCurrentPage(view);
-    window.location.hash = view;
+    const next = new URL(window.location.href); next.searchParams.delete('serviceId');
+    if (communityRoute()) { next.pathname = '/'; next.hash = view; window.history.pushState(null, '', next); }
+    else { if (next.search !== window.location.search) window.history.replaceState(null, '', next); window.location.hash = view; }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -396,6 +409,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   const handleBackToHome = () => {
     setPaymentBookingId(null);
     setCurrentPage('home');
+    const homeUrl = new URL(window.location.href); homeUrl.searchParams.delete('serviceId'); window.history.replaceState(null, '', homeUrl);
+    if (communityRoute()) { window.history.pushState(null, '', '/'); return; }
     const hashes = [
       '#login',
       '#register',
@@ -412,7 +427,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       '#admin',
       '#admin-bookings',
       '#admin-payments',
-      '#admin-salons', '#admin-reviews', '#admin-promotions', '#admin-settings',
+      '#admin-salons', '#admin-reviews', '#admin-promotions', '#admin-settings', '#admin-community', '#community-moderation',
       '#checkout',
       '#filter-explore',
       '#filter',
@@ -563,6 +578,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   // Auth Callbacks
   const handleUserSuccess = (user: CurrentUser) => {
     setCurrentUser(user);
+    if (returnTarget === 'community') { goCommunity(communityReturn.current); return; }
     if (user.role === 'SUPPLIER') {
       navigateTo('supplier-dashboard');
     } else if (user.role === 'ADMIN') {
@@ -693,8 +709,26 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     [navigateTo, rawServices, showToast]
   );
 
+  const communityServiceRequest = useRef(0);
+  const openCommunityService = useCallback(async (id: number, book: boolean) => {
+    const version = ++communityServiceRequest.current, context = window.location.href, token = getAccessToken();
+    try { const result = (await apiClient.get<BackendService>(`/v1/services/${id}`)).data;
+      if (version !== communityServiceRequest.current || window.location.href !== context || token !== getAccessToken()) return;
+      if (result.id !== id) throw new Error('Service identity mismatch');
+      if (book) handleOpenService(result); else { setSelectedPartner(mapServiceToPartner(result)); navigateTo('partner-detail'); const link = new URL(window.location.href); link.searchParams.set('serviceId', String(id)); window.history.replaceState(null, '', link); }
+    } catch { if (version === communityServiceRequest.current && context === window.location.href && token === getAccessToken()) showToast('Dịch vụ không còn sẵn sàng. Vui lòng tải lại catalog.'); }
+  }, [handleOpenService, navigateTo, showToast]);
+  const sharedServiceHandled = useRef(false);
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search); const raw = query.get('serviceId');
+    if (window.location.pathname !== '/' || !['', '#home', '#partner-detail'].includes(window.location.hash)) return;
+    if (sharedServiceHandled.current || !raw || !/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(Number(raw)) || continuationDestination() || query.has('payment') || query.has('orderCode')) return;
+    sharedServiceHandled.current = true; void openCommunityService(Number(raw), false);
+  }, [openCommunityService]);
+
   const handleAdminNavigate = useCallback((section: AdminSection, query?: string) => {
     const destinations: Record<AdminSection, AppView> = {
+      community: 'admin-community',
       overview: 'admin-dashboard',
       bookings: 'admin-bookings',
       customers: 'admin-customers',
@@ -823,8 +857,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   // =========================================================================
   // STANDALONE ROUTING SCREENS (No background overlay)
   // =========================================================================
-  const adminPages: AppView[] = ['admin-dashboard', 'admin-bookings', 'admin-customers', 'admin-payments', 'admin-salons', 'admin-reviews', 'admin-promotions', 'admin-settings'];
-  const protectedPages: AppView[] = [...adminPages, 'supplier-dashboard', 'reports', 'account', 'bookings', 'checkout'];
+  const adminPages: AppView[] = ['admin-community', 'admin-dashboard', 'admin-bookings', 'admin-customers', 'admin-payments', 'admin-salons', 'admin-reviews', 'admin-promotions', 'admin-settings'];
+  const protectedPages: AppView[] = ['community-moderation', ...adminPages, 'supplier-dashboard', 'reports', 'account', 'bookings', 'checkout'];
   if (protectedPages.includes(currentPage) && (awaitingIdentity || sessionPhase === 'locked')) {
     return <section role="status" aria-live="polite" className="mx-auto max-w-md px-5 py-12 text-center text-sm text-slate-600">
       {awaitingIdentity ? 'Đang kiểm tra quyền truy cập…' : 'Chưa thể xác minh phiên đăng nhập. Dữ liệu tài khoản đang được khóa.'}
@@ -848,6 +882,12 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     }
     return <div className="grid min-h-screen place-items-center bg-slate-50 p-6 text-center"><div><h1 className="text-2xl font-black">Không có quyền truy cập</h1><p className="mt-2 text-sm text-slate-500">Trang quản trị chỉ dành cho tài khoản ADMIN.</p><button onClick={handleBackToHome} className="mt-5 rounded-2xl bg-pink-600 px-5 py-3 text-sm font-black text-white">Về trang chủ</button></div></div>;
   }
+
+  if (currentPage === 'admin-community' || currentPage === 'community-moderation') {
+    if (!currentUser || !['ADMIN', 'STAFF'].includes(currentUser.role)) return <section className="p-8 text-center"><h1 className="text-xl font-bold">Không có quyền kiểm duyệt Community</h1><button type="button" onClick={() => goCommunity()} className="community-button-secondary mt-4">Về Community</button></section>;
+    return <React.Suspense fallback={<p role="status" className="p-8">Đang tải quản lý Community…</p>}><AdminCommunityModeration key={currentUser.id} user={currentUser} onHome={handleBackToHome} onCommunity={() => goCommunity()} onLogout={handleLogout} onNavigate={handleAdminNavigate} /></React.Suspense>;
+  }
+  if (currentPage === 'community') return <React.Suspense fallback={<p role="status" className="p-8">Đang tải Community…</p>}><CommunityPage user={hideAccountState ? null : currentUser} authPending={hideAccountState} authLocked={sessionPhase === 'locked'} onRetrySession={retrySession} onHome={handleBackToHome} onAccount={handleOpenAccount} onLogout={handleLogout} onNeedLogin={() => { communityReturn.current = communityRoute()?.id; navigateTo('login', 'community'); }} onViewService={id => void openCommunityService(id, false)} onBookService={id => void openCommunityService(id, true)} onModerate={() => navigateTo(currentUser?.role === 'ADMIN' ? 'admin-community' : 'community-moderation')} /></React.Suspense>;
 
   if (adminDetail && (currentPage === 'admin-salons' || currentPage === 'admin-customers')) {
     return <React.Suspense fallback={<div role="status" className="p-6">Đang tải trang chi tiết…</div>}><AdminDetailPage key={currentUser?.id} route={adminDetail} adminName={currentUser?.name || 'Quản trị viên'} onNavigate={handleAdminNavigate} onHome={handleBackToHome} onLogout={handleLogout} /></React.Suspense>;
@@ -1022,6 +1062,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       <div className="min-h-screen bg-[#FFF9FA] font-sans text-slate-800 antialiased selection:bg-[#fce7f3] selection:text-[#B42D58] flex flex-col justify-between">
         {/* Unified Platform Header */}
         <Header
+          onOpenCommunity={communityEnabled ? () => goCommunity() : undefined}
           authPending={hideAccountState}
           cartCount={cartItems.length}
           onOpenCart={() => setIsCartOpen(true)}
@@ -1125,6 +1166,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
 
       {/* Main Header */}
       <Header
+        onOpenCommunity={communityEnabled ? () => goCommunity() : undefined}
         authPending={hideAccountState}
         cartCount={cartItems.length}
         onOpenCart={() => setIsCartOpen(true)}

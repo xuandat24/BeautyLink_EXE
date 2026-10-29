@@ -150,17 +150,14 @@ export const BookingShareFeature: React.FC<BookingShareFeatureProps> = ({
     window.open(url, '_blank', 'noopener,noreferrer,width=620,height=580');
   };
 
+  const awaitMessengerCopy = () => { void handleCopyMessage(); };
   const handleShareMessenger = () => {
     // For mobile web or desktop
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isMobile) {
       window.location.href = `fb-messenger://share?link=${encodeURIComponent(shareUrl)}`;
     } else {
-      // Desktop Messenger fallback
-      const url = `https://www.facebook.com/dialog/send?link=${encodeURIComponent(
-        shareUrl
-      )}&app_id=291494419107518&redirect_uri=${encodeURIComponent(shareUrl)}`;
-      window.open(url, '_blank', 'noopener,noreferrer,width=620,height=580');
+      awaitMessengerCopy();
     }
   };
 
