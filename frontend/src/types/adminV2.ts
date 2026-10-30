@@ -4,6 +4,7 @@ export type AdminInsights = {
   range: AdminDateRange; granularity: 'DAY' | 'WEEK' | 'MONTH';
   totalBookings: Metric; users: Metric; revenue: Metric; activePartners: Metric; onlinePaymentRate: Metric; completedBookings: Metric;
   commissionRevenue?: Metric;
+  returningCustomers?: Metric;
   bookingCustomers: number; paymentAttempts: number; successfulAttempts: number; paymentAttemptSuccessRate: number | null;
   trends: Array<{ date: string; bookings: number; verifiedOnlineAmount: number; commissionAmount?: number }>;
   statuses: Array<{ status: AdminBooking['status']; count: number }>;

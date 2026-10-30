@@ -15,8 +15,11 @@ Open <http://localhost:5173>.
 
 For the classroom presentation deployment, set `VITE_PRESENTATION_DATA=true`
 before building. This supplies stable sample rating summaries only where there
-are no reviews, displays 286 fictional user profiles, 14 active partners,
-147 completed bookings from 78 customers and 1,906,000 VNĐ in commission revenue, and
+are no reviews, preserves original accounts and pads the directory to 286 users,
+displays 14 active partners, supplements October 2026 bookings to 147 completed
+while retaining original pending, confirmed and cancelled bookings, and reports
+1,906,000 VNĐ in commission revenue. Original customers are retained, with sample
+bookings distributed across at least 78 customers where available. It also
 replaces `@seed.beautylink.test` emails in admin account views and customer CSV
 exports. Actual review contents, booking records, login emails and notification
 recipients stay in the backend. Disable the flag and rebuild to show only live
@@ -27,10 +30,15 @@ used, remaining unbooked services show zero reviews. Supplier summaries reuse
 the service counts. Commission is a separate field from actual
 gross online receipts. Sample rating totals and report summaries do not create matching
 public review records. Admin lists, account details, customer CSV and booking
-histories use a shared presentation dataset dated October 2026 and respect date,
+histories merge original records by ID with a shared presentation dataset dated
+October 2026 and respect date,
 search, role and booking-status filters. Synthetic accounts are read-only and
 never sent to account editing or authentication APIs. Admin access is still
 required before presentation data is returned; edit mode uses live accounts.
+Sample bookings each have a stable pseudo-random 5,000–15,000 VNĐ online deposit;
+customer totals sum their bookings. Original payment amounts and payment ledger
+transactions are never replaced. The returning-customer card counts distinct
+customers with at least two non-cancelled bookings in the selected period.
 
 Useful checks:
 
