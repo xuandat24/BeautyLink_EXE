@@ -1,7 +1,7 @@
 import type { EditSnapshot, PartnerProfileEdit, PartnerServiceEdit, PartnerPersonEdit, PartnerScheduleEdit } from '../types/adminV2';
 import { apiClient, adminPresentationData } from './beautyApi';
 import { presentationAccount, presentationEnabled } from '../lib/presentationData';
-import { isPresentationUser, presentationBookings, presentationInsights, presentationPage, presentationSearch } from '../lib/presentationAdminData';
+import { isPresentationUser, mergePresentationBookings, presentationBookings, presentationInsights, presentationPage, presentationSearch } from '../lib/presentationAdminData';
 import type { AdminPage } from '../types';
 import type { AdminInsights, AdminUserRow, AdminSalonRow, AdminSalonDetail, AdminReviewRow } from '../types/adminV2';
 import type { AdminAccountDetail, AdminProfilePatch, AdminServiceDetail, AdminPaymentLedger } from '../types/adminV2';
@@ -45,13 +45,13 @@ export const adminV2Api = {
   salonSchedule: async (id: number, personId: number): Promise<AdminSalonDetail['schedules']> => (await apiClient.get(`/v1/admin/salons/${id}/practitioners/${personId}/schedule`)).data,
   salonBookings: async (id: number, params: { from: string; to: string; status?: string; page: number }): Promise<AdminPage<AdminBooking>> => {
     const data = (await apiClient.get(`/v1/admin/salons/${id}/bookings`, { params: { ...params, size: 20 } })).data;
-    const snapshot = await adminPresentationData();
-    return snapshot ? presentationPage(presentationBookings(snapshot, { ...params, supplierId: id }), params.page) : data;
+    const snapshot = await adminPresentationData(params);
+    return snapshot ? presentationPage(presentationBookings({ ...snapshot, bookings: mergePresentationBookings(snapshot.bookings, data.content) }, { ...params, supplierId: id }), params.page) : data;
   },
   paymentLedger: async (params: { from: string; to: string; page: number; salonId?: number }): Promise<AdminPaymentLedger> => (await apiClient.get('/v1/admin/payments', { params: { ...params, size: 20 } })).data,
   insights: async (params: AdminRange & { granularity: 'DAY' | 'WEEK' | 'MONTH' }): Promise<AdminInsights> => {
     const data = (await apiClient.get('/v1/admin/dashboard/insights', { params })).data;
-    const snapshot = await adminPresentationData(); return snapshot ? presentationInsights(data, snapshot) : data;
+    const snapshot = await adminPresentationData(params); return snapshot ? presentationInsights(data, snapshot) : data;
   },
   users: async (params: { query?: string; role?: string; page: number; size: number }, forEdit = false): Promise<AdminPage<AdminUserRow>> => {
     const data = (await apiClient.get<AdminPage<AdminUserRow>>('/v1/admin/users', { params })).data;

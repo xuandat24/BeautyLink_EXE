@@ -40,8 +40,8 @@ import {
 } from '../data/mockData';
 import { cache } from '../lib/cache';
 import { presentationAccount, presentationEnabled, presentationReviewAllocation, presentationService, type PresentationReviewAllocation } from '../lib/presentationData';
-import { createPresentationAdminData, isPresentationBooking, isPresentationUser, presentationBookings, presentationCustomerCsv, presentationCustomers, presentationPage, type PresentationAdminData } from '../lib/presentationAdminData';
-import type { AdminSalonRow } from '../types/adminV2';
+import { createPresentationAdminData, isPresentationBooking, isPresentationUser, mergePresentationBookings, presentationBookings, presentationCustomerCsv, presentationCustomers, presentationPage, type PresentationAdminData } from '../lib/presentationAdminData';
+import type { AdminSalonRow, AdminUserRow } from '../types/adminV2';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { clearSession, getSessionToken, installToken, peekAccessToken, sessionSnapshot, setSessionPhase, sessionCredentialEpoch } from '../lib/authSession';
 
@@ -66,6 +66,8 @@ let presentationCatalogPromise: Promise<BackendService[]> | null = null;
 let presentationAllocation: PresentationReviewAllocation | null = null;
 let adminPresentationPromise: Promise<PresentationAdminData> | null = null;
 let adminPresentationToken: string | null = null;
+let adminPresentationLoadedAt = 0;
+let adminPresentationFrom = '', adminPresentationTo = '';
 
 type BackendDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
 type BackendScheduleRule = {
@@ -168,18 +170,40 @@ async function reviewAllocation(): Promise<PresentationReviewAllocation | null> 
   }
 }
 
-export async function adminPresentationData(): Promise<PresentationAdminData | null> {
+async function readAdminPages<T>(path: string, params: Record<string, unknown> = {}): Promise<T[]> {
+  const first = (await apiClient.get<AdminPage<T>>(path, { params: { ...params, page: 0, size: 100 } })).data;
+  const rows = [...first.content];
+  for (let page = 1; page < first.totalPages; page++) {
+    rows.push(...(await apiClient.get<AdminPage<T>>(path, { params: { ...params, page, size: 100 } })).data.content);
+  }
+  return rows;
+}
+
+export async function adminPresentationData(range?: { from?: string; to?: string }): Promise<PresentationAdminData | null> {
   if (!presentationEnabled) return null;
   const token = getAccessToken();
-  if (!adminPresentationPromise || token !== adminPresentationToken) {
+  if (!adminPresentationPromise || token !== adminPresentationToken || Date.now() - adminPresentationLoadedAt > 30000) {
     adminPresentationToken = token;
+    adminPresentationLoadedAt = Date.now();
+    adminPresentationTo = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+    adminPresentationFrom = new Date(Date.parse(`${adminPresentationTo}T12:00:00Z`) - 365 * 86400000).toISOString().slice(0, 10);
     adminPresentationPromise = Promise.all([
       apiClient.get<AdminPage<AdminSalonRow>>('/v1/admin/salons', { params: { includeDemo: false, page: 0, size: 100 } }),
       presentationCatalogPromise ?? apiClient.get<BackendService[]>('/v1/catalog/services').then(response => response.data),
-    ]).then(([salons, catalog]) => createPresentationAdminData(salons.data.content, catalog));
+      readAdminPages<AdminUserRow>('/v1/admin/users'),
+      apiClient.get<AdminCustomer[]>('/v1/admin/customers'),
+      readAdminPages<AdminBooking>('/v1/admin/bookings', { from: adminPresentationFrom, to: adminPresentationTo, includeDemo: false }),
+    ]).then(([salons, catalog, users, customers, bookings]) => createPresentationAdminData(salons.data.content, catalog, { users, customers: customers.data, bookings }));
   }
   const pending = adminPresentationPromise;
-  try { return await pending; }
+  try {
+    const snapshot = await pending;
+    if (range?.from && range?.to && (range.from < adminPresentationFrom || range.to > adminPresentationTo)) {
+      const originals = await readAdminPages<AdminBooking>('/v1/admin/bookings', { from: range.from, to: range.to, includeDemo: false });
+      return { ...snapshot, bookings: mergePresentationBookings(snapshot.bookings, originals) };
+    }
+    return snapshot;
+  }
   catch (error) { if (adminPresentationPromise === pending) adminPresentationPromise = null; throw error; }
 }
 
@@ -1013,7 +1037,7 @@ export const beautyApi = {
   // ==========================================
   async adminCustomers(params?: { from?: string; to?: string; bookedOnly?: boolean; includeDemo?: boolean }): Promise<AdminCustomer[]> {
     const customers = await unwrap<AdminCustomer[]>(apiClient.get('/v1/admin/customers', { params }));
-    const snapshot = await adminPresentationData();
+    const snapshot = await adminPresentationData(params);
     return snapshot ? presentationCustomers(snapshot, params) : customers.map(presentationAccount);
   },
 
@@ -1072,8 +1096,8 @@ export const beautyApi = {
     query?: string; page?: number; size?: number;
   }): Promise<AdminPage<AdminBooking>> {
     const rows = await unwrap<AdminPage<AdminBooking>>(apiClient.get('/v1/admin/bookings', { params }));
-    const snapshot = await adminPresentationData();
-    return snapshot ? presentationPage(presentationBookings(snapshot, params), params.page, params.size) : rows;
+    const snapshot = await adminPresentationData(params);
+    return snapshot ? presentationPage(presentationBookings({ ...snapshot, bookings: mergePresentationBookings(snapshot.bookings, rows.content) }, params), params.page, params.size) : rows;
   },
 
   async adminBooking(id: number): Promise<AdminBooking> {
@@ -1088,6 +1112,11 @@ export const beautyApi = {
     if (presentationEnabled && isPresentationUser(customerId)) {
       await apiClient.get('/v1/admin/customers');
       return presentationPage(presentationBookings((await adminPresentationData())!, { customerId }), page);
+    }
+    if (presentationEnabled) {
+      const originals = await readAdminPages<AdminBooking>(`/v1/admin/customers/${customerId}/bookings`);
+      const snapshot = (await adminPresentationData())!;
+      return presentationPage(presentationBookings({ ...snapshot, bookings: mergePresentationBookings(snapshot.bookings, originals) }, { customerId }), page);
     }
     return unwrap(apiClient.get(`/v1/admin/customers/${customerId}/bookings`, { params: { page, size: 20 } }));
   },
