@@ -31,6 +31,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
   const [page, setPage] = useState(0); const pageSize = 20;
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [exportReady, setExportReady] = useState(false);
   const [error, setError] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomer | null>(null);
   const [history, setHistory] = useState<AdminBooking[]>([]);
@@ -39,11 +40,11 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
 
   const loadCustomers = async () => {
     const request = ++requestSequence.current; const token = getAccessToken();
-    setLoading(true);
+    setLoading(true); setExportReady(false);
     setError('');
     try {
       const rows = await beautyApi.adminCustomers(bookedRange ? { ...bookedRange, bookedOnly: true, includeDemo: false } : { includeDemo: false });
-      if (request === requestSequence.current && token === getAccessToken()) { setCustomers(rows); setPage(0); }
+      if (request === requestSequence.current && token === getAccessToken()) { setCustomers(rows); setPage(0); setExportReady(true); }
     } catch (err) {
       if (request === requestSequence.current && token === getAccessToken()) setError(getApiErrorMessage(err, 'Không thể tải danh sách tài khoản khách hàng.'));
     } finally {
@@ -111,7 +112,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
           <button
             type="button"
             onClick={handleExport}
-            disabled={exporting}
+            disabled={exporting || loading || !exportReady}
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#be185d] px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-pink-900/15 transition hover:bg-[#9d174d] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {exporting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}

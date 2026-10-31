@@ -8,7 +8,8 @@ import { mergePersistentPresentationData, presentationBookings, presentationCust
 import { selectReturningPresentationCustomers } from '../src/lib/returningPresentationCustomers';
 import { AdminModulesPage } from '../src/components/admin/AdminModulesPage';
 import { adminV2Api } from '../src/services/adminApi';
-import { apiClient } from '../src/services/beautyApi';
+import { AdminCustomersPage } from '../src/components/AdminCustomersPage';
+import { beautyApi, apiClient } from '../src/services/beautyApi';
 import type { PresentationAdminData } from '../src/lib/presentationAdminData';
 import type { AdminUserRow } from '../src/types/adminV2';
 
@@ -69,4 +70,16 @@ test('filtered CSV exports the whole sorted result beyond20 rows with consecutiv
   assert.equal(lines.length,46);assert.match(lines[1],/^"1","An 1",/);assert.match(lines[20],/^"20","An 20",/);assert.match(lines[21],/^"21","An 21",/);assert.match(lines[45],/^"45","An 45",/);assert.match(lines[1],/"'0391234567"/);
   const narrowed=await customerRowsCsv(rows.filter(row=>row.fullName==='An 21')).text();assert.match(narrowed, /"1","An 21",/);
   assert.equal(rows[0].fullName,'An 45','export never mutates the cached array');
+});
+
+
+test('local CSV cannot export stale or incomplete customer data while loading or after a failed reload',async()=>{
+  const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost'});Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,sessionStorage:dom.window.sessionStorage});Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configurable:true});
+  const root=createRoot(document.getElementById('root')!);const original=beautyApi.adminCustomers;let finish!:(rows:[])=>void;
+  beautyApi.adminCustomers=()=>new Promise(resolve=>{finish=resolve;});
+  const exportButton=()=>[...document.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.includes('Xuất kết quả đang lọc'))!;
+  try {await act(async()=>root.render(React.createElement(AdminCustomersPage,{embedded:true,adminName:'Admin',onBack(){},onLogout(){},onNavigate(){}})));assert.equal(exportButton().disabled,true);
+    await act(async()=>finish([]));assert.equal(exportButton().disabled,false,'a successfully loaded empty dataset is valid');
+    beautyApi.adminCustomers=async()=>{throw new Error('isolated temporary failure');};await act(async()=>document.querySelector<HTMLButtonElement>('[aria-label="Tải lại danh sách"]')!.click());assert.equal(exportButton().disabled,true,'a failed reload cannot export the previous scope');
+  }finally{beautyApi.adminCustomers=original;await act(async()=>root.unmount());dom.window.close();}
 });
