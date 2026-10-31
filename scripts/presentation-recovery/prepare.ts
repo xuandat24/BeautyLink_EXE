@@ -1,0 +1,30 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { createPresentationAdminData, isPresentationBooking, isPresentationUser, bookingDay } from '../../frontend/src/lib/presentationAdminData';
+import { presentationService } from '../../frontend/src/lib/presentationData';
+
+const [sourcePath, outputPath] = process.argv.slice(2);
+assert.ok(sourcePath && outputPath && sourcePath !== outputPath);
+const source = JSON.parse(readFileSync(sourcePath, 'utf8'));
+const historical = createPresentationAdminData(source.salons, source.catalog.map((s: any) => presentationService(s, null, true)), source);
+const original = historical.bookings.filter(b => !isPresentationBooking(b.id));
+const old = historical.bookings.filter(b => isPresentationBooking(b.id));
+const baseline = original.filter(b => b.status === 'COMPLETED' && bookingDay(b) >= '2026-10-01' && bookingDay(b) <= '2026-10-31').reduce((sum,b) => sum+b.totalAmount,0);
+const budget = 3_045_000 - baseline, minimum=15_000, quantum=1_000;
+assert.ok(budget >= old.length*minimum && budget % quantum === 0);
+const daily = [0.15,3.6,0.35,2.8,0.6,1.3,0.2,5.1,0.4,2.2,0.3,3.9,0.7];
+const weights = old.map(b => daily[Number(bookingDay(b).slice(-2)) % daily.length] * Math.max(1,Math.min(2,Math.log10(Math.max(b.totalAmount,10000))-3)));
+const totalWeight = weights.reduce((a,b)=>a+b,0), units=(budget-old.length*minimum)/quantum;
+const amounts=weights.map(w=>minimum+Math.floor(units*w/totalWeight)*quantum);
+let remainder=(budget-amounts.reduce((a,b)=>a+b,0))/quantum;
+weights.map((w,i)=>({i,part:units*w/totalWeight%1})).sort((a,b)=>b.part-a.part || a.i-b.i).slice(0,remainder).forEach(({i})=>amounts[i]+=quantum);
+const bookings=old.map((b,i)=>({...b,totalAmount:amounts[i],remainingAtSalon:null,
+  simulatedOnlineAmount:b.verifiedOnlineAmount,verifiedOnlineAmount:null,verifiedPaidAt:null,verifiedPaymentOption:null}));
+assert.equal(baseline+bookings.reduce((sum,b)=>sum+b.totalAmount,0),3045000);
+for(let i=0;i<old.length;i++) for(const key of ['id','bookingCode','customerId','customerName','supplierId','serviceId','serviceName','practitionerName','appointmentDate','startTime','endTime','createdAt','status','paymentStatus'] as const) assert.equal(bookings[i][key],old[i][key]);
+const days=new Map<string,number>(); bookings.forEach(b=>days.set(bookingDay(b),(days.get(bookingDay(b))??0)+b.totalAmount));
+assert.ok(new Set(days.values()).size>5);
+const data={users:historical.users.filter(u=>isPresentationUser(u.id)),salons:historical.salons,bookings,originalCustomers:[]};
+const payload={version:1,provenance:{sourceCommit:'f9e46a2',source:'Restored historical classroom presentation records; adjusted valuations, not externally verified revenue or payment receipts.',period:['2026-10-01','2026-10-31'],baselineValue:baseline,fingerprints:source.fingerprints,simulatedRecords:bookings.length},data};
+writeFileSync(outputPath,JSON.stringify(payload));
+console.log(JSON.stringify({users:historical.users.length,salons:historical.salons.length,bookings:historical.bookings.length,completed:historical.bookings.filter(b=>b.status==='COMPLETED').length,baseline,synthetic:budget,total:3045000,days:[...days].sort()},null,2));

@@ -40,6 +40,8 @@ import {
 } from '../data/mockData';
 import { cache } from '../lib/cache';
 import { presentationAccount, presentationEnabled, presentationReviewAllocation, presentationService, type PresentationReviewAllocation } from '../lib/presentationData';
+import { mergePersistentPresentationData, isPresentationBooking, isPresentationUser, mergePresentationBookings, presentationBookings, presentationCustomerCsv, presentationCustomers, presentationPage, type PresentationAdminData } from '../lib/presentationAdminData';
+import type { AdminUserRow } from '../types/adminV2';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { clearSession, getSessionToken, installToken, peekAccessToken, sessionSnapshot, setSessionPhase, sessionCredentialEpoch } from '../lib/authSession';
 
@@ -62,6 +64,10 @@ const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '/api';
 const DEMO_FALLBACK_ENABLED = import.meta.env?.DEV && import.meta.env?.VITE_ENABLE_DEMO_FALLBACK === 'true';
 let presentationCatalogPromise: Promise<BackendService[]> | null = null;
 let presentationAllocation: PresentationReviewAllocation | null = null;
+let adminPresentationPromise: Promise<PresentationAdminData | null> | null = null;
+let adminPresentationToken: string | null = null;
+let adminPresentationLoadedAt = 0;
+let adminPresentationFrom = '', adminPresentationTo = '';
 
 type BackendDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
 type BackendScheduleRule = {
@@ -164,6 +170,45 @@ async function reviewAllocation(): Promise<PresentationReviewAllocation | null> 
   }
 }
 
+async function readAdminPages<T>(path: string, params: Record<string, unknown> = {}): Promise<T[]> {
+  const first = (await apiClient.get<AdminPage<T>>(path, { params: { ...params, page: 0, size: 100 } })).data;
+  const rows = [...first.content];
+  for (let page = 1; page < first.totalPages; page++) {
+    rows.push(...(await apiClient.get<AdminPage<T>>(path, { params: { ...params, page, size: 100 } })).data.content);
+  }
+  return rows;
+}
+
+export async function adminPresentationData(range?: { from?: string; to?: string }): Promise<PresentationAdminData | null> {
+  const token = getAccessToken();
+  if (!token) return null;
+  if (!adminPresentationPromise || token !== adminPresentationToken || Date.now() - adminPresentationLoadedAt > 30000) {
+    adminPresentationToken = token;
+    adminPresentationLoadedAt = Date.now();
+    adminPresentationTo = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+    adminPresentationFrom = new Date(Date.parse(`${adminPresentationTo}T12:00:00Z`) - 365 * 86400000).toISOString().slice(0, 10);
+    adminPresentationPromise = (async () => {
+      const response = await apiClient.get<PresentationAdminData>('/v1/admin/presentation');
+      if (response.status === 204 || !response.data?.bookings) return null;
+      const [users, customers, bookings] = await Promise.all([
+        readAdminPages<AdminUserRow>('/v1/admin/users'),
+        apiClient.get<AdminCustomer[]>('/v1/admin/customers'),
+        readAdminPages<AdminBooking>('/v1/admin/bookings', { from: adminPresentationFrom, to: adminPresentationTo, includeDemo: false }),
+      ]);
+      return mergePersistentPresentationData(response.data, { users, customers: customers.data, bookings });
+    })();
+  }
+  const pending = adminPresentationPromise;
+  try {
+    const snapshot = await pending;
+    if (token !== getAccessToken()) throw new axios.CanceledError('Phiên đăng nhập đã thay đổi.');
+    if (snapshot && range?.from && range?.to && (range.from < adminPresentationFrom || range.to > adminPresentationTo)) {
+      const originals = await readAdminPages<AdminBooking>('/v1/admin/bookings', { from: range.from, to: range.to, includeDemo: false });
+      return { ...snapshot, bookings: mergePresentationBookings(snapshot.bookings, originals) };
+    }
+    return snapshot;
+  } catch (error) { if (adminPresentationPromise === pending) adminPresentationPromise = null; throw error; }
+}
 
 export function setAccessToken(token: string, rememberMe = false) {
   // Kept as a compatible argument for old callers; MVP persistent login is disabled.
@@ -972,7 +1017,15 @@ export const beautyApi = {
   },
 
   async supplierBookings(): Promise<BackendBooking[]> {
-    return unwrap(apiClient.get('/v1/bookings/supplier'));
+    const [originals, history] = await Promise.all([
+      unwrap<BackendBooking[]>(apiClient.get('/v1/bookings/supplier')),
+      unwrap<Array<AdminBooking & { serviceId: number }>>(apiClient.get('/v1/supplier/presentation-bookings')),
+    ]);
+    const rows = new Map<number, BackendBooking>((history ?? []).map(booking => [booking.id, { ...booking,
+      reviewEligible: false, completionEligible: false, cancelEligible: false, paymentEligible: false,
+      paymentBlockerReason: 'BOOKING_READ_ONLY', paymentAmount: null, paymentRemainingAmount: null, paymentAttemptActive: false }]));
+    originals.forEach(booking => rows.set(booking.id, booking));
+    return [...rows.values()].sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate) || b.startTime.localeCompare(a.startTime));
   },
 
   // ==========================================
@@ -995,10 +1048,13 @@ export const beautyApi = {
   // ==========================================
   async adminCustomers(params?: { from?: string; to?: string; bookedOnly?: boolean; includeDemo?: boolean }): Promise<AdminCustomer[]> {
     const customers = await unwrap<AdminCustomer[]>(apiClient.get('/v1/admin/customers', { params }));
-    return customers.map(presentationAccount);
+    const snapshot = await adminPresentationData(params);
+    return snapshot ? presentationCustomers(snapshot, params) : customers.map(presentationAccount);
   },
 
   async exportAdminCustomers(): Promise<Blob> {
+    const snapshot = await adminPresentationData();
+    if (snapshot) return presentationCustomerCsv(snapshot);
     return (await apiClient.get('/v1/admin/customers/export', { responseType: 'blob' })).data;
   },
 
@@ -1048,14 +1104,26 @@ export const beautyApi = {
     from: string; to: string; includeDemo: boolean; status?: string; paymentStatus?: string;
     query?: string; page?: number; size?: number;
   }): Promise<AdminPage<AdminBooking>> {
-    return unwrap(apiClient.get('/v1/admin/bookings', { params }));
+    const rows = await unwrap<AdminPage<AdminBooking>>(apiClient.get('/v1/admin/bookings', { params }));
+    const snapshot = await adminPresentationData(params);
+    return snapshot ? presentationPage(presentationBookings({ ...snapshot, bookings: mergePresentationBookings(snapshot.bookings, rows.content) }, params), params.page, params.size) : rows;
   },
 
   async adminBooking(id: number): Promise<AdminBooking> {
+    if (isPresentationBooking(id)) {
+      const row = (await adminPresentationData())?.bookings.find(booking => booking.id === id);
+      if (row) return row;
+    }
     return unwrap(apiClient.get(`/v1/admin/bookings/${id}`));
   },
 
   async adminCustomerBookings(customerId: number, page = 0): Promise<AdminPage<AdminBooking>> {
+    const snapshot = await adminPresentationData();
+    if (snapshot && isPresentationUser(customerId)) return presentationPage(presentationBookings(snapshot, { customerId }), page);
+    if (snapshot) {
+      const originals = await readAdminPages<AdminBooking>(`/v1/admin/customers/${customerId}/bookings`);
+      return presentationPage(presentationBookings({ ...snapshot, bookings: mergePresentationBookings(snapshot.bookings, originals) }, { customerId }), page);
+    }
     return unwrap(apiClient.get(`/v1/admin/customers/${customerId}/bookings`, { params: { page, size: 20 } }));
   },
 

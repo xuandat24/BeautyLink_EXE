@@ -48,6 +48,29 @@ class AdminDashboardV2IntegrationTest {
     @Autowired GoogleAuthService googleAuth;
     final Instant start=Instant.parse("2026-10-01T17:00:00Z");
     final LocalDate day=LocalDate.of(2026,10,2);
+
+    @Test void recoveredHistoryIsPrivateReadOnlyAndScopedWithoutChangingTheOperationalLedger() throws Exception {
+        long bookingCount=bookings.count(), paymentCount=payments.count();
+        var before=insights.insights(day,day,false,Granularity.DAY);
+        mvc.perform(get("/api/v1/admin/presentation").header("Authorization","Bearer "+jwt.createToken(admin))).andExpect(status().isNoContent());
+        String payload="{\"version\":1,\"provenance\":{\"source\":\"synthetic\"},\"data\":{\"users\":[],\"salons\":[],\"bookings\":[{\"id\":9000000000,\"supplierId\":"+a.getId()+",\"totalAmount\":15000},{\"id\":9000000001,\"supplierId\":"+b.getId()+",\"totalAmount\":25000}]}}";
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)")
+                .setParameter("id","beautylink-presentation-20261031").setParameter("payload",payload).executeUpdate();
+        mvc.perform(get("/api/v1/admin/presentation")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/admin/presentation").header("Authorization","Bearer "+jwt.createToken(customer))).andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/presentation").header("Authorization","Bearer "+jwt.createToken(admin)))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control","private, no-store"))
+                .andExpect(jsonPath("$.bookings.length()").value(2)).andExpect(jsonPath("$.provenance").doesNotExist());
+        mvc.perform(get("/api/v1/supplier/presentation-bookings").header("Authorization","Bearer "+jwt.createToken(a.getOwner())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].supplierId").value(a.getId()));
+        mvc.perform(get("/api/v1/supplier/presentation-bookings").header("Authorization","Bearer "+jwt.createToken(b.getOwner())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].supplierId").value(b.getId()));
+        mvc.perform(post("/api/v1/admin/presentation").header("Authorization","Bearer "+jwt.createToken(admin)))
+                .andExpect(status().isMethodNotAllowed());
+        assertFalse(bookings.existsById(9000000000L)); assertEquals(bookingCount,bookings.count()); assertEquals(paymentCount,payments.count());
+        var after=insights.insights(day,day,false,Granularity.DAY);
+        assertEquals(before.revenue(),after.revenue()); assertEquals(before.completedServiceValue(),after.completedServiceValue());
+    }
     UserAccount customer,admin; Supplier a,b,demo; ServiceOffering sa,sb,sd; Practitioner pa,pb,pd;
     @BeforeEach void fixture() {
         customer=user("Customer",Role.CUSTOMER); admin=user("Admin",Role.ADMIN);

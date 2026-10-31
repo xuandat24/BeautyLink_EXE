@@ -4,7 +4,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { presentationEmail, presentationReviewAllocation, presentationService } from '../src/lib/presentationData';
-import { createPresentationAdminData, isPresentationUser, presentationBookings, presentationCustomers, presentationCustomerCsv, presentationInsights as reportInsights, presentationPage } from '../src/lib/presentationAdminData';
+import { createPresentationAdminData, isPresentationUser, mergePersistentPresentationData, presentationBookings, presentationCustomers, presentationCustomerCsv, presentationInsights as reportInsights, presentationPage } from '../src/lib/presentationAdminData';
 import { AdminModulesPage } from '../src/components/admin/AdminModulesPage';
 import { AdminOverview } from '../src/components/admin/AdminOverview';
 import { adminV2Api } from '../src/services/adminApi';
@@ -17,6 +17,29 @@ const salons = Array.from({ length: 14 }, (_, index) => ({ id: index + 1, name: 
 const snapshot = createPresentationAdminData(salons, []);
 const insightsFixture = () => { const data = sourceInsightsFixture(); return { ...data, range: { ...data.range, toDate: '2026-10-29' } }; };
 const presentationInsights = (data: ReturnType<typeof insightsFixture>, enabled: boolean) => enabled ? reportInsights(data, snapshot) : data;
+
+test('database-recovered records preserve every original and reconcile service value, statuses and all chart grains', async () => {
+  const values=[11000,11000,11000,200000];
+  const originals=values.map((totalAmount,i)=>({...snapshot.bookings[i],id:i+1,bookingCode:`BL-REAL-${i}`,totalAmount,customerId:501,customerName:'Original customer',createdAt:'2026-10-15T02:30:00Z',verifiedOnlineAmount:null,paymentStatus:'UNPAID'} as AdminBooking));
+  const source={users:[{id:501,fullName:'Original customer',email:'original@example.com',role:'CUSTOMER' as const,status:'ACTIVE',createdAt:'2026-09-01T00:00:00Z'}],bookings:originals};
+  const plan=createPresentationAdminData(salons,[],source);
+  const stored={...plan,users:plan.users.filter(u=>isPresentationUser(u.id)),originalCustomers:[],bookings:plan.bookings.filter(b=>b.id>=9000000000).map((b,i)=>({...b,totalAmount:i<95?20000:19000,verifiedOnlineAmount:null,verifiedPaidAt:null,verifiedPaymentOption:null,remainingAtSalon:null}))};
+  const recovered=mergePersistentPresentationData(stored,source);
+  assert.equal(recovered.bookings.length,147);
+  assert.equal(recovered.users.length,286);
+  for(const original of originals) for(const [key,value] of Object.entries(original)) if(!['serviceId','commissionAmount'].includes(key)) assert.deepEqual((recovered.bookings.find(b=>b.id===original.id) as any)[key],value);
+  for(const granularity of ['DAY','WEEK','MONTH'] as const) {
+    const api=insightsFixture(); api.granularity=granularity; api.range={...api.range,fromDate:'2026-10-01',toDate:'2026-10-31'};
+    const result=reportInsights(api,recovered);
+    assert.equal(result.completedServiceValue!.value,3045000);
+    assert.equal(result.completedBookings.value,147);
+    assert.equal(result.trends.reduce((sum,t)=>sum+(t.completedServiceValue??0),0),3045000);
+    assert.equal(result.topSalons.reduce((sum,t)=>sum+(t.completedServiceValue??0),0),3045000);
+    assert.deepEqual(result.revenue,api.revenue,'verified receipts never become simulated service value');
+  }
+  const malicious={...stored,users:[{...stored.users[0],role:'CUSTOMER' as const,fullName:'=IMPORTXML("unsafe")'}]};
+  assert.match(await presentationCustomerCsv(malicious).text(),/'=IMPORTXML/);
+});
 
 test('live bookings and customers survive supplementation, with deposits summed per customer', () => {
   const customer = { id: 501, fullName: 'Trần Hải Anh', phone: '0912345678', email: 'hai.anh@gmail.com', gender: 'FEMALE', dateOfBirth: '1996-04-12',
@@ -108,7 +131,7 @@ test('date and status filters agree with overview totals, including empty ranges
     assert.equal(result.totalBookings.value, count);
     assert.equal(result.trends.reduce((sum, point) => sum + point.bookings, 0), count);
     assert.equal(result.topSalons.reduce((sum, salon) => sum + salon.bookings, 0), count);
-    assert.equal(result.trends.reduce((sum, point) => sum + point.commissionAmount!, 0), result.commissionRevenue!.value);
+    assert.equal(result.trends.reduce((sum, point) => sum + point.completedServiceValue!, 0), result.completedServiceValue!.value);
   }
 });
 
@@ -178,11 +201,11 @@ test('presentation report reconciles 286 users, 14 active partners and 147 compl
   assert.equal(result.completedBookings.changePercent, null);
   assert.equal(result.totalBookings.value, 147);
   assert.equal(result.bookingCustomers, 78);
-  assert.equal(result.commissionRevenue?.value, 1_906_000);
+  assert.equal(result.completedServiceValue?.value, snapshot.bookings.reduce((sum, row) => sum + row.totalAmount, 0));
   assert.equal(result.statuses.reduce((sum, row) => sum + row.count, 0), 147);
   assert.equal(result.statuses.find(row => row.status === 'COMPLETED')?.count, 147);
   assert.equal(result.trends.reduce((sum, row) => sum + row.bookings, 0), 147);
-  assert.equal(result.trends.reduce((sum, row) => sum + row.commissionAmount!, 0), 1_906_000);
+  assert.equal(result.trends.reduce((sum, row) => sum + row.completedServiceValue!, 0), result.completedServiceValue!.value);
   assert.equal(result.revenue, source.revenue);
   assert.equal(result.users.value, 286);
   assert.equal(result.activePartners.value, 14);
@@ -201,17 +224,17 @@ test('chart granularities, empty API trends and partner/service rankings retain 
       source.popularServices = [1, 2, 3].map(id => ({ id, name: `Service ${id}`, supplierName: 'Salon', bookings: id, percentage: 0 }));
       const result = presentationInsights(source, true);
       assert.equal(result.trends.reduce((sum, row) => sum + row.bookings, 0), 147);
-      assert.equal(result.trends.reduce((sum, row) => sum + row.commissionAmount!, 0), 1_906_000);
+      assert.equal(result.trends.reduce((sum, row) => sum + row.completedServiceValue!, 0), result.completedServiceValue!.value);
       assert.equal(result.topSalons.reduce((sum, row) => sum + row.bookings, 0), 147);
-      assert.equal(result.topSalons.reduce((sum, row) => sum + row.commissionAmount!, 0), 1_906_000);
+      assert.equal(result.topSalons.reduce((sum, row) => sum + row.completedServiceValue!, 0), result.completedServiceValue!.value);
       assert.equal(result.popularServices.reduce((sum, row) => sum + row.bookings, 0), 147);
       for (const service of result.popularServices) assert.equal(service.percentage, Math.round(service.bookings / 147 * 1000) / 10);
-      assert.ok(result.trends.every(row => Number.isInteger(row.bookings) && Number.isInteger(row.commissionAmount) && row.bookings >= 0 && row.commissionAmount! >= 0));
+      assert.ok(result.trends.every(row => Number.isInteger(row.bookings) && Number.isInteger(row.completedServiceValue) && row.bookings >= 0 && row.completedServiceValue! >= 0));
     }
   }
 });
 
-test('commission dashboard labels distinguish platform earnings from online receipts and show the matching donut', async () => {
+test('service-value dashboard keeps verified receipts separate and shows the matching donut', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/#admin-dashboard' });
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage });
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
@@ -223,12 +246,12 @@ test('commission dashboard labels distinguish platform earnings from online rece
   try {
     await act(async () => root.render(React.createElement(AdminOverview, { params: { from: '2026-10-01', to: '2026-10-15', includeDemo: false }, renderBookings: () => null, onSalon() {}, onBookedCustomers() {} })));
     const cards = [...document.querySelectorAll('[aria-label="Chỉ số kinh doanh"] article')];
-    assert.deepEqual(cards.slice(0, 3).map(card => card.querySelector('h2')?.textContent), ['Tổng đơn đặt lịch', 'Người dùng', 'Doanh thu hoa hồng']);
+    assert.deepEqual(cards.slice(0, 3).map(card => card.querySelector('h2')?.textContent), ['Tổng đơn đặt lịch', 'Người dùng', 'Doanh thu']);
     assert.deepEqual(cards.slice(0, 2).map(card => card.querySelector('[data-admin-value]')?.textContent), ['147', '286']);
-    assert.match(cards[2].querySelector('[data-admin-value]')?.textContent ?? '', /1\.906\.000/);
+    assert.equal(cards[2].querySelector('[data-admin-value]')?.textContent, new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(snapshot.bookings.reduce((sum,row)=>sum+row.totalAmount,0)));
     assert.ok(document.querySelector('svg[aria-label="147 lịch trong kỳ"]'));
-    assert.match(document.body.textContent ?? '', /Kết quả kinh doanh & tài chính/);
-    assert.doesNotMatch(document.body.textContent ?? '', /Tổng thu online xác minh theo paidAt/);
+    assert.doesNotMatch(document.body.textContent ?? '', /Kết quả kinh doanh & tài chính/);
+    assert.match(document.body.textContent ?? '', /Tổng thu online xác minh theo paidAt/);
   } finally { await act(async () => root.unmount()); Object.assign(adminV2Api, { insights: original.insights }); beautyApi.adminPaymentSummary = original.payments; beautyApi.adminBookings = original.bookings; dom.window.close(); }
 });
 

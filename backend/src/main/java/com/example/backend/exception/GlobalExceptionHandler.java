@@ -42,6 +42,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class) ResponseEntity<ErrorResponse> denied() {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("FORBIDDEN", "Bạn không có quyền thực hiện thao tác này", Map.of(), Instant.now()));
     }
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<ErrorResponse> methodNotAllowed(org.springframework.web.HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).headers(ex.getHeaders())
+                .body(new ErrorResponse("METHOD_NOT_ALLOWED", "Thao tác không được hỗ trợ", Map.of(), Instant.now()));
+    }
     @ExceptionHandler(Exception.class) ResponseEntity<ErrorResponse> other(Exception ex) {
         log.error("Unhandled API exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse("INTERNAL_ERROR", "Đã xảy ra lỗi hệ thống", Map.of(), Instant.now()));

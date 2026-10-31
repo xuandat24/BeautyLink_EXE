@@ -1,7 +1,7 @@
 import type { EditSnapshot, PartnerProfileEdit, PartnerServiceEdit, PartnerPersonEdit, PartnerScheduleEdit } from '../types/adminV2';
-import { apiClient } from './beautyApi';
+import { apiClient, adminPresentationData } from './beautyApi';
 import { presentationAccount } from '../lib/presentationData';
-import { isPresentationUser } from '../lib/presentationAdminData';
+import { isPresentationUser, mergePresentationBookings, presentationBookings, presentationInsights, presentationPage, presentationSearch } from '../lib/presentationAdminData';
 import type { AdminPage } from '../types';
 import type { AdminInsights, AdminUserRow, AdminSalonRow, AdminSalonDetail, AdminReviewRow } from '../types/adminV2';
 import type { AdminAccountDetail, AdminProfilePatch, AdminServiceDetail, AdminPaymentLedger } from '../types/adminV2';
@@ -24,6 +24,11 @@ export const adminV2Api = {
   partnerSchedule: async (sid: number, id: number): Promise<EditSnapshot<PartnerScheduleEdit[]>> => (await apiClient.get(`/v1/admin/salons/${sid}/practitioners/${id}/schedule/edit`)).data,
   updatePartnerSchedule: async (sid: number, id: number, rules: PartnerScheduleEdit[], expectedRevision: string): Promise<EditSnapshot<PartnerScheduleEdit[]>> => (await apiClient.put(`/v1/admin/salons/${sid}/practitioners/${id}/schedule/edit`, { data: { rules: rules.map(({ dayOfWeek, startTime, endTime, breakStart, breakEnd, slotMinutes, active }) => ({ dayOfWeek, startTime, endTime, breakStart, breakEnd, slotMinutes, active })) }, expectedRevision })).data,
   account: async (id: number, forEdit = false): Promise<AdminAccountDetail> => {
+    if (isPresentationUser(id)) {
+      if (forEdit) throw new Error('Hồ sơ báo cáo chỉ hỗ trợ xem.');
+      await apiClient.get('/v1/admin/users', { params: { page: 0, size: 1 } });
+      return (await adminPresentationData())!.users.find(user => user.id === id)!;
+    }
     const account = (await apiClient.get(`/v1/admin/users/${id}`)).data; return forEdit ? account : presentationAccount(account);
   },
   updateAccount: async (id: number, data: AdminProfilePatch): Promise<AdminAccountDetail> => {
@@ -32,32 +37,38 @@ export const adminV2Api = {
   },
   salonHeader: async (id: number): Promise<AdminSalonDetail> => {
     const data: AdminSalonDetail = (await apiClient.get(`/v1/admin/salons/${id}`, { params: { includeDemo: false, headerOnly: true } })).data;
-    return data;
+    const snapshot = await adminPresentationData(); const salon = snapshot?.salons.find(row => row.id === id);
+    return salon ? { ...data, salon } : data;
   },
   salonServices: async (id: number, page = 0): Promise<AdminPage<AdminServiceDetail>> => (await apiClient.get(`/v1/admin/salons/${id}/services`, { params: { page, size: 20 } })).data,
   salonPractitioners: async (id: number, page = 0): Promise<AdminPage<AdminSalonDetail['practitioners'][number]>> => (await apiClient.get(`/v1/admin/salons/${id}/practitioners`, { params: { page, size: 20 } })).data,
   salonSchedule: async (id: number, personId: number): Promise<AdminSalonDetail['schedules']> => (await apiClient.get(`/v1/admin/salons/${id}/practitioners/${personId}/schedule`)).data,
   salonBookings: async (id: number, params: { from: string; to: string; status?: string; page: number }): Promise<AdminPage<AdminBooking>> => {
     const data = (await apiClient.get(`/v1/admin/salons/${id}/bookings`, { params: { ...params, size: 20 } })).data;
-    return data;
+    const snapshot = await adminPresentationData(params);
+    return snapshot ? presentationPage(presentationBookings({ ...snapshot, bookings: mergePresentationBookings(snapshot.bookings, data.content) }, { ...params, supplierId: id }), params.page) : data;
   },
   paymentLedger: async (params: { from: string; to: string; page: number; salonId?: number }): Promise<AdminPaymentLedger> => (await apiClient.get('/v1/admin/payments', { params: { ...params, size: 20 } })).data,
   insights: async (params: AdminRange & { granularity: 'DAY' | 'WEEK' | 'MONTH' }): Promise<AdminInsights> => {
     const data = (await apiClient.get('/v1/admin/dashboard/insights', { params })).data;
-    return data;
+    const snapshot = await adminPresentationData(params); return snapshot ? presentationInsights(data, snapshot) : data;
   },
   users: async (params: { query?: string; role?: string; page: number; size: number }, forEdit = false): Promise<AdminPage<AdminUserRow>> => {
     const data = (await apiClient.get<AdminPage<AdminUserRow>>('/v1/admin/users', { params })).data;
     if (forEdit) return data;
-    return { ...data, content: data.content.map(presentationAccount) };
+    const snapshot = await adminPresentationData();
+    return snapshot ? presentationPage(snapshot.users.filter(user => (!params.role || user.role === params.role) && presentationSearch(`${user.fullName} ${user.email}`, params.query))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id), params.page, params.size) : { ...data, content: data.content.map(presentationAccount) };
   },
   salons: async (params: { query?: string; includeDemo: boolean; page: number; size: number }): Promise<AdminPage<AdminSalonRow>> => {
     const data = (await apiClient.get('/v1/admin/salons', { params })).data;
-    return data;
+    const snapshot = await adminPresentationData();
+    return snapshot ? presentationPage(snapshot.salons.filter(salon => presentationSearch(`${salon.name} ${salon.ownerName}`, params.query)), params.page, params.size) : data;
   },
   salon: async (id: number, includeDemo = false): Promise<AdminSalonDetail> => {
     const data: AdminSalonDetail = (await apiClient.get(`/v1/admin/salons/${id}`, { params: { includeDemo } })).data;
-    return data;
+    const snapshot = await adminPresentationData(); const salon = snapshot?.salons.find(row => row.id === id);
+    return salon ? { ...data, salon, recentBookings: presentationBookings(snapshot!, { supplierId: id }).slice(0, 10) } : data;
   },
   reviews: async (params: { includeDemo: boolean; page: number; size: number }): Promise<AdminPage<AdminReviewRow>> => (await apiClient.get('/v1/admin/reviews', { params })).data,
 };
