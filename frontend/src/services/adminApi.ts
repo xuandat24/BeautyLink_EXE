@@ -7,6 +7,7 @@ import type { AdminInsights, AdminUserRow, AdminSalonRow, AdminSalonDetail, Admi
 import type { AdminAccountDetail, AdminProfilePatch, AdminServiceDetail, AdminPaymentLedger } from '../types/adminV2';
 import type { AdminBooking } from '../types';
 import type { ReportingPaymentSummary } from '../types/adminV2';
+import { selectReturningPresentationCustomers } from '../lib/returningPresentationCustomers';
 export type AdminRange = { from: string; to: string; includeDemo: boolean };
 export function adminRangeError({ from, to }: Pick<AdminRange, 'from' | 'to'>): string | null {
   const valid = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
@@ -62,6 +63,12 @@ export const adminV2Api = {
     const snapshot = await adminPresentationData();
     return snapshot ? presentationPage(snapshot.users.filter(user => (!params.role || user.role === params.role) && presentationSearch(`${user.fullName} ${user.email}`, params.query))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id), params.page, params.size) : { ...data, content: data.content.map(presentationAccount) };
+  },
+  returningUsers: async (params: { query?: string; page: number; size: number }): Promise<AdminPage<AdminUserRow>> => {
+    const first = await adminV2Api.users({ page: 0, size: 100 });
+    const rest = await Promise.all(Array.from({ length: Math.max(0, first.totalPages - 1) }, (_, index) => adminV2Api.users({ page: index + 1, size: 100 })));
+    const rows = selectReturningPresentationCustomers([...first.content, ...rest.flatMap(page => page.content)]);
+    return presentationPage(rows.filter(user => presentationSearch(`${user.fullName} ${user.email}`, params.query)), params.page, params.size);
   },
   salons: async (params: { query?: string; includeDemo: boolean; page: number; size: number }): Promise<AdminPage<AdminSalonRow>> => {
     const data = (await apiClient.get('/v1/admin/salons', { params })).data;

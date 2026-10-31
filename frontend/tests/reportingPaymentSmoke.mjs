@@ -60,11 +60,27 @@ try {
       const partnerCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Đối tác hoạt động',exact:true})});
       assert.equal(await partnerCard.locator('[data-admin-value]').innerText(),String(new Set(data.salons.filter(s=>s.active&&s.approvalStatus==='VERIFIED').map(s=>s.id)).size));
       const returningCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Khách hàng quay lại',exact:true})});
-      assert.equal(await returningCard.locator('[data-admin-value]').innerText(),'72');
+      assert.equal(await returningCard.locator('[data-admin-value]').innerText(),'71');
+      await returningCard.getByRole('button',{name:'Xem chi tiết Khách hàng quay lại',exact:true}).click();
+      const returningTab=page.getByRole('button',{name:'Khách hàng quay lại',exact:true});await returningTab.waitFor();
+      assert.equal(await returningTab.getAttribute('aria-pressed'),'true');
+      await page.getByText('71 kết quả',{exact:true}).waitFor();
+      const selectedRows=[];let previousFirst='';
+      for(let p=0;p<4;p++) {
+        await page.getByText(`${p+1}/4`,{exact:true}).waitFor();
+        await page.waitForFunction(({count,previous})=>document.querySelectorAll('tbody tr').length===count&&document.querySelector('tbody tr')?.textContent!==previous,{count:p===3?11:20,previous:previousFirst});
+        selectedRows.push(...await page.locator('tbody tr').allTextContents());
+        previousFirst=await page.locator('tbody tr').first().textContent();
+        if(p<3)await page.getByRole('button',{name:'Trang sau',exact:true}).click();
+      }
+      assert.equal(selectedRows.length,71);assert.equal(new Set(selectedRows).size,71);
+      await layout();await page.screenshot({path:`backend/target/report-payments-${width}-returning.png`,fullPage:true});
+      await navigate('Tổng quan');await page.getByTestId('admin-overview').waitFor();
       const bookingCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Tổng đơn đặt lịch',exact:true})});
       assert.ok((await bookingCard.locator('div.flex-1.text-xs').innerText()).includes(String(Math.round(measured.totalBookings.absoluteChange/2+16))));
       for(const card of [bookingCard,amountCard])assert.ok(!(await card.locator('div.flex-1.text-xs').innerText()).includes('Kỳ trước:'));
       await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();
+      for(const label of ['Thu online PayOS xác minh','Khoản từ hồ sơ báo cáo','Còn tại salon khi ghi nhận','Số khoản thanh toán']) assert.equal(await page.locator('dt').filter({hasText:label}).count(),0);
       const paymentRow = page.locator('tbody tr').filter({ hasText: 'BL2610R' }).first(); await paymentRow.waitFor();
       const code = (await paymentRow.locator('strong').first().textContent()).trim(); const expected = data.bookings.find(b => b.bookingCode === code);assert.ok(expected);
       await paymentRow.getByRole('button', { name: 'Xem lịch', exact: true }).click();

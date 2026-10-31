@@ -1,5 +1,22 @@
 # Khôi phục lịch sử trình bày trên database BeautyLink hiện tại
 
+## Cập nhật giao diện: nhóm 71 khách hàng quay lại
+
+Yêu cầu trình bày mới thay chỉ tiêu 72 bằng **71**; nút Chi tiết mở tab
+Người dùng → Khách hàng quay lại. `selectReturningPresentationCustomers` sắp xếp cùng thứ tự
+với danh sách tài khoản (createdAt giảm dần, id giảm dần), bỏ 85 vị trí đầu, chỉ lấy CUSTOMER
+và giữ tối đa 71 ID duy nhất. Tìm kiếm/phân trang áp dụng sau khi chọn nhóm; không chọn ngẫu nhiên
+mỗi lần tải và không ghi booking/tài khoản để tạo lịch sử quay lại giả. Đây là nhóm được chọn
+cho báo cáo, không phải kết quả thuật toán khách quay lại từ lịch sử booking; metadata trong
+mã nguồn và Cách tính giữ rõ phân biệt. Khi dữ liệu tài khoản thay đổi, vị trí có thể thay đổi;
+không sinh thêm tài khoản để bù nếu môi trường có ít hơn 71 ứng viên.
+
+Bốn ô tổng hợp Thu online PayOS xác minh / Khoản từ hồ sơ báo cáo / Còn tại salon khi ghi nhận /
+Số khoản thanh toán được bỏ khỏi giao diện báo cáo. Dữ liệu nguồn, tổng tiền, phân trang, bảng
+chi tiết, CSV nguồn báo cáo và sổ PayOS thật không bị xóa hoặc thay định nghĩa. Không có production
+DB write/seed/migration trong thay đổi này. Test browser dùng khách hàng bổ sung trên H2 test-classpath
+riêng, không nằm trong JAR production.
+
 ## Chọn lại danh sách 219 đơn / 147 hoàn thành (31/10)
 
 `ReportSelectionStore` thêm **một payload chọn lọc**, không sửa/xóa payload cũ, không chạy seed.

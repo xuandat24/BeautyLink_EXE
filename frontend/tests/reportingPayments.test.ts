@@ -51,7 +51,7 @@ test('requested presentation comparisons and returning target do not change tota
     for(const name of ['Tổng đơn đặt lịch','Tổng thanh toán báo cáo']) assert.doesNotMatch(card(name).querySelector('.flex-1.text-xs')!.textContent!,/Kỳ trước:/);
     assert.equal(card('Tổng đơn đặt lịch').querySelector('[data-admin-value]')!.textContent,'363');
     assert.match(card('Tổng thanh toán báo cáo').querySelector('[data-admin-value]')!.textContent!,/^≈ 3\.045\.000/);
-    assert.equal(card('Khách hàng quay lại').querySelector('[data-admin-value]')!.textContent,'72');
+    assert.equal(card('Khách hàng quay lại').querySelector('[data-admin-value]')!.textContent,'71');
     assert.equal(card('Đối tác hoạt động').querySelector('[data-admin-value]')!.textContent,'14');
     assert.equal(card('Tỷ lệ thanh toán online').querySelector('[data-admin-value]')!.textContent,'85,6%');
     assert.match(card('Người dùng').textContent!,/Kỳ trước: 217/);
@@ -65,10 +65,10 @@ test('requested presentation comparisons and returning target do not change tota
     assert.equal(card('Đơn hoàn thành').querySelector('[data-admin-value]')!.textContent,'147');
     assert.equal(card('Tổng đơn đặt lịch').querySelector('.flex-1.text-xs > p')!.textContent,'↑ Tăng 197 đơn');
     assert.match(card('Tổng thanh toán báo cáo').querySelector('[data-admin-value]')!.textContent!,/^≈ 3\.043\.000/);
-    for(const [name,value] of [['Người dùng','286'],['Khách hàng quay lại','72'],['Đối tác hoạt động','14'],['Tỷ lệ thanh toán online','85,6%']]) assert.equal(card(name).querySelector('[data-admin-value]')!.textContent,value);
+    for(const [name,value] of [['Người dùng','286'],['Khách hàng quay lại','71'],['Đối tác hoạt động','14'],['Tỷ lệ thanh toán online','85,6%']]) assert.equal(card(name).querySelector('[data-admin-value]')!.textContent,value);
     data.totalBookings={...metricFixture(0),absoluteChange:0};data.reportPayments=metricFixture(0,'VND');await render('2026-10-30');
     for(const name of ['Tổng đơn đặt lịch','Tổng thanh toán báo cáo']) assert.equal(card(name).querySelector('.flex-1.text-xs > p')!.textContent,'Không thay đổi');
-    assert.equal(card('Khách hàng quay lại').querySelector('[data-admin-value]')!.textContent,'72');
+    assert.equal(card('Khách hàng quay lại').querySelector('[data-admin-value]')!.textContent,'71');
   }finally{adminV2Api.insights=original.insights;beautyApi.adminPaymentSummary=original.payments;beautyApi.adminBookings=original.bookings;await act(async()=>env.root.unmount());env.dom.window.close();}
 });
 
@@ -132,6 +132,7 @@ test('payment row opens the same booking and shows simulated deposit without cla
   beautyApi.adminBooking = async id => { assert.equal(id, row.bookingId); return booking(); };
   try {
     await act(async () => env.root.render(React.createElement(ReportingPaymentPanel, { salonId: 3, range: { from: '2026-10-01', to: '2026-10-31', includeDemo: false } })));
+    assert.deepEqual([...document.querySelectorAll('dl dt')].map(el=>el.textContent),['Tổng thanh toán báo cáo','Tiền cọc','Thanh toán đủ','Số booking có thanh toán']);
     assert.match(document.body.textContent ?? '', /BL2610R0001/);assert.match(document.body.textContent ?? '', /2026-10-20/);
     await act(async () => [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Xem lịch')!.click());
     const dialog = document.querySelector('[role="dialog"]')!; assert.match(dialog.textContent ?? '', /10:00–11:00/); assert.match(dialog.textContent ?? '', /không phải biên nhận PayOS đã xác minh/);
