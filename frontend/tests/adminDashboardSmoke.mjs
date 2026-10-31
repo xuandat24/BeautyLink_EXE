@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
-const base = 'http://localhost:5173';
+const base = process.env.BEAUTYLINK_SMOKE_URL || 'http://localhost:5173';
 const browser = await chromium.launch({ headless: true });
 let customerLookupEmail = 'mobile-browser@example.com';
 try {
@@ -38,6 +38,16 @@ try {
       const loaded = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?') && r.url().includes('includeDemo=false'));
       await page.getByRole('button', { name: 'Đăng nhập ngay', exact: true }).click();
       const data = await (await loaded).json();
+      assert.equal(data.timezone, 'Asia/Ho_Chi_Minh');
+      assert.ok(Date.parse(data.currentPeriod.endExclusive) <= Date.parse(data.asOf));
+      assert.equal(Date.parse(data.currentPeriod.endExclusive) - Date.parse(data.currentPeriod.startInclusive), Date.parse(data.previousPeriod.endExclusive) - Date.parse(data.previousPeriod.startInclusive));
+      assert.equal(data.onlinePaymentRate.currentDenominator, data.totalBookings.currentValue);
+      assert.equal(data.completedBookings.currentValue, null, 'missing completion history must not turn into zero');
+      assert.equal(data.completedBookings.comparisonStatus, 'INSUFFICIENT_HISTORY');
+      assert.equal(data.trends.reduce((sum, row) => sum + row.verifiedOnlineAmount, 0), data.revenue.currentValue);
+      for (const key of ['totalBookings', 'users', 'revenue', 'activePartners', 'onlinePaymentRate', 'completedBookings', 'returningCustomers']) {
+        for (const field of ['currentValue', 'previousValue', 'absoluteChange', 'relativeChangePercent', 'percentagePointChange', 'comparisonStatus', 'unit', 'metricDefinition']) assert.ok(Object.hasOwn(data[key], field), `${key}.${field} is explicit`);
+      }
       await page.getByTestId('admin-overview').waitFor();
       if (width < 1024) {
         const toggle = page.getByRole('button', { name: 'Mở menu quản trị', exact: true });
@@ -69,13 +79,13 @@ try {
         assert.equal(await page.getByRole('button', { name: label, exact: true }).getAttribute('aria-pressed'), 'true');
       }
       assert.equal(unrelatedCalls(), beforeGrain, 'chart grain never refetches payment summary/recent bookings'); assert.equal(documentLoads, 1, 'SPA controls do not reload document');
-      const point = page.locator(`circle[aria-label^="${data.completedServiceValue ? 'Giá trị dịch vụ' : 'Thu online'}"]`).first(); await point.focus();
+      const point = page.locator('circle[aria-label^="Thu online"]').first(); await point.focus();
       assert.equal(await point.evaluate(el => document.activeElement === el), true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `${width}: whole page must not overflow`);
-      assert.equal(await cards.locator('article').evaluateAll(nodes => nodes.every(n => n.getBoundingClientRect().height < 250)), true, 'KPI cards remain compact');
+      assert.equal(await cards.locator('article').evaluateAll(nodes => nodes.every(n => n.getBoundingClientRect().height < 310)), true, 'KPI cards remain compact with comparison context');
       await capture('');
       // Deliberate UI-only stress response in this isolated test: not accounting evidence.
-      await page.route('**/api/v1/admin/dashboard/insights?*', async route => { const response = await route.fetch(); const json = await response.json(); (json.completedServiceValue ?? json.revenue).value = 1234567890123; await route.fulfill({ response, json }); }, { times: 1 });
+      await page.route('**/api/v1/admin/dashboard/insights?*', async route => { const response = await route.fetch(); const json = await response.json(); json.revenue.currentValue = json.revenue.value = 1234567890123; await route.fulfill({ response, json }); }, { times: 1 });
       const stress = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?'));
       await page.getByRole('button', { name: 'Làm mới', exact: true }).click(); await stress;
       const formatted = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(1234567890123);

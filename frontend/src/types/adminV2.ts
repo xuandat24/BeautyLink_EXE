@@ -1,7 +1,19 @@
 import type { AdminBooking, AdminDateRange } from '../types';
-export type Metric = { value: number; previous: number | null; changePercent: number | null; basis: string };
+export type ComparisonStatus = 'COMPARABLE' | 'LOW_BASE' | 'NEW_ACTIVITY' | 'UNCHANGED' | 'NO_DENOMINATOR' | 'INSUFFICIENT_HISTORY' | 'CURRENT_SNAPSHOT' | 'NEGATIVE_VALUE';
+export type Metric = {
+  currentValue: number | null; previousValue: number | null; absoluteChange: number | null;
+  relativeChangePercent: number | null; percentagePointChange: number | null;
+  comparisonStatus: ComparisonStatus; unit: 'BOOKING' | 'ACCOUNT' | 'PARTNER' | 'CUSTOMER' | 'VND' | 'PERCENT';
+  metricDefinition: string; currentNumerator: number | null; currentDenominator: number | null;
+  previousNumerator: number | null; previousDenominator: number | null; lowSample: boolean;
+  /** Legacy aliases share the same nullable values, not a second business definition. */
+  value: number | null; previous: number | null; changePercent: number | null; basis: string;
+};
+export type ReportingPeriod = { startInclusive: string; endExclusive: string };
 export type AdminInsights = {
   range: AdminDateRange; granularity: 'DAY' | 'WEEK' | 'MONTH';
+  currentPeriod: ReportingPeriod; previousPeriod: ReportingPeriod; timezone: string; asOf: string;
+  lowBaseThreshold: number; smallRateDenominator: number;
   totalBookings: Metric; users: Metric; revenue: Metric; activePartners: Metric; onlinePaymentRate: Metric; completedBookings: Metric;
   commissionRevenue?: Metric;
   completedServiceValue?: Metric;

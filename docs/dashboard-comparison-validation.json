@@ -1,0 +1,53 @@
+{
+  "feature": "Admin previous-period comparisons",
+  "businessTimezone": "Asia/Ho_Chi_Minh",
+  "sourceVerification": {
+    "method": "SELECT-only JDBC transaction, connection read-only, rolled back; no application started against production",
+    "asOf": "2026-10-31T07:16:02Z",
+    "currentPeriod": { "startInclusive": "2026-10-01T17:00:00Z", "endExclusive": "2026-10-31T07:16:02Z" },
+    "previousPeriod": { "startInclusive": "2026-09-01T17:00:00Z", "endExclusive": "2026-10-01T07:16:02Z" },
+    "operationalBookings": { "current": 76, "previous": 1 },
+    "storedPresentationBookings": { "current": 137, "previous": 6 },
+    "operationalCumulativeAccounts": { "current": 217, "previous": 37 },
+    "storedCumulativeProfiles": { "current": 69, "previous": 69 },
+    "verifiedOnlineGrossVND": { "current": 1215458, "previous": 0 },
+    "verifiedPaidBookingNumerator": { "current": 36, "previous": 0 },
+    "operationalActivePartnersAtAudit": 4,
+    "ledgerInventory": { "transactions": 71, "paid": 40, "grossAcrossAllPaidNonManualRowsVND": 1293958 },
+    "ledgerInventoryCaveat": "Inventory includes other supplier scopes and all receipts; it is not the canonical period revenue KPI.",
+    "missingSchema": ["Booking.completedAt or completion event history", "Supplier/account status history", "timestamped refund ledger"],
+    "rootCause": "76 unique operational bookings versus 1 source booking gives (76-1)/1*100 = 7500%. Arithmetic was correct; low-base context and elapsed-period alignment were missing. Frontend presentation aggregation also erased all comparisons and mixed cumulative users with period registrations.",
+    "queryArtifact": "scripts/dashboard-comparison-audit.sql"
+  },
+  "expectedNewReportingResultsFromSourceArithmeticNotDeployedApi": {
+    "bookings": { "current": 213, "previous": 7, "absoluteChange": 206 },
+    "cumulativeAccounts": { "current": 286, "previous": 106, "absoluteChange": 180 },
+    "onlineRate": { "currentNumerator": 36, "currentDenominator": 213, "previousNumerator": 0, "previousDenominator": 7, "lowSample": true },
+    "periodCompletions": null,
+    "periodReturningCustomers": null,
+    "activePartnersPrevious": null
+  },
+  "metricDefinitions": [
+    { "metric": "Tổng đơn đặt lịch", "source": "Booking plus persisted presentation_recovery booking IDs", "time": "createdAt in [startInclusive,endExclusive)", "scope": "CUSTOMER; supplier demo flag excluded unless includeDemo; all four booking statuses; unique ID", "kind": "period flow", "unit": "BOOKING" },
+    { "metric": "Người dùng", "source": "UserAccount plus reserved persisted recovery profiles", "time": "createdAt < each period endExclusive", "scope": "All retained CUSTOMER/SUPPLIER/STAFF/ADMIN accounts; cannot reconstruct deleted accounts", "kind": "cumulative stock, compared only with cumulative stock", "unit": "ACCOUNT" },
+    { "metric": "Doanh thu", "source": "PaymentTransaction joined to CUSTOMER Booking and allowed Supplier", "time": "paidAt in [startInclusive,endExclusive)", "scope": "First PAID transaction ID per booking, requiresManualReview=false and paidAt present. Gross verified online collection; deposits counted at actual amount, not full service price. Existing refund policy retained: no external refund ledger to subtract. No recovery money, salon cash or commission.", "kind": "period cash collection", "unit": "VND" },
+    { "metric": "Đối tác hoạt động", "source": "Supplier plus owner UserAccount", "time": "Current database snapshot at asOf, regardless of selected dates", "scope": "VERIFIED and owner ACTIVE; supplier demo flag filter. Stored presentation flags are not operational approval history.", "kind": "current snapshot, previous=null", "unit": "PARTNER" },
+    { "metric": "Tỷ lệ thanh toán online", "source": "Same unique booking cohort as booking KPI; numerator from canonical verified PaymentTransaction only", "time": "Booking created in each period; paidAt before that period endExclusive", "scope": "Numerator and denominator share cohort/status/supplier filters; retries do not multiply bookings; no simulated deposits; zero denominator=null", "kind": "percentage-point comparison; numerator/denominator both returned", "unit": "PERCENT" },
+    { "metric": "Đơn hoàn thành", "source": "Requires actual Booking completion event/time, currently absent", "time": "Would be actual completion time in period, never createdAt/appointment/updatedAt", "kind": "INSUFFICIENT_HISTORY, both values=null", "unit": "BOOKING" },
+    { "metric": "Khách hàng quay lại", "source": "Requires actual ordered completion history, currently absent", "time": "Unique customer completed in period with a strictly earlier completed booking", "kind": "INSUFFICIENT_HISTORY, both values=null", "unit": "CUSTOMER" }
+  ],
+  "serviceValuePreservation": "Persisted presentation history and amounts are unchanged. completedServiceValue remains a separate current-status snapshot of COMPLETED bookings created in the selected range, not period revenue/completion events; no unsupported historical comparison.",
+  "testsVersusSource": "1->76, 100->120/80, zero/negative transitions, rates, precise monetary arithmetic and date-edge inputs are isolated test fixtures. Operational 76/1 was independently verified with source SQL, not inferred from the UI percentage.",
+  "validation": {
+    "frontend": { "tests": 198, "passed": 198, "failed": 0, "typescript": "passed", "productionBuild": "passed" },
+    "backendFullSuite": { "tests": 487, "passed": 479, "failures": 0, "errors": 0, "skipped": 8 },
+    "backendProductionJdbcTimezoneFocusedSuite": { "timezone": "Asia/Bangkok", "database": "isolated H2", "tests": 32, "passed": 32, "failed": 0 },
+    "mysql": "Production MySQL 9.7 SELECT-only reconciliation passed. Local MySQL integration/migration suite not run: no isolated MySQL/Docker; 8 optional tests skipped. This is not a claim that the new API was executed against production.",
+    "schemaLimit": "Each Booking references exactly one ServiceOffering. Tests cover different service IDs, multiple supplier children/review targets and payment retries without count multiplication; there is no multi-service-per-booking workflow in this schema.",
+    "api": "ADMIN authorization retained; customer/supplier/staff rejected; explicit null/comparison statuses and both period bounds serialized; canonical receipts, refund gross policy, period cutoffs, cohort counts and chart reconciliation tested.",
+    "browser": "Real Spring/JWT/API/H2 flow, not mocked admin responses: desktop/mobile 1920,1440,1366,1024,768,390,360 px passed; SPA filters, DAY/WEEK/MONTH, no horizontal overflow, no page errors or API 5xx; auth revocation/logout and scoped financial reads passed.",
+    "productionAdminSession": "Not used to validate the new UI/API; not deployed. Financial baseline comes from read-only source queries, not browser fixtures."
+  },
+  "deployment": "Not deployed by this implementation task. Coordinate releases: stage the frontend contract guard before enabling the new backend contract, or switch both together. Legacy aliases retain null for unknown history (older clients assumed non-null); the new frontend fails safely while an older backend is still serving.",
+  "integrity": "No genuine or synthetic production business records, PayOS identifiers/receipts/signatures, audit rows or backups were modified. Only read-only production SELECTs were executed. Local H2 test fixtures are disposable."
+}

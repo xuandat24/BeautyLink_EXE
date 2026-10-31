@@ -49,7 +49,7 @@ public class BookingReviewSmokeServer {
     }
     public static void main(String[] args) {
         var context = new SpringApplicationBuilder(BackendApplication.class, LocalGateway.class).profiles("test").run(
-                "--spring.config.import=", "--server.address="+System.getenv().getOrDefault("SMOKE_BIND_ADDRESS","127.0.0.1"), "--server.port=8080",
+                "--spring.config.import=", "--server.address="+System.getenv().getOrDefault("SMOKE_BIND_ADDRESS","127.0.0.1"), "--server.port="+System.getenv().getOrDefault("SMOKE_PORT","8080"),
                 "--spring.datasource.url=jdbc:h2:mem:review-browser;MODE=MySQL;DB_CLOSE_DELAY=-1",
                 "--app.payos.client-id=", "--app.payos.api-key=", "--app.payos.checksum-key=",
                 "--app.otp.resend.api-key=", "--app.payos.reconciliation-initial-delay-ms=3600000");

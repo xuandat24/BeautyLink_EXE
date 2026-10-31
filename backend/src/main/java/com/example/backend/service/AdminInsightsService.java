@@ -1,103 +1,174 @@
 package com.example.backend.service;
 
 import com.example.backend.dto.AdminV2Dtos.*;
+import com.example.backend.dto.AdminV2Dtos.Period;
 import com.example.backend.model.DomainEnums.*;
 import com.example.backend.repository.AdminReadRepository;
+import com.example.backend.exception.ApiException;
+import org.springframework.http.HttpStatus;
+import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.annotation.Isolation;
-import java.math.*;
+import org.springframework.transaction.annotation.*;
+import java.math.BigDecimal;
 import java.time.*;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
+import static com.example.backend.dto.AdminV2Dtos.ComparisonStatus.*;
+import static com.example.backend.dto.AdminV2Dtos.MetricUnit.*;
 import static com.example.backend.repository.AdminReadRepository.*;
+import static com.example.backend.service.DashboardComparison.*;
 
 @Service
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class AdminInsightsService {
     private final AdminReadRepository read;
     private final AdminDashboardService dashboard;
-    public AdminInsightsService(AdminReadRepository read, AdminDashboardService dashboard) { this.read = read; this.dashboard = dashboard; }
+    private final PresentationRecoveryService recovery;
+    private final int lowBase, smallDenominator;
+    private final Clock clock;
+
+    @Autowired
+    public AdminInsightsService(AdminReadRepository read, AdminDashboardService dashboard, PresentationRecoveryService recovery,
+            @Value("${app.dashboard.low-base-threshold:4}") int lowBase,
+            @Value("${app.dashboard.small-rate-denominator:20}") int smallDenominator) {
+        this(read, dashboard, recovery, lowBase, smallDenominator, Clock.systemUTC());
+    }
+    AdminInsightsService(AdminReadRepository read, AdminDashboardService dashboard, PresentationRecoveryService recovery,
+            int lowBase, int smallDenominator, Clock clock) {
+        if (lowBase < 1 || smallDenominator < 1) throw new IllegalArgumentException("Positive reporting thresholds required");
+        this.read = read; this.dashboard = dashboard; this.recovery = recovery;
+        this.lowBase = lowBase; this.smallDenominator = smallDenominator; this.clock = clock;
+    }
+
+    private record BookingFact(long id, Instant createdAt, BookingStatus status, BigDecimal value, long customerId,
+            long supplierId, String supplierName, String location, long serviceId, String serviceName) {}
+    private record Receipt(long bookingId, long supplierId, String supplierName, String location, Instant paidAt, BigDecimal amount) {}
+    private record Cohort(List<BookingFact> bookings, long paidBookings, BigDecimal revenue, BigDecimal serviceValue) {}
 
     public Insights insights(LocalDate from, LocalDate to, boolean demo, Granularity granularity) {
-        var range = dashboard.range(from, to, demo);
-        long days = range.toDate().toEpochDay() - range.fromDate().toEpochDay() + 1;
-        var previous = dashboard.range(range.fromDate().minusDays(days), range.fromDate().minusDays(1), demo);
-        var statuses = counts(range); var previousStatuses = counts(previous);
-        long total = statuses.values().stream().mapToLong(Long::longValue).sum();
-        long previousTotal = previousStatuses.values().stream().mapToLong(Long::longValue).sum();
-        BigDecimal revenue = revenue(range), previousRevenue = revenue(previous);
-        long active = read.count("select count(s) from Supplier s where s.verificationStatus = :approval and s.owner.status = :active and (:demo = true or s.demoData = false)", range);
-        // Snapshot status history is not recorded, so no historical partner trend can be asserted.
-        long attempts = read.count("select count(p) from PaymentTransaction p join p.booking b where p.createdAt >= :from and p.createdAt < :to and b.customer.role = :customer and (:demo = true or b.supplier.demoData = false)", range);
-        long success = read.count("select count(p) from PaymentTransaction p join p.booking b where p.createdAt >= :from and p.createdAt < :to and b.customer.role = :customer and (:demo = true or b.supplier.demoData = false) and p.status = :paid and p.requiresManualReview = false and p.paidAt is not null", range);
-        var salonAmounts = new HashMap<Long, BigDecimal>();
-        var salonValues = new HashMap<Long, BigDecimal>();
-        read.rows("select b.supplier.id, sum(b.totalAmount) from Booking b where " + COHORT + " and b.status = :completed group by b.supplier.id", range, 10000)
-                .forEach(row -> salonValues.put((Long) row[0], money(row[1])));
-        var top = read.rows("select b.supplier.id, b.supplier.name, l.name, count(b) from Booking b left join b.supplier.location l where " + COHORT + " group by b.supplier.id, b.supplier.name, l.name order by count(b) desc, b.supplier.id asc", range, 5);
-        if (!top.isEmpty()) {
-            @SuppressWarnings("unchecked") List<Object[]> amounts = read.query("select b.supplier.id, sum(p.amount) from PaymentTransaction p join p.booking b where " + COHORT + " and " + PAID + " and b.supplier.id in :ids group by b.supplier.id", range).setParameter("ids", top.stream().map(r -> (Long)r[0]).toList()).getResultList();
-            amounts.forEach(row -> salonAmounts.put((Long) row[0], money(row[1])));
+        Instant asOf = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        LocalDate today = asOf.atZone(ZONE).toLocalDate();
+        LocalDate endDate = to == null ? today : to;
+        var requested = dashboard.range(from == null ? endDate.minusDays(29) : from, endDate, demo);
+        if (requested.fromDate().isAfter(today)) throw new ApiException(HttpStatus.BAD_REQUEST, "REPORTING_PERIOD_NOT_STARTED", "Khoảng thống kê chưa bắt đầu; chọn ngày bắt đầu không sau hôm nay.");
+        var periods = periods(requested.fromDate(), requested.toDate(), asOf);
+        var current = periods.current(); var previous = periods.previous();
+        var combined = new AdminDashboardService.Range(previous.startInclusive().atZone(ZONE).toLocalDate(), requested.toDate(), previous.startInclusive(), current.endExclusive(), demo);
+        // Scalar projections in bulk: no entity traversal, many-attempt join, or request/query per card.
+        var facts = new LinkedHashMap<Long, BookingFact>();
+        read.rows("select b.id, b.createdAt, b.status, b.totalAmount, b.customer.id, b.supplier.id, b.supplier.name, l.name, b.service.id, b.service.name from Booking b left join b.supplier.location l where " + COHORT, combined, Integer.MAX_VALUE)
+                .forEach(r -> facts.put(number(r[0]), new BookingFact(number(r[0]), (Instant) r[1], (BookingStatus) r[2], money(r[3]), number(r[4]), number(r[5]), (String) r[6], (String) r[7], number(r[8]), (String) r[9])));
+        var receipts = read.rows("select b.id, b.supplier.id, b.supplier.name, l.name, p.paidAt, p.amount from PaymentTransaction p join p.booking b left join b.supplier.location l where " + PAYMENT_PERIOD + " and " + PAID, combined, Integer.MAX_VALUE)
+                .stream().map(r -> new Receipt(number(r[0]), number(r[1]), (String) r[2], (String) r[3], (Instant) r[4], money(r[5]))).toList();
+        JsonNode stored = recovery.data();
+        addStoredBookings(facts, stored, combined);
+        Cohort now = cohort(facts.values(), receipts, current), before = cohort(facts.values(), receipts, previous);
+        long currentUsers = users(current.endExclusive(), stored, combined), previousUsers = users(previous.endExclusive(), stored, combined);
+        long active = read.count("select count(s) from Supplier s where s.verificationStatus = :approval and s.owner.status = :active and (:demo = true or s.demoData = false)", combined);
+        var currentRange = new AdminDashboardService.Range(requested.fromDate(), requested.toDate(), current.startInclusive(), current.endExclusive(), demo);
+        long attempts = read.count("select count(p) from PaymentTransaction p join p.booking b where p.createdAt >= :from and p.createdAt < :to and b.customer.role = :customer and (:demo = true or b.supplier.demoData = false)", currentRange);
+        long success = read.count("select count(p) from PaymentTransaction p join p.booking b where p.createdAt >= :from and p.createdAt < :to and b.customer.role = :customer and (:demo = true or b.supplier.demoData = false) and p.status = :paid and p.requiresManualReview = false and p.paidAt is not null and p.paidAt < :to", currentRange);
+        var statuses = new EnumMap<BookingStatus, Long>(BookingStatus.class);
+        now.bookings().forEach(b -> statuses.merge(b.status(), 1L, Long::sum));
+        String scope = "Phạm vi: CUSTOMER, loại đối tác có cờ dữ liệu thử khi includeDemo=false. ";
+        String unavailableCompletion = "Thiếu thời điểm hoàn thành thực tế (Booking không có completedAt/lịch sử chuyển trạng thái). Không dùng createdAt, ngày hẹn hoặc updatedAt thay thế.";
+        var totalMetric = compare(BigDecimal.valueOf(now.bookings().size()), BigDecimal.valueOf(before.bookings().size()), BOOKING,
+                scope + "Nguồn Booking và lịch sử báo cáo đã lưu trong presentation_recovery. Đếm ID duy nhất theo createdAt trong [bắt đầu, kết thúc), mọi trạng thái PENDING/CONFIRMED/COMPLETED/CANCELLED.");
+        return new Insights(requested.response(), granularity, current, previous, ZONE.getId(), asOf, lowBase, smallDenominator,
+                totalMetric,
+                compare(BigDecimal.valueOf(currentUsers), BigDecimal.valueOf(previousUsers), ACCOUNT,
+                        "Tổng tích lũy tài khoản còn lưu (CUSTOMER, SUPPLIER, STAFF, ADMIN) có createdAt < mốc kết thúc mỗi kỳ; gồm hồ sơ báo cáo đã lưu. Không phải người dùng mới trong kỳ; không tái dựng tài khoản đã xóa."),
+                compare(now.revenue(), before.revenue(), VND,
+                        scope + "Nguồn PaymentTransaction, không cộng presentation_recovery. Doanh thu ở đây là tổng thu online xác minh (gross) theo paidAt: PAID đầu tiên mỗi booking, không manual review, paidAt hợp lệ. Chỉ cộng amount đã nhận (cọc 5% không phải 100% giá dịch vụ); không gồm tiền tại salon, không phải hoa hồng. Giữ chính sách sổ thu hiện có: chưa trừ hoàn tiền ngoài app vì không có sổ hoàn tiền/thời điểm hoàn tiền."),
+                unavailable(BigDecimal.valueOf(active), PARTNER, "Snapshot vận hành tại asOf: Supplier VERIFIED và chủ tài khoản ACTIVE; loại demo theo bộ lọc. Không có lịch sử trạng thái nên không so sánh theo kỳ hoặc dùng trạng thái lưu trong báo cáo thay trạng thái vận hành.", CURRENT_SNAPSHOT),
+                rate(now.paidBookings(), now.bookings().size(), before.paidBookings(), before.bookings().size(), scope + "Booking tạo trong kỳ có PAID đầu tiên đã xác minh trước mốc kết thúc kỳ / mọi booking tạo trong cùng kỳ (gồm lịch hủy và lịch sử báo cáo đã lưu). Đếm booking, không đếm lần thử; tiền cọc mô phỏng không được tính. Chênh lệch tính bằng điểm phần trăm.", smallDenominator),
+                unavailable(null, BOOKING, unavailableCompletion, INSUFFICIENT_HISTORY),
+                unavailable(now.serviceValue(), VND, scope + "Giá trị dịch vụ của booking tạo trong khoảng lọc đang có trạng thái COMPLETED tại asOf (snapshot cohort). Không phải doanh thu phát sinh/tiền thực thu trong kỳ; không so sánh quá khứ khi thiếu lịch sử hoàn thành.", INSUFFICIENT_HISTORY),
+                unavailable(null, CUSTOMER, "Khách duy nhất có đơn hoàn thành trong kỳ và ít nhất một đơn hoàn thành sớm hơn. " + unavailableCompletion, INSUFFICIENT_HISTORY),
+                now.bookings().stream().map(BookingFact::customerId).distinct().count(), attempts, success,
+                attempts == 0 ? null : percentage(success, attempts).doubleValue(),
+                trends(now, receipts, current, requested.fromDate(), granularity),
+                Arrays.stream(BookingStatus.values()).map(s -> new StatusCount(s, statuses.getOrDefault(s, 0L))).toList(),
+                topSalons(now, receipts, current), popularServices(now));
+    }
+
+    private Cohort cohort(Collection<BookingFact> all, List<Receipt> receipts, Period period) {
+        var bookings = all.stream().filter(b -> inside(b.createdAt(), period)).toList();
+        var paid = new HashSet<Long>();
+        // Same cutoff for numerator/denominator: never today's payment state for a past cohort.
+        receipts.stream().filter(p -> p.paidAt().isBefore(period.endExclusive())).forEach(p -> paid.add(p.bookingId()));
+        return new Cohort(bookings, bookings.stream().filter(b -> paid.contains(b.id())).count(),
+                receipts.stream().filter(p -> inside(p.paidAt(), period)).map(Receipt::amount).reduce(BigDecimal.ZERO, BigDecimal::add),
+                bookings.stream().filter(b -> b.status() == BookingStatus.COMPLETED).map(BookingFact::value).reduce(BigDecimal.ZERO, BigDecimal::add));
+    }
+
+    private long users(Instant cutoff, JsonNode stored, AdminDashboardService.Range range) {
+        long count = ((Number) read.query("select count(u) from UserAccount u where u.createdAt < :cutoff", range).setParameter("cutoff", cutoff).getSingleResult()).longValue();
+        var ids = new HashSet<Long>();
+        if (stored != null) for (var u : stored.path("users")) if (u.path("id").asLong() >= 8_000_000_000L && instant(u).isBefore(cutoff)) ids.add(u.path("id").asLong());
+        return count + ids.size();
+    }
+
+    private void addStoredBookings(Map<Long, BookingFact> facts, JsonNode stored, AdminDashboardService.Range range) {
+        if (stored == null || stored.path("bookings").isEmpty()) return;
+        var suppliers = new HashMap<Long, Object[]>();
+        read.rows("select s.id, s.name, l.name from Supplier s left join s.location l where (:demo = true or s.demoData = false)", range, Integer.MAX_VALUE).forEach(r -> suppliers.put(number(r[0]), r));
+        for (var b : stored.path("bookings")) {
+            long id = b.path("id").asLong(), supplierId = b.path("supplierId").asLong();
+            if (id < 9_000_000_000L) throw new IllegalStateException("Recovery booking outside reserved partition");
+            var supplier = suppliers.get(supplierId);
+            if (supplier == null) continue;
+            Instant created = instant(b);
+            if (created.isBefore(range.from()) || !created.isBefore(range.to())) continue;
+            if (!b.path("totalAmount").isNumber() || b.path("customerId").asLong() <= 0 || b.path("serviceId").asLong() <= 0) throw new IllegalStateException("Incomplete recovery booking");
+            facts.putIfAbsent(id, new BookingFact(id, created, BookingStatus.valueOf(b.path("status").asText()), money(b.path("totalAmount").decimalValue()), b.path("customerId").asLong(), supplierId, (String) supplier[1], (String) supplier[2], b.path("serviceId").asLong(), b.path("serviceName").asText()));
         }
-        List<TopSalon> salons = top.stream().map(r -> new TopSalon((Long) r[0], (String) r[1], (String) r[2], number(r[3]), salonAmounts.getOrDefault((Long) r[0], BigDecimal.ZERO), salonValues.getOrDefault((Long) r[0], BigDecimal.ZERO))).toList();
-        List<PopularService> services = read.rows("select b.service.id, b.service.name, b.supplier.name, count(b) from Booking b where " + COHORT + " group by b.service.id, b.service.name, b.supplier.name order by count(b) desc, b.service.id asc", range, 10)
-                .stream().map(r -> new PopularService((Long) r[0], (String) r[1], (String) r[2], number(r[3]), percentage(number(r[3]), total))).toList();
-        return new Insights(range.response(), granularity,
-                metric(total, previousTotal, "Booking.createdAt; mọi trạng thái, gồm lịch hủy"),
-                metric(newUsers(range), newUsers(previous), "UserAccount.createdAt; mọi vai trò, gồm tài khoản tổng hợp vì schema không có cờ demo cho user"),
-                metric(revenue, previousRevenue, "Gross online; paidAt; PAID đầu tiên/booking, không cộng cờ manual; chưa trừ hoàn tiền ngoài app"),
-                new Metric(BigDecimal.valueOf(active), null, null, "Snapshot hiện tại: VERIFIED và chủ tài khoản ACTIVE; không có lịch sử phê duyệt"),
-                metric(rate(range, total), rate(previous, previousTotal), "Booking có PAID xác minh đầu tiên / mọi booking tạo trong kỳ, gồm lịch hủy"),
-                metric(statuses.getOrDefault(BookingStatus.COMPLETED, 0L), previousStatuses.getOrDefault(BookingStatus.COMPLETED, 0L), "Trạng thái COMPLETED hiện tại của booking tạo trong kỳ"),
-                metric(completedValue(range), completedValue(previous), "Tổng Booking.totalAmount của đơn COMPLETED tạo trong kỳ; giá trị dịch vụ, không phải tiền online đã thu hay hoa hồng"),
-                metric(returning(range), returning(previous), "Khách có ít nhất hai đơn không hủy được tạo trong kỳ; mỗi khách tính một lần"),
-                read.count("select count(distinct b.customer.id) from Booking b where " + COHORT, range),
-                attempts, success, attempts == 0 ? null : percentage(success, attempts), trends(range, granularity),
-                Arrays.stream(BookingStatus.values()).map(s -> new StatusCount(s, statuses.getOrDefault(s, 0L))).toList(), salons, services);
     }
-    private Map<BookingStatus, Long> counts(AdminDashboardService.Range range) {
-        var values = new EnumMap<BookingStatus, Long>(BookingStatus.class);
-        read.rows("select b.status, count(b) from Booking b where " + COHORT + " group by b.status", range, 4).forEach(r -> values.put((BookingStatus) r[0], number(r[1])));
-        return values;
-    }
-    private long newUsers(AdminDashboardService.Range r) { return read.count("select count(u) from UserAccount u where u.createdAt >= :from and u.createdAt < :to", r); }
-    private BigDecimal revenue(AdminDashboardService.Range r) {
-        return money(read.query("select coalesce(sum(p.amount),0) from PaymentTransaction p join p.booking b where " + PAYMENT_PERIOD + " and " + PAID, r).getSingleResult());
-    }
-    private BigDecimal completedValue(AdminDashboardService.Range range) {
-        return money(read.query("select coalesce(sum(b.totalAmount),0) from Booking b where " + COHORT + " and b.status = :completed", range).getSingleResult());
-    }
-    private long returning(AdminDashboardService.Range range) {
-        return read.rows("select b.customer.id, count(b) from Booking b where " + COHORT + " and b.status <> :cancelled group by b.customer.id having count(b) >= 2", range, Integer.MAX_VALUE).size();
-    }
-    private BigDecimal rate(AdminDashboardService.Range r, long denominator) {
-        long paid = read.count("select count(b) from Booking b where " + COHORT + " and exists (select p.id from PaymentTransaction p where p.booking=b and " + PAID + ")", r);
-        return BigDecimal.valueOf(percentage(paid, denominator));
-    }
-    private List<Trend> trends(AdminDashboardService.Range range, Granularity grain) {
-        Map<LocalDate, Long> bookings = new HashMap<>(); Map<LocalDate, BigDecimal> amounts = new HashMap<>(); Map<LocalDate, BigDecimal> completed = new HashMap<>();
-        // Shift instants by Vietnam's fixed UTC+07 before date grouping; SQL is generated for each dialect.
-        read.rows("select cast(timestampadd(hour,7,b.createdAt) as LocalDate), count(b) from Booking b where " + COHORT + " group by cast(timestampadd(hour,7,b.createdAt) as LocalDate)", range, 366)
-                .forEach(r -> bookings.put((LocalDate) r[0], number(r[1])));
-        read.rows("select cast(timestampadd(hour,7,p.paidAt) as LocalDate), sum(p.amount) from PaymentTransaction p join p.booking b where " + PAYMENT_PERIOD + " and " + PAID + " group by cast(timestampadd(hour,7,p.paidAt) as LocalDate)", range, 366)
-                .forEach(r -> amounts.put((LocalDate) r[0], money(r[1])));
-        read.rows("select cast(timestampadd(hour,7,b.createdAt) as LocalDate), sum(b.totalAmount) from Booking b where " + COHORT + " and b.status = :completed group by cast(timestampadd(hour,7,b.createdAt) as LocalDate)", range, 366)
-                .forEach(r -> completed.put((LocalDate) r[0], money(r[1])));
-        Map<LocalDate, Trend> buckets = new TreeMap<>();
-        for (LocalDate date = range.fromDate(); !date.isAfter(range.toDate()); date = date.plusDays(1)) {
-            LocalDate key = switch (grain) { case DAY -> date; case WEEK -> date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)); case MONTH -> date.withDayOfMonth(1); };
-            if (key.isBefore(range.fromDate())) key = range.fromDate();
-            Trend previous = buckets.getOrDefault(key, new Trend(key, 0, BigDecimal.ZERO, BigDecimal.ZERO));
-            buckets.put(key, new Trend(key, previous.bookings() + bookings.getOrDefault(date, 0L), previous.verifiedOnlineAmount().add(amounts.getOrDefault(date, BigDecimal.ZERO)), previous.completedServiceValue().add(completed.getOrDefault(date, BigDecimal.ZERO))));
+
+    private List<Trend> trends(Cohort cohort, List<Receipt> receipts, Period period, LocalDate from, Granularity grain) {
+        var buckets = new TreeMap<LocalDate, Trend>();
+        LocalDate last = period.endExclusive().minusNanos(1).atZone(ZONE).toLocalDate();
+        for (LocalDate day = from; !day.isAfter(last); day = day.plusDays(1)) {
+            LocalDate key = bucket(day, from, grain); buckets.putIfAbsent(key, new Trend(key, 0, BigDecimal.ZERO, BigDecimal.ZERO));
+        }
+        for (var b : cohort.bookings()) {
+            LocalDate key = bucket(b.createdAt().atZone(ZONE).toLocalDate(), from, grain); var p = buckets.get(key);
+            buckets.put(key, new Trend(key, p.bookings() + 1, p.verifiedOnlineAmount(), p.completedServiceValue().add(b.status() == BookingStatus.COMPLETED ? b.value() : BigDecimal.ZERO)));
+        }
+        for (var r : receipts) if (inside(r.paidAt(), period)) {
+            LocalDate key = bucket(r.paidAt().atZone(ZONE).toLocalDate(), from, grain); var p = buckets.get(key);
+            buckets.put(key, new Trend(key, p.bookings(), p.verifiedOnlineAmount().add(r.amount()), p.completedServiceValue()));
         }
         return List.copyOf(buckets.values());
     }
+    private List<TopSalon> topSalons(Cohort cohort, List<Receipt> receipts, Period period) {
+        var salons = new HashMap<Long, TopSalon>();
+        for (var b : cohort.bookings()) {
+            var p = salons.getOrDefault(b.supplierId(), new TopSalon(b.supplierId(), b.supplierName(), b.location(), 0, BigDecimal.ZERO, BigDecimal.ZERO));
+            salons.put(b.supplierId(), new TopSalon(p.id(), p.name(), p.location(), p.bookings() + 1, p.verifiedOnlineAmount(), p.completedServiceValue().add(b.status() == BookingStatus.COMPLETED ? b.value() : BigDecimal.ZERO)));
+        }
+        // Same receipt period as the revenue card/chart, not the booking-created cohort.
+        for (var r : receipts) if (inside(r.paidAt(), period)) {
+            var p = salons.getOrDefault(r.supplierId(), new TopSalon(r.supplierId(), r.supplierName(), r.location(), 0, BigDecimal.ZERO, BigDecimal.ZERO));
+            salons.put(p.id(), new TopSalon(p.id(), p.name(), p.location(), p.bookings(), p.verifiedOnlineAmount().add(r.amount()), p.completedServiceValue()));
+        }
+        return salons.values().stream().sorted(Comparator.comparingLong(TopSalon::bookings).reversed().thenComparingLong(TopSalon::id)).limit(5).toList();
+    }
+    private List<PopularService> popularServices(Cohort cohort) {
+        var counts = new HashMap<Long, PopularService>();
+        for (var b : cohort.bookings()) { var p = counts.getOrDefault(b.serviceId(), new PopularService(b.serviceId(), b.serviceName(), b.supplierName(), 0, 0)); counts.put(b.serviceId(), new PopularService(p.id(), p.name(), p.supplierName(), p.bookings() + 1, 0)); }
+        return counts.values().stream().sorted(Comparator.comparingLong(PopularService::bookings).reversed().thenComparingLong(PopularService::id)).limit(10)
+                .map(p -> new PopularService(p.id(), p.name(), p.supplierName(), p.bookings(), percentage(p.bookings(), cohort.bookings().size()).doubleValue())).toList();
+    }
+    private Metric compare(BigDecimal value, BigDecimal previous, MetricUnit unit, String definition) { return metric(value, previous, unit, definition, lowBase); }
+    private static LocalDate bucket(LocalDate day, LocalDate from, Granularity grain) {
+        LocalDate key = switch (grain) { case DAY -> day; case WEEK -> day.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)); case MONTH -> day.withDayOfMonth(1); };
+        return key.isBefore(from) ? from : key;
+    }
+    private static boolean inside(Instant at, Period p) { return !at.isBefore(p.startInclusive()) && at.isBefore(p.endExclusive()); }
+    private static Instant instant(JsonNode node) { return Instant.parse(node.path("createdAt").asText()); }
     private static long number(Object value) { return ((Number) value).longValue(); }
     private static BigDecimal money(Object value) { return value == null ? BigDecimal.ZERO : new BigDecimal(value.toString()); }
-    private static double percentage(long value, long total) { return total == 0 ? 0 : BigDecimal.valueOf(value).multiply(BigDecimal.valueOf(100)).divide(BigDecimal.valueOf(total), 1, RoundingMode.HALF_UP).doubleValue(); }
-    private static Metric metric(long value, long previous, String basis) { return metric(BigDecimal.valueOf(value), BigDecimal.valueOf(previous), basis); }
-    private static Metric metric(BigDecimal value, BigDecimal previous, String basis) {
-        return new Metric(value, previous, previous.signum() == 0 ? null : value.subtract(previous).multiply(BigDecimal.valueOf(100)).divide(previous, 1, RoundingMode.HALF_UP).doubleValue(), basis);
-    }
 }
