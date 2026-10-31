@@ -14,12 +14,15 @@ import java.util.List;
 public class PresentationRecoveryController {
     private final PresentationRecoveryService recovery;
     private final CurrentAccountService accounts;
-    public PresentationRecoveryController(PresentationRecoveryService recovery, CurrentAccountService accounts) { this.recovery = recovery; this.accounts = accounts; }
+    private final com.example.backend.service.PresentationDisplayProfiles profiles;
+    public PresentationRecoveryController(PresentationRecoveryService recovery, CurrentAccountService accounts, com.example.backend.service.PresentationDisplayProfiles profiles) { this.recovery = recovery; this.accounts = accounts; this.profiles = profiles; }
     @GetMapping("/admin/presentation") @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<JsonNode> admin() {
         var data = recovery.data();
         return data == null ? ResponseEntity.noContent().build() : ResponseEntity.ok().header("Cache-Control", "private, no-store").body(data);
     }
+    @GetMapping("/admin/presentation/profiles") @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<JsonNode> profiles() { return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(profiles.metadata()); }
     @GetMapping("/supplier/presentation-bookings") @PreAuthorize("hasRole('SUPPLIER')")
     public List<JsonNode> supplier(Authentication auth) { return recovery.supplierBookings(accounts.require(auth)); }
 }

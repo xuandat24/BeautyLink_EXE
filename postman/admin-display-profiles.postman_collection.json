@@ -1,0 +1,122 @@
+{
+  "info": {
+    "name": "BeautyLink Admin display profiles — isolated read-only contract",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:18081/api"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!/^http:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?\\/api$/.test(pm.variables.get('baseUrl'))) throw new Error('Isolated loopback target only');"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Unauthenticated profile map denied",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/v1/admin/presentation/profiles"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('401 requires a real session',()=>pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Persisted Admin profile map",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/v1/admin/presentation/profiles"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Admin authorized',()=>pm.response.to.have.status(200));",
+              "pm.test('Versioned unique safe display aliases',()=>{const d=pm.response.json();pm.expect(d.profileVersion).to.eql(1);const rows=d.displayProfiles;pm.expect(rows.length).to.be.above(0);const keys=rows.map(p=>p.email.toLowerCase().split('@')[0].split('+')[0].replace(/\\./g,''));pm.expect(new Set(keys).size).to.eql(rows.length);for(const p of rows){pm.expect(p.email).to.match(/^[a-z0-9]+@gmail\\.com$/);pm.expect(['REPORT','SEED_CUSTOMER','SEED_PARTNER']).to.include(p.source);}pm.environment.set('seedAccountId',rows.find(p=>p.source==='SEED_CUSTOMER').id);});",
+              "pm.test('Private response',()=>pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Whole-result sorted second page",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/v1/admin/users?role=CUSTOMER&page=1&size=20"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Second page metadata',()=>{pm.response.to.have.status(200);const d=pm.response.json();pm.expect(d.page).to.eql(1);pm.expect(d.size).to.eql(20);pm.expect(d.content.length).to.eql(20);pm.expect(new Set(d.content.map(u=>u.id)).size).to.eql(20);});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Raw editor contact is not a display alias",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/v1/admin/users/{{seedAccountId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Editor retains operational email',()=>{pm.response.to.have.status(200);pm.expect(pm.response.json().email).to.match(/@seed\\.beautylink\\.test$/);});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

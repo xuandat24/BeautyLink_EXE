@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
+import { alphabetic } from '../src/lib/adminDisplayProfiles';
 import { selectReturningPresentationCustomers } from '../src/lib/returningPresentationCustomers';
 import { presentationPage } from '../src/lib/presentationAdminData';
 import { adminV2Api } from '../src/services/adminApi';
@@ -30,7 +31,7 @@ test('returning search and pagination operate on the same selected71, not differ
   adminV2Api.users=async p=>{assert.equal(p.query,undefined);assert.equal(p.role,undefined);requests.push(p.page);return presentationPage(users,p.page,p.size);};
   try {
     const all=[];for(let page=0;page<4;page++){const r=await adminV2Api.returningUsers({page,size:20});assert.equal(r.totalElements,71);assert.equal(r.totalPages,4);all.push(...r.content);}
-    assert.deepEqual(all,selectReturningPresentationCustomers(users));assert.deepEqual(requests.slice(0,2),[0,1]);
+    assert.deepEqual(all,alphabetic(selectReturningPresentationCustomers(users), u=>u.fullName));assert.deepEqual(requests.slice(0,2),[0,1]);
     assert.equal((await adminV2Api.returningUsers({query:'customer115@',page:0,size:20})).content[0].id,115);
     assert.equal((await adminV2Api.returningUsers({query:'customer200@',page:0,size:20})).totalElements,0);
   }finally{adminV2Api.users=original;}
@@ -43,12 +44,12 @@ test('returning tab opens directly, lists71 over4 pages, navigates to existing a
     await act(async()=>env.root.render(React.createElement(AdminModulesPage,{section:'customers',initialReturning:true,adminName:'Admin',onNavigate(){},onHome(){},onLogout(){},onOpenAccount:id=>{selected=id;}})));
     assert.equal(button('Khách hàng quay lại').getAttribute('aria-pressed'),'true');assert.match(document.body.textContent!,/71 kết quả/);assert.equal(document.querySelectorAll('tbody tr').length,20);
     assert.equal(document.querySelector('[aria-label="Lọc vai trò"]'),null);
-    await act(async()=>document.querySelector<HTMLButtonElement>('tbody button')!.click());assert.equal(selected,115);
+    await act(async()=>document.querySelector<HTMLButtonElement>('tbody button')!.click());assert.equal(selected,43);
     for(let i=0;i<3;i++)await act(async()=>button('Trang sau').click());
     assert.equal(document.querySelectorAll('tbody tr').length,11);assert.equal(button('Trang sau').disabled,true);
-    await act(async()=>button('Tất cả tài khoản').click());assert.match(document.body.textContent!,/200 kết quả/);assert.equal(document.querySelector('tbody tr td')!.textContent,'Khách 200');
+    await act(async()=>button('Tất cả tài khoản').click());assert.match(document.body.textContent!,/200 kết quả/);assert.equal(document.querySelector('tbody tr td:nth-child(2)')!.textContent,'Khách 200');
     assert.ok(document.querySelector('[aria-label="Lọc vai trò"]'));
-    await act(async()=>button('Khách hàng quay lại').click());assert.equal(document.querySelector('tbody tr td')!.textContent,'Khách 115');
+    await act(async()=>button('Khách hàng quay lại').click());assert.equal(document.querySelector('tbody tr td:nth-child(2)')!.textContent,'Khách 43');
   }finally{adminV2Api.users=original;await act(async()=>env.root.unmount());env.dom.window.close();}
 });
 test('dashboard returning detail passes returning tab through the existing admin navigation',async()=>{

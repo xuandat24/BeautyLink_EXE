@@ -35,7 +35,7 @@ public final class AdminV2Dtos {
     public record UserRow(Long id, String fullName, String email, Role role, AccountStatus status, Instant createdAt) {}
     public record SalonRow(Long id, String name, String ownerName, String ownerEmail, String businessType,
             String location, String address, VerificationStatus approvalStatus, boolean active,
-            long serviceCount, long practitionerCount, long bookingCount) {}
+            long serviceCount, long practitionerCount, long bookingCount, Long ownerUserId) {}
     public record ServiceRow(Long id, String name, BigDecimal price, int durationMinutes, boolean active) {}
     public record PractitionerRow(Long id, String name, String specialty, boolean active) {}
     public record ScheduleRow(Long practitionerId, DayOfWeek day, LocalTime start, LocalTime end,

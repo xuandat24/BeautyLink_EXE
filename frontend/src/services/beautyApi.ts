@@ -39,7 +39,7 @@ import {
   VOUCHERS,
 } from '../data/mockData';
 import { cache } from '../lib/cache';
-import { presentationAccount, presentationEnabled, presentationReviewAllocation, presentationService, type PresentationReviewAllocation } from '../lib/presentationData';
+import { presentationEnabled, presentationReviewAllocation, presentationService, type PresentationReviewAllocation } from '../lib/presentationData';
 import { mergePersistentPresentationData, isPresentationBooking, isPresentationUser, mergePresentationBookings, presentationBookings, presentationCustomerCsv, presentationCustomers, presentationPage, type PresentationAdminData } from '../lib/presentationAdminData';
 import type { AdminUserRow } from '../types/adminV2';
 import { getOptimizedImageUrl } from '../utils/imageOptimizer';
@@ -190,12 +190,13 @@ export async function adminPresentationData(range?: { from?: string; to?: string
     adminPresentationPromise = (async () => {
       const response = await apiClient.get<PresentationAdminData>('/v1/admin/presentation');
       if (response.status === 204 || !response.data?.bookings) return null;
-      const [users, customers, bookings] = await Promise.all([
+      const [users, customers, bookings, salons] = await Promise.all([
         readAdminPages<AdminUserRow>('/v1/admin/users'),
         apiClient.get<AdminCustomer[]>('/v1/admin/customers'),
         readAdminPages<AdminBooking>('/v1/admin/bookings', { from: adminPresentationFrom, to: adminPresentationTo, includeDemo: false }),
+        readAdminPages<import('../types/adminV2').AdminSalonRow>('/v1/admin/salons', { includeDemo: false }),
       ]);
-      return mergePersistentPresentationData(response.data, { users, customers: customers.data, bookings });
+      return mergePersistentPresentationData(response.data, { users, customers: customers.data, bookings, salons });
     })();
   }
   const pending = adminPresentationPromise;
@@ -1049,7 +1050,7 @@ export const beautyApi = {
   async adminCustomers(params?: { from?: string; to?: string; bookedOnly?: boolean; includeDemo?: boolean }): Promise<AdminCustomer[]> {
     const customers = await unwrap<AdminCustomer[]>(apiClient.get('/v1/admin/customers', { params }));
     const snapshot = await adminPresentationData(params);
-    return snapshot ? presentationCustomers(snapshot, params) : customers.map(presentationAccount);
+    return snapshot ? presentationCustomers(snapshot, params) : customers;
   },
 
   async exportAdminCustomers(): Promise<Blob> {
@@ -1114,7 +1115,9 @@ export const beautyApi = {
       const row = (await adminPresentationData())?.bookings.find(booking => booking.id === id);
       if (row) return row;
     }
-    return unwrap(apiClient.get(`/v1/admin/bookings/${id}`));
+    const row: AdminBooking = await unwrap(apiClient.get(`/v1/admin/bookings/${id}`));
+    const snapshot = await adminPresentationData();
+    return { ...row, customerName: snapshot?.users.find(user => user.id === row.customerId)?.fullName ?? row.customerName };
   },
 
   async adminCustomerBookings(customerId: number, page = 0): Promise<AdminPage<AdminBooking>> {

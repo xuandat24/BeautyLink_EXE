@@ -11,6 +11,8 @@ import {
 import { AdminBooking, AdminCustomer } from '../types';
 import { beautyApi, getAccessToken, getApiErrorMessage } from '../services/beautyApi';
 import { AdminStatusBadge } from './admin/AdminStatusBadge';
+import { alphabetic } from '../lib/adminDisplayProfiles';
+import { presentationSearch, customerRowsCsv } from '../lib/presentationAdminData';
 import { adminMoney } from './admin/AdminOverview';
 import { AdminNav, type AdminSection } from './admin/AdminNav';
 
@@ -26,6 +28,7 @@ interface AdminCustomersPageProps {
 export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, onNavigate, onLogout, adminName, bookedRange, embedded = false }) => {
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0); const pageSize = 20;
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
@@ -40,7 +43,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
     setError('');
     try {
       const rows = await beautyApi.adminCustomers(bookedRange ? { ...bookedRange, bookedOnly: true, includeDemo: false } : { includeDemo: false });
-      if (request === requestSequence.current && token === getAccessToken()) setCustomers(rows);
+      if (request === requestSequence.current && token === getAccessToken()) { setCustomers(rows); setPage(0); }
     } catch (err) {
       if (request === requestSequence.current && token === getAccessToken()) setError(getApiErrorMessage(err, 'Không thể tải danh sách tài khoản khách hàng.'));
     } finally {
@@ -61,23 +64,20 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
     finally { if (request === historySequence.current && token === getAccessToken()) setHistoryLoading(false); }
   };
 
-  const visibleCustomers = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase('vi-VN');
-    return customers
-      .map((customer, index) => ({ customer, ordinal: index + 1 }))
-      .filter(({ customer }) => {
-        if (!normalizedQuery) return true;
-        return [customer.fullName, customer.phone, customer.email]
-          .some((value) => value?.toLocaleLowerCase('vi-VN').includes(normalizedQuery));
-      });
+  const filteredCustomers = useMemo(() => {
+    return alphabetic(customers.filter(customer => presentationSearch(`${customer.fullName} ${customer.phone} ${customer.email}`, query)), customer => customer.fullName)
+      .map((customer, index) => ({ customer, ordinal: index + 1 }));
   }, [customers, query]);
+
+  const visibleCustomers = filteredCustomers.slice(page * pageSize, (page + 1) * pageSize);
+  const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / pageSize));
 
   const handleExport = async () => {
     const token = getAccessToken();
     setExporting(true);
     setError('');
     try {
-      const blob = await beautyApi.exportAdminCustomers();
+      const blob = customerRowsCsv(filteredCustomers.map(row => row.customer));
       if (token !== getAccessToken()) return;
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
@@ -115,7 +115,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#be185d] px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-pink-900/15 transition hover:bg-[#9d174d] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {exporting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-            Tải toàn bộ dữ liệu (.CSV)
+            Xuất kết quả đang lọc (.CSV)
           </button>
         </div>
 
@@ -136,7 +136,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
                 <span className="sr-only">Tìm khách hàng</span>
                 <input
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => { setQuery(event.target.value); setPage(0); }}
                   placeholder="Tìm theo tên, điện thoại, email"
                   className="min-h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-pink-400 focus:bg-white focus:ring-2 focus:ring-pink-100"
                 />
@@ -196,7 +196,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink-100 text-sm font-black text-pink-700">
-                            {customer.fullName.trim().charAt(0).toLocaleUpperCase('vi-VN') || '?'}
+                            {customer.fullName?.trim().charAt(0).toLocaleUpperCase('vi-VN') || '?'}
                           </span>
                           <span className="text-sm font-black text-slate-800">{customer.fullName}</span>
                         </div>
@@ -215,6 +215,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
               </table>
             </div>
           )}
+          {!loading && filteredCustomers.length > 0 && <div className="flex items-center justify-end gap-3 border-t border-slate-100 p-4 text-sm"><span>{filteredCustomers.length} kết quả · {page + 1}/{totalPages}</span><button type="button" className="admin-action" disabled={page === 0} onClick={() => setPage(value => value - 1)}>Trang trước</button><button type="button" className="admin-action" disabled={page + 1 >= totalPages} onClick={() => setPage(value => value + 1)}>Trang sau</button></div>}
         </section>
 
         {error && (

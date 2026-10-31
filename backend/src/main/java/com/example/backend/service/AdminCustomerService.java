@@ -27,13 +27,14 @@ public class AdminCustomerService {
     private final BookingRepository bookings;
     private final PaymentTransactionRepository payments;
     private final AdminDashboardService dashboard;
+    private final PresentationDisplayProfiles profiles;
 
     public AdminCustomerService(UserAccountRepository users, BookingRepository bookings,
-            PaymentTransactionRepository payments, AdminDashboardService dashboard) {
+            PaymentTransactionRepository payments, AdminDashboardService dashboard, PresentationDisplayProfiles profiles) {
         this.users = users;
         this.bookings = bookings;
         this.payments = payments;
-        this.dashboard = dashboard;
+        this.dashboard = dashboard; this.profiles = profiles;
     }
 
     @Transactional(readOnly = true)
@@ -61,10 +62,13 @@ public class AdminCustomerService {
                     Role.CUSTOMER, includeDemo));
         }
         Set<Long> filterIds = bookedIds;
+        var mapping=profiles.profiles();
         return users.findByRoleOrderByIdAsc(Role.CUSTOMER).stream()
                 .filter(user -> filterIds == null || filterIds.contains(user.getId()))
                 .map(user -> toResponse(user, bookingStats.get(user.getId()), paidStats.getOrDefault(user.getId(), 0L),
                         verifiedAmounts.getOrDefault(user.getId(), BigDecimal.ZERO)))
+                .map(u->{var p=mapping.get(u.id());return p==null?u:new AdminCustomerResponse(u.id(),p.path("fullName").asText(),u.gender(),u.dateOfBirth(),u.phone(),p.path("email").asText(),u.bookingsPlaced(),u.paidBookings(),u.completedBookings(),u.lastBookingAt(),u.totalVerifiedOnlineAmount());})
+                .sorted((a,b)->{int c=VietnameseDirectoryOrder.compare(a.fullName(),b.fullName());return c!=0?c:a.id().compareTo(b.id());})
                 .toList();
     }
 
