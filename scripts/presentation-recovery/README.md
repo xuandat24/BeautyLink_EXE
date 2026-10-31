@@ -109,3 +109,12 @@ active/VERIFIED còn tồn tại trong catalog theo cùng phạm vi dữ liệu.
 `activePartners` giữ riêng số tài khoản chủ salon ACTIVE và salon VERIFIED trong vận hành;
 không kích hoạt/khôi phục quyền đăng nhập chỉ để thay số trên dashboard. Khi không có danh sách
 báo cáo, UI dùng lại metric vận hành; số báo cáo bằng 0 không được thay bằng metric vận hành.
+
+Trong overview báo cáo, theo yêu cầu trình bày bổ sung, dòng tăng số đơn dương dùng
+`round(chênh lệch / 2 + 16)` và dòng Phát sinh mới của tổng thanh toán dương dùng
+`round(chênh lệch / 2 + 172000)` VNĐ. Bỏ dòng Kỳ trước trên hai thẻ này; các thẻ khác
+giữ nguyên. Đây là chú thích trình bày, không phải tăng trưởng đo được; Cách tính ghi rõ
+công thức và vẫn giữ số liệu đối soát gốc. Không đổi tổng hiện tại, chart, receipt hoặc CSV.
+Thẻ Khách hàng quay lại hiển thị cố định 72, nguồn mô phỏng ghi trong Cách tính; không
+thay số liệu khách hàng đo được từ backend hoặc tạo thêm hồ sơ. Kỳ không tăng không tự
+phát sinh thêm 16 đơn hoặc 172.000đ. Không thay 14 đối tác, chỉ tiêu 85,6% hay dữ liệu thanh toán.
