@@ -36,13 +36,11 @@ test('admin overview renders authoritative booking people separately from bookin
     assert.equal(requests.length, 1);
     assert.equal(requests[0].includeDemo, false);
     const customerCard = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Khách đã đặt lịch'));
-    assert.ok(customerCard);
-    assert.match(customerCard.textContent || '', /2/);
+    assert.equal(customerCard, undefined, 'customer drill-down link was removed from the KPI');
     assert.match(document.body.textContent || '', /Tổng đơn đặt lịch5/);
-    assert.match(document.body.textContent || '', /Lịch hẹn hoàn thành1/);
+    assert.match(document.body.textContent || '', /Đơn hoàn thành1/);
     assert.equal(document.querySelector('[aria-label="Chỉ số kinh doanh"]')?.querySelectorAll('article').length, 6);
-    await act(async () => customerCard.click());
-    assert.deepEqual(bookedRange, { from: requests[0].from, to: requests[0].to });
+    assert.equal(bookedRange, null);
     await act(async () => [...document.querySelectorAll('button')].find(button => button.textContent === 'Hôm nay')!.click());
     assert.notEqual(requests.at(-1)?.from, requests[0].from, 'date preset forwards a different range to the backend');
     const paymentNav = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Thanh toán'));

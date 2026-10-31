@@ -1,3 +1,4 @@
+// Historical fixture helpers only; runtime Admin APIs now return database records unchanged.
 import type { AdminBooking, AdminCustomer, AdminPage, BackendService } from '../types';
 import type { AdminAccountDetail, AdminInsights, AdminSalonRow, AdminUserRow } from '../types/adminV2';
 import { presentationEmail, presentationReport } from './presentationData';

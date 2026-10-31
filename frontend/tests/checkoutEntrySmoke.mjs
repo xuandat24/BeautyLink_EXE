@@ -9,8 +9,25 @@ page.on('pageerror', error => errors.push(error.message));
 page.on('response', response => { if (response.url().includes('/api/') && response.status() >= 500) errors.push(`API ${response.status()}`); });
 page.on('request', request => { const path=new URL(request.url()).pathname; if (request.method()==='GET' && /\/services\/\d+\/capacity$/.test(path)) capacityPaths.push(path); if (request.method() === 'POST' && /\/api\/v1\/(bookings$|payments\/payos\/bookings\/)/.test(new URL(request.url()).pathname)) writes++; });
 const slots = () => page.locator('button').evaluateAll(nodes => nodes.filter(node => /^\d{2}:\d{2}/.test(node.textContent.trim())).map(node => ({ label: node.textContent.trim(), disabled: node.disabled })));
+let workingDate;
 async function schedule() {
-  await page.locator('input[type=date]').waitFor();
+  const dateInput = page.locator('input[type=date]');
+  await dateInput.waitFor();
+  if (!capacityPaths.length) await page.waitForRequest(request => /\/services\/\d+\/capacity$/.test(new URL(request.url()).pathname));
+  if (!workingDate) {
+    // Tomorrow can be a closed Sunday; use actual server capacity, not a weekday assumption.
+    workingDate = await page.evaluate(async ({ path, first }) => {
+      for (let offset = 0; offset < 7; offset++) {
+        const date = new Date(`${first}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + offset);
+        const day = date.toISOString().slice(0, 10);
+        const response = await fetch(`${path}?date=${day}`);
+        if (response.ok && (await response.json()).slots.some(slot => slot.availablePractitioners > 0)) return day;
+      }
+      return null;
+    }, { path: capacityPaths.at(-1), first: await dateInput.inputValue() });
+    assert.ok(workingDate, 'seeded service must have capacity within the next working week');
+  }
+  if (await dateInput.inputValue() !== workingDate) await dateInput.fill(workingDate);
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => /^\d{2}:\d{2}/.test(button.textContent.trim()) && !button.disabled));
   assert.equal(await page.getByRole('dialog').count(), 0, 'direct checkout must not open the obsolete booking modal');
   return slots();

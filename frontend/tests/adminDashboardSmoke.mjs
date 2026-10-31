@@ -49,7 +49,7 @@ try {
       }
       const cards = page.getByRole('region', { name: 'Chỉ số kinh doanh' });
       // Named section is exposed as a region by its aria-label.
-      assert.equal(await cards.locator('article').count(), 6);
+      assert.equal(await cards.locator('article').count(), 7);
       const expectedColumns = width >= 1800 ? 6 : width >= 1280 ? 3 : width >= 640 ? 2 : 1;
       assert.equal(await cards.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length), expectedColumns, `${width}: responsive KPI columns`);
       assert.ok((await cards.locator('article').first().textContent()).includes(String(data.totalBookings.value)));
@@ -69,13 +69,13 @@ try {
         assert.equal(await page.getByRole('button', { name: label, exact: true }).getAttribute('aria-pressed'), 'true');
       }
       assert.equal(unrelatedCalls(), beforeGrain, 'chart grain never refetches payment summary/recent bookings'); assert.equal(documentLoads, 1, 'SPA controls do not reload document');
-      const point = page.locator('circle[aria-label^="Thu online"]').first(); await point.focus();
+      const point = page.locator(`circle[aria-label^="${data.completedServiceValue ? 'Giá trị dịch vụ' : 'Thu online'}"]`).first(); await point.focus();
       assert.equal(await point.evaluate(el => document.activeElement === el), true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `${width}: whole page must not overflow`);
       assert.equal(await cards.locator('article').evaluateAll(nodes => nodes.every(n => n.getBoundingClientRect().height < 250)), true, 'KPI cards remain compact');
       await capture('');
       // Deliberate UI-only stress response in this isolated test: not accounting evidence.
-      await page.route('**/api/v1/admin/dashboard/insights?*', async route => { const response = await route.fetch(); const json = await response.json(); json.revenue.value = 1234567890123; await route.fulfill({ response, json }); }, { times: 1 });
+      await page.route('**/api/v1/admin/dashboard/insights?*', async route => { const response = await route.fetch(); const json = await response.json(); (json.completedServiceValue ?? json.revenue).value = 1234567890123; await route.fulfill({ response, json }); }, { times: 1 });
       const stress = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?'));
       await page.getByRole('button', { name: 'Làm mới', exact: true }).click(); await stress;
       const formatted = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(1234567890123);
@@ -101,7 +101,7 @@ try {
       await page.getByRole('heading', { name: 'Lượt thanh toán & đối soát', exact: true }).waitFor();
       await page.getByRole('button', { name: '← Danh sách salon', exact: true }).click(); await page.getByRole('button', { name: 'Xem chi tiết', exact: true }).first().waitFor(); await capture('salons');
       await navigate('Tổng quan'); await page.getByTestId('admin-overview').waitFor();
-      await page.getByRole('button', { name: 'Xem chi tiết Lịch hẹn hoàn thành', exact: true }).click();
+      await page.getByRole('button', { name: 'Xem chi tiết Đơn hoàn thành', exact: true }).click();
       await page.getByLabel('Trạng thái lịch', { exact: true }).waitFor(); assert.equal(await page.getByLabel('Trạng thái lịch', { exact: true }).inputValue(), 'COMPLETED');
       await page.goBack(); await page.getByTestId('admin-overview').waitFor();
       await page.goForward(); await page.getByLabel('Trạng thái lịch', { exact: true }).waitFor();
