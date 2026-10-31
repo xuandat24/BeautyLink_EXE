@@ -119,6 +119,13 @@ public class BookingReviewSmokeServer {
                 b.setTotalAmount(offering.getPrice()); b.setStatus(BookingStatus.PENDING); b.setPaymentStatus(PaymentStatus.UNPAID); bookings.save(b);
             }
             if (System.getenv("SMOKE_REPORT_PAYMENTS") != null) {
+                var password=users.findByPhone("0900000001").orElseThrow().getPasswordHash();
+                for(int i=0;i<180;i++) {
+                    var returning=new UserAccount();returning.setFullName("Khách lịch sử "+i);returning.setEmail("returning-"+i+"@example.com");
+                    returning.setPhone("092"+String.format("%07d",i));returning.setPasswordHash(password);returning.setRole(Role.CUSTOMER);
+                    users.save(returning);
+                }
+                users.flush();
                 var json=context.getBean(com.fasterxml.jackson.databind.ObjectMapper.class);
                 var original=json.createObjectNode().put("version",1);var history=original.putObject("data");
                 history.putArray("users");history.set("salons",json.valueToTree(context.getBean(com.example.backend.service.AdminDirectoryService.class).salons(null,false,0,100).content()));history.putArray("bookings");history.putArray("originalCustomers");

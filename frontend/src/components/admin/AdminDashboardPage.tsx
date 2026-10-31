@@ -16,7 +16,7 @@ type DashboardMode = 'overview' | 'bookings' | 'payments';
 interface AdminDashboardPageProps {
   mode: DashboardMode;
   adminName: string;
-  onNavigate: (section: AdminSection) => void;
+  onNavigate: (section: AdminSection, query?: string) => void;
   onHome: () => void;
   onLogout: () => void;
   onOpenBookedCustomers: (from: string, to: string) => void;
@@ -159,7 +159,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
       {error && <div role="alert" className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700"><span>{error}</span><button onClick={() => void load()} className="underline">Thử lại</button></div>}
       {loading && !error && mode !== 'overview' && !bookingPage && !payments ? <div className="grid min-h-80 place-items-center"><div className="text-center text-sm font-bold text-slate-500"><Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-pink-600" />Đang tổng hợp dữ liệu...</div></div> : null}
 
-      {!error && mode === 'overview' && <AdminOverview params={requestParams} refreshKey={overviewRefresh} onNavigate={(section, bookingStatus) => { if (section === 'bookings') { setStatus(bookingStatus ?? ''); setPaymentStatus(''); setQuery(''); setPage(0); } onNavigate(section); }} renderBookings={rows => <BookingTable title="Đơn đặt lịch gần đây" bookings={rows} onSelect={setSelected} onViewAll={() => { setStatus(''); setPaymentStatus(''); setPage(0); setQuery(''); onNavigate('bookings'); }} />} onSalon={id => onOpenSalon?.(id, false)} onBookedCustomers={() => onOpenBookedCustomers(from, to)} />}
+      {!error && mode === 'overview' && <AdminOverview params={requestParams} refreshKey={overviewRefresh} onNavigate={(section, bookingStatus, customerTab) => { if (section === 'bookings') { setStatus(bookingStatus ?? ''); setPaymentStatus(''); setQuery(''); setPage(0); } onNavigate(section, customerTab); }} renderBookings={rows => <BookingTable title="Đơn đặt lịch gần đây" bookings={rows} onSelect={setSelected} onViewAll={() => { setStatus(''); setPaymentStatus(''); setPage(0); setQuery(''); onNavigate('bookings'); }} />} onSalon={id => onOpenSalon?.(id, false)} onBookedCustomers={() => onOpenBookedCustomers(from, to)} />}
       {mode === 'bookings' && <>
         <section className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-3">
           <label className="relative md:col-span-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Mã lịch, khách, salon, dịch vụ" className="min-h-10 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm" /></label>
