@@ -103,3 +103,9 @@ CSV và API. Bộ lọc vẫn tính từ dữ liệu, không hardcode mục tiê
 39.640.000đ được ghi rõ không phải tiền thu online. Biên nhận PayOS/CSV thật đặt trong
 phần đối soát riêng; không biến 144 receipt mô phỏng thành giao dịch PayOS hoặc cộng lại
 metadata cọc phục hồi cũ. Thay đổi này không chạy seed hoặc ghi dữ liệu production.
+
+Thẻ Đối tác hoạt động dùng `reportActivePartners` khi có danh sách salon báo cáo: đếm ID duy nhất
+active/VERIFIED còn tồn tại trong catalog theo cùng phạm vi dữ liệu. Bộ hiện tại có 14 salon.
+`activePartners` giữ riêng số tài khoản chủ salon ACTIVE và salon VERIFIED trong vận hành;
+không kích hoạt/khôi phục quyền đăng nhập chỉ để thay số trên dashboard. Khi không có danh sách
+báo cáo, UI dùng lại metric vận hành; số báo cáo bằng 0 không được thay bằng metric vận hành.

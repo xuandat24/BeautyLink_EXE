@@ -30,7 +30,7 @@ public final class AdminV2Dtos {
             Period currentPeriod, Period previousPeriod, String timezone, Instant asOf,
             int lowBaseThreshold, int smallRateDenominator,
             Metric totalBookings, Metric users, Metric revenue, Metric activePartners, Metric onlinePaymentRate,
-            Metric completedBookings, Metric completedServiceValue, Metric returningCustomers, Metric reportPayments, Metric reportOnlinePaymentRate, Metric completedBookingSnapshot, long bookingCustomers, long paymentAttempts, long successfulAttempts, Double paymentAttemptSuccessRate,
+            Metric completedBookings, Metric completedServiceValue, Metric returningCustomers, Metric reportPayments, Metric reportOnlinePaymentRate, Metric completedBookingSnapshot, Metric reportActivePartners, long bookingCustomers, long paymentAttempts, long successfulAttempts, Double paymentAttemptSuccessRate,
             List<Trend> trends, List<StatusCount> statuses, List<TopSalon> topSalons, List<PopularService> popularServices) {}
     public record UserRow(Long id, String fullName, String email, Role role, AccountStatus status, Instant createdAt) {}
     public record SalonRow(Long id, String name, String ownerName, String ownerEmail, String businessType,

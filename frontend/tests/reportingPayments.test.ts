@@ -33,6 +33,26 @@ test('report money rounds visibly without replacing precise receipts or ignoring
   assert.match(roundedReportMoney(210000), /^210\.000/);
 });
 
+test('partner card uses the report directory count, including zero, and falls back only without a report', async () => {
+  const env=environment(); const data=insightsFixture(); const destinations: string[]=[];
+  const original={insights:adminV2Api.insights,payments:beautyApi.adminPaymentSummary,bookings:beautyApi.adminBookings};
+  data.activePartners=metricFixture(4,'PARTNER'); data.reportActivePartners=metricFixture(14,'PARTNER');
+  adminV2Api.insights=async()=>data; beautyApi.adminPaymentSummary=async()=>paymentFixture();
+  beautyApi.adminBookings=async()=>({content:[],totalElements:0,totalPages:0,page:0,size:5});
+  const render=(from:string)=>act(async()=>env.root.render(React.createElement(AdminOverview,{params:{from,to:'2026-10-31',includeDemo:false},renderBookings:()=>null,onSalon(){},onBookedCustomers(){},onNavigate:section=>destinations.push(section)})));
+  const card=()=>[...document.querySelectorAll('article')].find(el=>el.querySelector('h2')?.textContent==='Đối tác hoạt động')!;
+  try {
+    await render('2026-10-01'); assert.equal(card().querySelector('[data-admin-value]')!.textContent,'14');
+    assert.match(card().querySelector('details')!.textContent!,/Theo danh sách Đối tác trong hồ sơ báo cáo/);
+    await act(async()=>card().querySelector('button')!.click());assert.deepEqual(destinations,['salons']);
+    data.reportActivePartners=metricFixture(0,'PARTNER');await render('2026-10-02');assert.equal(card().querySelector('[data-admin-value]')!.textContent,'0');
+    data.reportActivePartners=null;await render('2026-10-03');assert.equal(card().querySelector('[data-admin-value]')!.textContent,'4');
+  } finally {
+    adminV2Api.insights=original.insights;beautyApi.adminPaymentSummary=original.payments;beautyApi.adminBookings=original.bookings;
+    await act(async()=>env.root.unmount());env.dom.window.close();
+  }
+});
+
 test('presentation target is 85.6 percent, measured report rate and verified funds stay separate', async () => {
   const env = environment();
   const original = { insights: adminV2Api.insights, payments: beautyApi.adminPaymentSummary, bookings: beautyApi.adminBookings };
