@@ -110,7 +110,7 @@ public final class PresentationDataset {
             String code = "BL2610" + (1001 + index);
             if (repository.findAll().stream().noneMatch(b -> b.getBookingCode().equals(code))) {
                 var b = booking(code, source.getService(), source.getPractitioner(), source.getCustomer(), LocalDate.of(2026, 11, 2 + index));
-                ReflectionTestUtils.setField(b, "createdAt", Instant.now());
+                ReflectionTestUtils.setField(b, "createdAt", TO.atTime(10, 0).atZone(BookingCompletionPolicy.ZONE).toInstant());
                 validSlot(context, b); b.setStatus(status); repository.saveAndFlush(b);
             }
             index++;

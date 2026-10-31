@@ -63,9 +63,16 @@ try {
       const expectedColumns = width >= 1800 ? 6 : width >= 1280 ? 3 : width >= 640 ? 2 : 1;
       assert.equal(await cards.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length), expectedColumns, `${width}: responsive KPI columns`);
       assert.ok((await cards.locator('article').first().textContent()).includes(String(data.totalBookings.value)));
+      // On the first of a month the initial month already equals Today. Establish a real 30-day cohort first.
+      let wide = data;
+      const wideButton = page.getByRole('button', { name: '30 ngày', exact: true });
+      if (await wideButton.getAttribute('aria-pressed') !== 'true') {
+        const response = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?') && r.url().includes('includeDemo=false'));
+        await wideButton.click(); wide = await (await response).json();
+      }
       const todayResponse = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?') && r.url().includes('includeDemo=false'));
       await page.getByRole('button', { name: 'Hôm nay', exact: true }).click();
-      const today = await (await todayResponse).json(); assert.ok(today.totalBookings.value < data.totalBookings.value, 'date range changes actual DB cohort');
+      const today = await (await todayResponse).json(); assert.ok(today.totalBookings.value < wide.totalBookings.value, 'date range changes actual DB cohort');
       await page.getByTestId('admin-overview').waitFor();
       const monthResponse = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?') && r.url().includes('includeDemo=false'));
       await page.getByRole('button', { name: '30 ngày', exact: true }).click(); await monthResponse; await page.getByTestId('admin-overview').waitFor();
@@ -197,7 +204,7 @@ try {
       await page.getByRole('button', { name: 'Khách hàng & lịch sử / CSV', exact: true }).click();
       await page.getByRole('heading', { name: 'Tài khoản khách hàng', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Xem', exact: true }).first().waitFor(); await checkLayout();
-      const customerDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Tải toàn bộ dữ liệu (.CSV)', exact: true }).click();
+      const customerDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Xuất kết quả đang lọc (.CSV)', exact: true }).click();
       assert.match((await customerDownload).suggestedFilename(), /beautylink-customers.*csv/);
       await page.getByRole('button', { name: 'Xem', exact: true }).first().click(); await page.getByRole('dialog', { name: 'Lịch sử khách hàng' }).waitFor(); await checkLayout();
       await page.getByRole('dialog', { name: 'Lịch sử khách hàng' }).getByRole('button', { name: 'Đóng', exact: true }).last().click();

@@ -130,7 +130,7 @@ test('partner editor saves scoped profile, retains form on conflict and blocks d
 test('editor API reads and save responses keep raw contact identities rather than presentation aliases', async () => {
   const originalGet=apiClient.get, originalPatch=apiClient.patch;
   const account={id:7,fullName:'Seed Contact',email:'seedcontact+001@seed.beautylink.test',phone:'0391111111',role:'CUSTOMER',status:'ACTIVE',gender:null,dateOfBirth:null,createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-01T00:00:00Z',salons:[]};
-  assert.notEqual(presentationEmail(account.email,true),account.email);
+  assert.notEqual(presentationEmail(account.email,true,7,{displayProfiles:[{id:7,source:'SEED_CUSTOMER',fullName:account.fullName,email:'seedcontact1234@gmail.com'}]}),account.email);
   apiClient.get=(async(url:string)=>({data:url.includes('/users/')?account:{content:[account],totalElements:1,totalPages:1,page:0,size:20}})) as typeof apiClient.get;
   apiClient.patch=(async()=>({data:account})) as typeof apiClient.patch;
   try {

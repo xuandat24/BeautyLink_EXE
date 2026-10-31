@@ -17,14 +17,22 @@ try {
       if (width < 1024) await page.getByRole('button', { name: 'Mở menu quản trị', exact: true }).click();
       await page.getByRole('navigation', { name: 'Điều hướng quản trị' }).getByRole('button', { name: label, exact: true }).click();
     };
+    const selectReportPeriod = async (endpoint) => {
+      // Arm before changing inputs: the local API may finish before fill() resolves.
+      const from = page.getByLabel('Từ ngày', { exact: true }), to = page.getByLabel('Đến ngày', { exact: true });
+      if (await from.inputValue() !== '2026-10-01' || await to.inputValue() !== '2026-10-31') {
+        const response = page.waitForResponse(r => { const u = new URL(r.url()); return u.pathname.endsWith(endpoint) && u.searchParams.get('from') === '2026-10-01' && u.searchParams.get('to') === '2026-10-31' && r.status() === 200; });
+        await from.fill('2026-10-01'); await to.fill('2026-10-31'); await response;
+      }
+      if (endpoint.endsWith('/insights')) await page.locator('[aria-label="Chỉ số kinh doanh"][aria-busy="false"]').waitFor();
+    };
     const layout = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: no page overflow`);
     try {
       await page.goto(`${base}/#login`);
       await page.locator('#customer-identifier').fill('0901234599'); await page.locator('#customer-password').fill('Synthetic Admin123!');
       await page.getByRole('button', { name: 'Đăng nhập ngay', exact: true }).click();
       await page.getByTestId('admin-overview').waitFor();
-      await page.getByLabel('Từ ngày', { exact: true }).fill('2026-10-01'); await page.getByLabel('Đến ngày', { exact: true }).fill('2026-10-31');
-      await page.getByRole('button', { name: 'Làm mới', exact: true }).click();
+      await selectReportPeriod('/admin/dashboard/insights');
       const token = await page.evaluate(() => sessionStorage.getItem('beautylink_access_token'));
       const get = async path => { const response = await context.request.get(base + path, { headers: { Authorization: `Bearer ${token}` } }); assert.equal(response.status(), 200); return response.json(); };
       const data = await get('/api/v1/admin/presentation'); const report = await get('/api/v1/admin/report-payments?from=2026-10-01&to=2026-10-31&size=100');
@@ -75,11 +83,11 @@ try {
       }
       assert.equal(selectedRows.length,71);assert.equal(new Set(selectedRows).size,71);
       await layout();await page.screenshot({path:`backend/target/report-payments-${width}-returning.png`,fullPage:true});
-      await navigate('Tổng quan');await page.getByTestId('admin-overview').waitFor();
+      await navigate('Tổng quan');await page.getByTestId('admin-overview').waitFor();await selectReportPeriod('/admin/dashboard/insights');
       const bookingCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Tổng đơn đặt lịch',exact:true})});
       assert.ok((await bookingCard.locator('div.flex-1.text-xs').innerText()).includes(String(Math.round(measured.totalBookings.absoluteChange/2+16))));
       for(const card of [bookingCard,amountCard])assert.ok(!(await card.locator('div.flex-1.text-xs').innerText()).includes('Kỳ trước:'));
-      await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();
+      await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();await selectReportPeriod('/admin/report-payments');
       for(const label of ['Thu online PayOS xác minh','Khoản từ hồ sơ báo cáo','Còn tại salon khi ghi nhận','Số khoản thanh toán']) assert.equal(await page.locator('dt').filter({hasText:label}).count(),0);
       const paymentRow = page.locator('tbody tr').filter({ hasText: 'BL2610R' }).first(); await paymentRow.waitFor();
       const code = (await paymentRow.locator('strong').first().textContent()).trim(); const expected = data.bookings.find(b => b.bookingCode === code);assert.ok(expected);
@@ -95,7 +103,7 @@ try {
       const downloadVerified = page.waitForEvent('download');await page.getByRole('button', { name: 'Tải CSV', exact: true }).click();
       const realFile=await downloadVerified;const realStream=await realFile.createReadStream();let realCsv='';for await(const chunk of realStream)realCsv+=chunk.toString();
       assert.ok(!realCsv.includes('BL2610R')&&!realCsv.includes('SIMULATED'));
-      await navigate('Lịch đặt');await page.getByPlaceholder('Mã lịch, khách, salon, dịch vụ', { exact: true }).fill(code);
+      await navigate('Lịch đặt');await selectReportPeriod('/admin/bookings');await page.getByPlaceholder('Mã lịch, khách, salon, dịch vụ', { exact: true }).fill(code);
       await page.getByRole('button', { name: `Chi tiết ${code}`, exact: true }).click();await detail.waitFor();
       const bookingText=await detail.innerText();assert.equal(bookingText,text,'Payment and booking views open the identical record');
       await page.getByRole('button', { name: 'Đóng', exact: true }).click();await layout();

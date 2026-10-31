@@ -177,6 +177,30 @@ class AdminDashboardV2IntegrationTest {
         assertEquals(5L,rolledBackInsights.reportOnlinePaymentRate().currentDenominator());
         assertEquals(2,((Number)em.createNativeQuery("select count(*) from presentation_recovery where id like :prefix").setParameter("prefix",batch+"%").getSingleResult()).intValue(),"Rollback marker retains immutable batch as audit");
     }
+    @Test void persistedDisplayPatchOrdersWholeResultAndNeverChangesRawEditorOrOwnerOrMoney() throws Exception {
+        customer.setFullName("phan.dinh.khoi91");customer.setEmail("khoi+001@seed.beautylink.test");users.saveAndFlush(customer);
+        var owner=a.getOwner();owner.setEmail("catalog.alpha@beautylink.local");owner.setStatus(AccountStatus.DISABLED);users.saveAndFlush(owner);
+        for(int i=45;i>0;i--){var u=user("Directory Fixture "+i,Role.CUSTOMER);u.setFullName(i%5==0?"Đặng An":(i%2==0?"Ánh "+i:"An "+i));users.saveAndFlush(u);}
+        var source=json.createObjectNode();var rows=source.putArray("users");for(var u:users.findAll())rows.addObject().put("id",u.getId()).put("fullName",u.getFullName()).put("email",u.getEmail()).put("role",u.getRole().name()).put("createdAt",u.getCreatedAt().toString());
+        source.putArray("salons").addObject().put("id",a.getId()).put("ownerUserId",owner.getId());
+        var plan=PresentationProfilePatch.plan(source);String before=customer.getEmail(),password=customer.getPasswordHash();long bc=bookings.count(),pc=payments.count();
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",PresentationProfilePatch.ID).setParameter("payload",json.writeValueAsString(plan)).executeUpdate();em.clear();
+        var first=directory.users(null,Role.CUSTOMER,0,20);var second=directory.users(null,Role.CUSTOMER,1,20);
+        var combined=new ArrayList<com.example.backend.dto.AdminV2Dtos.UserRow>();combined.addAll(first.content());combined.addAll(second.content());
+        for(int i=1;i<combined.size();i++)assertTrue(VietnameseDirectoryOrder.compare(combined.get(i-1).fullName(),combined.get(i).fullName())<=0);
+        assertEquals(40,combined.stream().map(u->u.id()).distinct().count());
+        var mapped=directory.users("Phan Dinh",Role.CUSTOMER,0,20).content().getFirst();assertEquals(customer.getId(),mapped.id());assertTrue(mapped.email().matches("[a-z0-9]+@gmail\\.com"));
+        assertEquals("Phan Dinh Khoi",dashboard.customerBookings(customer.getId(),false,0,20).content().getFirst().customerName());
+        assertEquals("Phan Dinh Khoi",reportingPayments.summary(day,day,null,0,20).rows().content().getFirst().customerName());
+        assertEquals(before,details.account(customer.getId()).email());assertEquals(password,users.findById(customer.getId()).orElseThrow().getPasswordHash());
+        assertEquals(before,directory.users("khoi+001",Role.CUSTOMER,0,20,true).content().getFirst().email());
+        var salon=directory.salonsById(a.getId());assertEquals(owner.getId(),salon.ownerUserId());assertFalse(salon.active());assertTrue(salon.ownerEmail().endsWith("@gmail.com"));
+        assertEquals(AccountStatus.DISABLED,users.findById(owner.getId()).orElseThrow().getStatus());assertEquals(bc,bookings.count());assertEquals(pc,payments.count());
+        String token=jwt.createToken(admin);mvc.perform(get("/api/v1/admin/presentation/profiles").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.displayProfiles.length()").value(2));
+        mvc.perform(get("/api/v1/admin/presentation/profiles").header("Authorization","Bearer "+jwt.createToken(users.findById(customer.getId()).orElseThrow()))).andExpect(status().isForbidden());
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",PresentationProfilePatch.ID+".rollback").setParameter("payload","{\"version\":1}").executeUpdate();em.clear();
+        assertEquals(before,directory.users("khoi+001",Role.CUSTOMER,0,20).content().getFirst().email());
+    }
     @BeforeEach void fixture() {
         ReflectionTestUtils.setField(insights,"clock",Clock.fixed(Instant.parse("2026-11-01T17:00:00Z"),ZoneOffset.UTC));
         customer=user("Customer",Role.CUSTOMER); admin=user("Admin",Role.ADMIN);

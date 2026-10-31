@@ -158,6 +158,17 @@ public class BookingReviewSmokeServer {
                     }
                 } catch(com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalStateException(e); }
             }
+            if(System.getenv("SMOKE_DISPLAY_PROFILES")!=null) {
+                var json=context.getBean(com.fasterxml.jackson.databind.ObjectMapper.class);var em=context.getBean(jakarta.persistence.EntityManager.class);
+                var source=json.createObjectNode();var sourceUsers=source.putArray("users");
+                for(int i=1;i<=45;i++) {
+                    var u=new UserAccount();u.setFullName(i==1?"phan.dinh.khoi91":i%5==0?"Đặng An":i%2==0?"Ánh "+i:"An "+i);u.setEmail("customer"+i+"@seed.beautylink.test");u.setPhone("039111"+String.format("%04d",i));u.setRole(Role.CUSTOMER);users.saveAndFlush(u);
+                }
+                for(var u:users.findAll())sourceUsers.addObject().put("id",u.getId()).put("fullName",u.getFullName()).put("email",u.getEmail()).put("role",u.getRole().name()).put("createdAt",u.getCreatedAt().toString());
+                var salons=source.putArray("salons");for(var salon:context.getBean(SupplierRepository.class).findAll())salons.addObject().put("id",salon.getId()).put("ownerUserId",salon.getOwner().getId());
+                var patch=com.example.backend.service.PresentationProfilePatch.plan(source);
+                em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",com.example.backend.service.PresentationProfilePatch.ID).setParameter("payload",patch.toString()).executeUpdate();
+            }
             return null;
         });
         var uncertain = payments.findByOrderCode(9100004L).orElseThrow();

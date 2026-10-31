@@ -182,15 +182,14 @@ test('154 services share at most 147 reviews and unbooked services get one or tw
   assert.deepEqual(presentationReviewAllocation(catalog), allocation);
 });
 
-test('only seeded email display addresses change; aliases are stable and use ordinary human-style local parts', () => {
+test('email helpers require a persisted account-ID mapping and never infer aliases from domain', () => {
   const email = 'nguyen.minhanh+492.351@seed.beautylink.test';
-  assert.equal(presentationEmail(email, false), email);
+  const metadata = { displayProfiles: [{ id: 7, source: 'SEED_CUSTOMER' as const, fullName: 'Nguyễn Minh Anh', email: 'nguyenminhanh1985@gmail.com' }] };
+  assert.equal(presentationEmail(email, true), email);
+  assert.equal(presentationEmail(email, false, 7, metadata), email);
   assert.equal(presentationEmail(null, true), null);
-  assert.equal(presentationEmail('real.person@gmail.com', true), 'real.person@gmail.com');
-  const alias = presentationEmail(email, true)!;
-  assert.match(alias, /^nguyen\.minhanh\d{2}@(gmail|outlook|yahoo)\.com$/);
-  assert.equal(presentationEmail(email, true), alias);
-  assert.doesNotMatch(alias, /seed|test|demo|\+/);
+  assert.equal(presentationEmail('real.person@company.vn', true, 8, metadata), 'real.person@company.vn');
+  assert.equal(presentationEmail(email, true, 7, metadata), metadata.displayProfiles[0].email);
 });
 
 test('presentation report reconciles 286 users, 14 active partners and 147 completed bookings without mutating API data', () => {
@@ -256,7 +255,7 @@ test('service-value dashboard keeps verified receipts separate and shows the mat
   } finally { await act(async () => root.unmount()); Object.assign(adminV2Api, { insights: original.insights }); beautyApi.adminPaymentSummary = original.payments; beautyApi.adminBookings = original.bookings; dom.window.close(); }
 });
 
-test('users table has five aligned columns and retains account detail navigation', async () => {
+test('users table has STT and five business columns and retains account detail navigation', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/#admin-customers' });
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage });
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
@@ -265,8 +264,8 @@ test('users table has five aligned columns and retains account detail navigation
   adminV2Api.users = async () => ({ content: [{ id: 7, fullName: 'Nguyễn Minh Anh', email: 'minhanh97@gmail.com', role: 'CUSTOMER', status: 'DISABLED', createdAt: '2026-10-01T00:00:00Z' }], page: 0, size: 20, totalElements: 1, totalPages: 1 });
   try {
     await act(async () => root.render(React.createElement(AdminModulesPage, { section: 'customers', adminName: 'Admin', onNavigate() {}, onHome() {}, onLogout() {}, onOpenAccount(id) { selected = id; } })));
-    assert.deepEqual([...document.querySelectorAll('thead th')].map(th => th.textContent), ['Người dùng', 'Email', 'Vai trò', 'Ngày tạo', 'Thao tác']);
-    assert.equal(document.querySelectorAll('tbody tr:first-child td').length, 5);
+    assert.deepEqual([...document.querySelectorAll('thead th')].map(th => th.textContent), ['STT', 'Người dùng', 'Email', 'Vai trò', 'Ngày tạo', 'Thao tác']);
+    assert.equal(document.querySelectorAll('tbody tr:first-child td').length, 6);
     assert.doesNotMatch(document.querySelector('tbody')?.textContent ?? '', /DISABLED|Vô hiệu hóa/);
     await act(async () => document.querySelector<HTMLButtonElement>('tbody button')!.click());
     assert.equal(selected, 7);

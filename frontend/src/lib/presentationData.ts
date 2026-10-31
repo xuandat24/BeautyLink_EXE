@@ -1,4 +1,5 @@
 import type { BackendService } from '../types';
+import { displayAccount, type DisplayMetadata } from './adminDisplayProfiles';
 
 // Classroom presentation values only; never written to accounts, reviews or bookings.
 export const presentationEnabled = import.meta.env?.VITE_PRESENTATION_DATA === 'true';
@@ -63,16 +64,10 @@ export function presentationService(service: BackendService, allocation?: Presen
   return result;
 }
 
-export function presentationEmail(email: string | null, enabled = presentationEnabled): string | null {
-  if (!enabled || !email || !/@seed\.beautylink\.test$/i.test(email)) return email;
-  const local = email.split('@')[0];
-  const name = local.split('+')[0].replace(/[._-]?\d.*$/, '').replace(/[^a-zA-Z._-]/g, '').toLowerCase() || 'minhanh';
-  let hash = 0;
-  for (const character of local) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  const domains = ['gmail.com', 'gmail.com', 'outlook.com', 'yahoo.com'];
-  return `${name}${85 + hash % 15}@${domains[hash % domains.length]}`;
+// Compatibility helpers never invent an address. A persisted ID mapping is mandatory.
+export function presentationEmail(email: string | null, enabled = presentationEnabled, accountId?: number, metadata: DisplayMetadata = {}): string | null {
+  return enabled && accountId !== undefined ? metadata.displayProfiles?.find(profile => profile.id === accountId)?.email ?? email : email;
 }
-
-export function presentationAccount<T extends { email: string | null }>(account: T): T {
-  return { ...account, email: presentationEmail(account.email) };
+export function presentationAccount<T extends { id: number; fullName: string; email: string | null }>(account: T, metadata: DisplayMetadata = {}): T {
+  return displayAccount(account, metadata);
 }
