@@ -4,7 +4,8 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { presentationEmail, presentationReviewAllocation, presentationService } from '../src/lib/presentationData';
-import { createPresentationAdminData, isPresentationUser, mergePersistentPresentationData, presentationBookings, presentationCustomers, presentationCustomerCsv, presentationInsights as reportInsights, presentationPage } from '../src/lib/presentationAdminData';
+import { createPresentationAdminData, isPresentationUser, mergePersistentPresentationData, presentationBookings, presentationCustomers, presentationCustomerCsv, presentationPage } from '../src/lib/presentationAdminData';
+import { presentationInsights as reportInsights } from './legacyPresentationInsights';
 import { AdminModulesPage } from '../src/components/admin/AdminModulesPage';
 import { AdminOverview } from '../src/components/admin/AdminOverview';
 import { adminV2Api } from '../src/services/adminApi';
@@ -58,7 +59,7 @@ test('live bookings and customers survive supplementation, with deposits summed 
   assert.equal(insights.totalBookings.value, 150);
   assert.deepEqual(insights.statuses.map(row => row.count), [1, 1, 147, 1]);
   assert.equal(insights.trends.reduce((sum, point) => sum + point.bookings, 0), 150);
-  assert.ok(insights.returningCustomers!.value > 0);
+  assert.ok(insights.returningCustomers!.value! > 0);
   const nonCancelled = new Map<number, number>();
   report.bookings.filter(booking => booking.status !== 'CANCELLED').forEach(booking => nonCancelled.set(booking.customerId, (nonCancelled.get(booking.customerId) ?? 0) + 1));
   assert.equal(insights.returningCustomers!.value, [...nonCancelled.values()].filter(count => count >= 2).length);
@@ -248,7 +249,7 @@ test('service-value dashboard keeps verified receipts separate and shows the mat
     const cards = [...document.querySelectorAll('[aria-label="Chỉ số kinh doanh"] article')];
     assert.deepEqual(cards.slice(0, 3).map(card => card.querySelector('h2')?.textContent), ['Tổng đơn đặt lịch', 'Người dùng', 'Doanh thu']);
     assert.deepEqual(cards.slice(0, 2).map(card => card.querySelector('[data-admin-value]')?.textContent), ['147', '286']);
-    assert.equal(cards[2].querySelector('[data-admin-value]')?.textContent, new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(snapshot.bookings.reduce((sum,row)=>sum+row.totalAmount,0)));
+    assert.equal(cards[2].querySelector('[data-admin-value]')?.textContent, new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(30000));
     assert.ok(document.querySelector('svg[aria-label="147 lịch trong kỳ"]'));
     assert.doesNotMatch(document.body.textContent ?? '', /Kết quả kinh doanh & tài chính/);
     assert.match(document.body.textContent ?? '', /Tổng thu online xác minh theo paidAt/);

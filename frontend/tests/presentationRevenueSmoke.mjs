@@ -32,12 +32,14 @@ try {
         await from.fill('2026-10-01'); data = await (await changed).json();
       }
       assert.equal(Number(data.completedServiceValue.value), 3045000);
-      assert.equal(Number(data.completedBookings.value), 9);
+      assert.equal(data.completedBookings.currentValue, null);
+      assert.equal(data.statuses.find(row => row.status === 'COMPLETED').count, 9);
       assert.equal(Number(data.totalBookings.value), 12);
       assert.equal(Number(data.revenue.value), 0);
       const values = label => page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({ has: page.getByRole('heading', { name: label, exact: true }) }).locator('[data-admin-value]');
-      await values('Doanh thu').filter({ hasText: '3.045.000' }).waitFor();
-      assert.equal(await values('Đơn hoàn thành').innerText(), '9');
+      await values('Doanh thu').filter({ hasText: '0' }).waitFor();
+      await page.getByText('Tổng giá trị dịch vụ: 3.045.000', { exact: false }).waitFor();
+      assert.equal(await values('Đơn hoàn thành').innerText(), '—');
       assert.equal(await page.getByText(/Khách đã đặt lịch|Chưa có so sánh/).count(), 0);
       const chartNode = await page.getByTestId('admin-overview').elementHandle();
       for (const [grain, label] of [['WEEK', 'Theo tuần'], ['MONTH', 'Theo tháng'], ['DAY', 'Theo ngày']]) {

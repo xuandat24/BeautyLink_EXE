@@ -60,7 +60,8 @@ class PresentationDatasetTest {
         for (var grain : Granularity.values()) {
             var data = insights.insights(PresentationDataset.FROM, PresentationDataset.TO, false, grain);
             assertEquals(0, data.completedServiceValue().value().compareTo(PresentationDataset.TARGET));
-            assertEquals(9, data.completedBookings().value().intValue());
+            assertNull(data.completedBookings().currentValue(), "presentation fixtures have no actual completion timestamp either");
+            assertEquals(9,data.statuses().stream().filter(s->s.status()==BookingStatus.COMPLETED).findFirst().orElseThrow().count());
             assertEquals(12, data.totalBookings().value().intValue());
             assertEquals(0, data.revenue().value().signum());
             assertEquals(0, data.trends().stream().map(t -> t.completedServiceValue()).reduce(BigDecimal.ZERO, BigDecimal::add).compareTo(PresentationDataset.TARGET));
@@ -70,7 +71,8 @@ class PresentationDatasetTest {
         var days = insights.insights(PresentationDataset.FROM, PresentationDataset.TO, false, Granularity.DAY).trends();
         var partial = insights.insights(PresentationDataset.FROM, LocalDate.of(2026,10,7), false, Granularity.DAY);
         assertEquals(830000, partial.completedServiceValue().value().intValue());
-        assertEquals(2, partial.completedBookings().value().intValue());
+        assertNull(partial.completedBookings().currentValue());
+        assertEquals(2,partial.statuses().stream().filter(s->s.status()==BookingStatus.COMPLETED).findFirst().orElseThrow().count());
         assertEquals(830000, partial.trends().stream().map(t -> t.completedServiceValue()).reduce(BigDecimal.ZERO, BigDecimal::add).intValue());
         assertTrue(days.stream().anyMatch(t -> t.completedServiceValue().signum() == 0));
         assertTrue(days.stream().map(t -> t.completedServiceValue()).distinct().count() > 5, "High, low and zero days derive from actual bookings");

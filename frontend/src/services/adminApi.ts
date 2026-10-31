@@ -1,7 +1,7 @@
 import type { EditSnapshot, PartnerProfileEdit, PartnerServiceEdit, PartnerPersonEdit, PartnerScheduleEdit } from '../types/adminV2';
 import { apiClient, adminPresentationData } from './beautyApi';
 import { presentationAccount } from '../lib/presentationData';
-import { isPresentationUser, mergePresentationBookings, presentationBookings, presentationInsights, presentationPage, presentationSearch } from '../lib/presentationAdminData';
+import { isPresentationUser, mergePresentationBookings, presentationBookings, presentationPage, presentationSearch } from '../lib/presentationAdminData';
 import type { AdminPage } from '../types';
 import type { AdminInsights, AdminUserRow, AdminSalonRow, AdminSalonDetail, AdminReviewRow } from '../types/adminV2';
 import type { AdminAccountDetail, AdminProfilePatch, AdminServiceDetail, AdminPaymentLedger } from '../types/adminV2';
@@ -50,8 +50,9 @@ export const adminV2Api = {
   },
   paymentLedger: async (params: { from: string; to: string; page: number; salonId?: number }): Promise<AdminPaymentLedger> => (await apiClient.get('/v1/admin/payments', { params: { ...params, size: 20 } })).data,
   insights: async (params: AdminRange & { granularity: 'DAY' | 'WEEK' | 'MONTH' }): Promise<AdminInsights> => {
-    const data = (await apiClient.get('/v1/admin/dashboard/insights', { params })).data;
-    const snapshot = await adminPresentationData(params); return snapshot ? presentationInsights(data, snapshot) : data;
+    const data: AdminInsights = (await apiClient.get('/v1/admin/dashboard/insights', { params })).data;
+    if (!data.currentPeriod || !data.previousPeriod || !data.asOf || !data.totalBookings?.comparisonStatus) throw new Error('API báo cáo chưa hỗ trợ so sánh kỳ trước. Vui lòng thử lại sau khi cập nhật backend.');
+    return data;
   },
   users: async (params: { query?: string; role?: string; page: number; size: number }, forEdit = false): Promise<AdminPage<AdminUserRow>> => {
     const data = (await apiClient.get<AdminPage<AdminUserRow>>('/v1/admin/users', { params })).data;

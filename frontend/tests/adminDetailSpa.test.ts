@@ -27,7 +27,7 @@ test('detail hash routes preserve IDs/tabs and fail closed on malformed and unsa
   assert.equal(parseAdminDetailHash('#admin-users/{id}/edit')?.id, null);
   assert.equal(parseAdminDetailHash('#admin-users/edit/extra')?.list, undefined);
 });
-test('grain switching keeps dashboard nodes/data mounted, fetches only insights, and ignores stale response', async () => {
+test('grain switching retains mounted nodes, atomically updates snapshot and ignores stale response', async () => {
   const env = environment(); const original = { insights: adminV2Api.insights, payments: beautyApi.adminPaymentSummary, bookings: beautyApi.adminBookings };
   let calls = 0, payCalls = 0, bookingCalls = 0; const requests: Array<{ resolve: (data: ReturnType<typeof insightsFixture>) => void; reject: (error: Error) => void }> = [];
   adminV2Api.insights = async () => { calls++; if (calls === 1) return insightsFixture(); return new Promise((resolve, reject) => requests.push({ resolve, reject })); };
@@ -39,10 +39,10 @@ test('grain switching keeps dashboard nodes/data mounted, fetches only insights,
     await click('Theo tuần'); await click('Theo tháng');
     assert.equal(document.querySelector('[data-testid="admin-overview"]'), root); assert.equal(document.querySelector('[aria-label="Chỉ số kinh doanh"]'), cards); assert.equal(document.getElementById('recent'), recent);
     assert.equal(payCalls, 1); assert.equal(bookingCalls, 1);
-    const month = insightsFixture(); month.totalBookings.value = 999; month.trends = [{ date: '2026-10-01', bookings: 88, verifiedOnlineAmount: 300 }];
+    const month = insightsFixture(); month.totalBookings.value = month.totalBookings.currentValue = 999; month.trends = [{ date: '2026-10-01', bookings: 88, verifiedOnlineAmount: 300 }];
     await act(async () => requests[1].resolve(month)); await act(async () => requests[0].resolve(insightsFixture()));
     assert.match(document.querySelector('p[role="status"]')?.textContent ?? '', /88 lịch/);
-    assert.equal(cards?.querySelector('[data-admin-value]')?.textContent, '5', 'trend response cannot replace unrelated summary');
+    assert.equal(cards?.querySelector('[data-admin-value]')?.textContent, '999', 'cards and chart use the same new API snapshot');
     await click('Theo ngày'); await act(async () => requests[2].reject(new Error('Chart unavailable')));
     assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /Chart unavailable/); assert.equal(document.querySelector('[aria-label="Chỉ số kinh doanh"]'), cards);
     await click('Thử lại biểu đồ'); assert.equal(payCalls, 1); assert.equal(bookingCalls, 1);

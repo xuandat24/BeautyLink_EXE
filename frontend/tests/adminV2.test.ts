@@ -46,7 +46,7 @@ test('overview shows loading/error/retry and truthful zero/N-A without fake data
   const dom = environment(); const root = createRoot(document.getElementById('root')!);
   const original = { insights: adminV2Api.insights, payments: beautyApi.adminPaymentSummary, bookings: beautyApi.adminBookings };
   let reject!: (error: Error) => void; let calls = 0;
-  const zero = insightsFixture(); for (const metric of [zero.totalBookings, zero.users, zero.revenue, zero.activePartners, zero.onlinePaymentRate, zero.completedBookings]) metric.value = 0;
+  const zero = insightsFixture(); for (const metric of [zero.totalBookings, zero.users, zero.revenue, zero.activePartners, zero.onlinePaymentRate, zero.completedBookings]) metric.value = metric.currentValue = 0;
   zero.statuses.forEach(row => row.count = 0); zero.paymentAttemptSuccessRate = null; zero.topSalons = []; zero.popularServices = [];
   adminV2Api.insights = async () => { calls++; if (calls === 1) return new Promise((_ok, fail) => { reject = fail; }); return zero; };
   beautyApi.adminPaymentSummary = async () => paymentFixture(); beautyApi.adminBookings = async () => ({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 5 });
@@ -94,7 +94,7 @@ test('late range and previous-account insights never overwrite the current admin
   const render = (from: string) => act(async () => root.render(React.createElement(AdminOverview, { params: { from, to: '2026-10-15', includeDemo: false }, renderBookings: () => null, onSalon() {}, onBookedCustomers() {} })));
   try {
     await render('2026-10-01'); await render('2026-10-02');
-    const current = insightsFixture(); current.totalBookings.value = 99;
+    const current = insightsFixture(); current.totalBookings.value = current.totalBookings.currentValue = 99;
     await act(async () => finish[1](current)); await act(async () => finish[0](insightsFixture()));
     assert.match(document.querySelector('[aria-label="Chỉ số kinh doanh"] article')?.textContent ?? '', /99/);
     await render('2026-10-03');

@@ -148,7 +148,7 @@ test('directories use normal scope even with a legacy demo flag and preserve rol
 });
 
 test('compact KPI keeps full definitions in closed disclosures, real currency and all drilldowns', async () => {
-  const env = await setup(); env.data.revenue.value = 1234567890123;
+  const env = await setup(); env.data.revenue.value = env.data.revenue.currentValue = 1234567890123;
   try {
     await act(async () => env.root.render(React.createElement(AdminOverview, { ...overviewProps, onNavigate() {} })));
     const cards = [...document.querySelectorAll('[aria-label="Chỉ số kinh doanh"] article')];

@@ -53,7 +53,9 @@ class AdminDashboardV2IntegrationTest {
         long bookingCount=bookings.count(), paymentCount=payments.count();
         var before=insights.insights(day,day,false,Granularity.DAY);
         mvc.perform(get("/api/v1/admin/presentation").header("Authorization","Bearer "+jwt.createToken(admin))).andExpect(status().isNoContent());
-        String payload="{\"version\":1,\"provenance\":{\"source\":\"synthetic\"},\"data\":{\"users\":[],\"salons\":[],\"bookings\":[{\"id\":9000000000,\"supplierId\":"+a.getId()+",\"totalAmount\":15000},{\"id\":9000000001,\"supplierId\":"+b.getId()+",\"totalAmount\":25000}]}}";
+        String payload=json.writeValueAsString(Map.of("version",1,"provenance",Map.of("source","synthetic"),"data",Map.of("users",List.of(),"salons",List.of(),"bookings",List.of(
+                Map.of("id",9000000000L,"supplierId",a.getId(),"serviceId",sa.getId(),"serviceName",sa.getName(),"customerId",customer.getId(),"createdAt",start.plusSeconds(30).toString(),"status","COMPLETED","totalAmount",15000),
+                Map.of("id",9000000001L,"supplierId",b.getId(),"serviceId",sb.getId(),"serviceName",sb.getName(),"customerId",customer.getId(),"createdAt",start.plusSeconds(31).toString(),"status","COMPLETED","totalAmount",25000)))));
         em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)")
                 .setParameter("id","beautylink-presentation-20261031").setParameter("payload",payload).executeUpdate();
         mvc.perform(get("/api/v1/admin/presentation")).andExpect(status().isUnauthorized());
@@ -69,10 +71,13 @@ class AdminDashboardV2IntegrationTest {
                 .andExpect(status().isMethodNotAllowed());
         assertFalse(bookings.existsById(9000000000L)); assertEquals(bookingCount,bookings.count()); assertEquals(paymentCount,payments.count());
         var after=insights.insights(day,day,false,Granularity.DAY);
-        assertEquals(before.revenue(),after.revenue()); assertEquals(before.completedServiceValue(),after.completedServiceValue());
+        assertEquals(before.revenue(),after.revenue()); assertEquals(42000,after.completedServiceValue().value().intValue());
+        assertEquals(7,after.totalBookings().currentValue().intValue());
+        assertNull(after.completedBookings().currentValue(),"no fabricated completion times");
     }
     UserAccount customer,admin; Supplier a,b,demo; ServiceOffering sa,sb,sd; Practitioner pa,pb,pd;
     @BeforeEach void fixture() {
+        ReflectionTestUtils.setField(insights,"clock",Clock.fixed(Instant.parse("2026-11-01T17:00:00Z"),ZoneOffset.UTC));
         customer=user("Customer",Role.CUSTOMER); admin=user("Admin",Role.ADMIN);
         a=salon("Alpha",false);b=salon("Beta",false);demo=salon("Demo",true);
         var category=new ServiceCategory();category.setName("Care");category.setSlug("v2-care");categories.save(category);
@@ -94,16 +99,18 @@ class AdminDashboardV2IntegrationTest {
         var data=insights.insights(day,day,false,Granularity.DAY);
         assertEquals(5,data.totalBookings().value().longValue());
         assertEquals(5,data.statuses().stream().mapToLong(s->s.count()).sum());
-        assertEquals(2,data.completedBookings().value().longValue());
+        assertNull(data.completedBookings().currentValue());
+        assertEquals(com.example.backend.dto.AdminV2Dtos.ComparisonStatus.INSUFFICIENT_HISTORY,data.completedBookings().comparisonStatus());
         assertEquals(2000,data.completedServiceValue().value().intValue(),"completed service value is independent of verified receipt amount and refund status");
         assertEquals(500,data.revenue().value().intValue(),"gross first verified receipt, no duplicate/manual/demo or next-day receipt");
         assertEquals(500,dashboard.paymentSummary(day,day,false).verifiedOnlineCollected().intValue(),"legacy payment summary and CSV policy remain consistent");
-        assertEquals(60,data.onlinePaymentRate().value().intValue());
+        assertEquals(40,data.onlinePaymentRate().value().intValue(),"late receipt excluded at period cutoff");
+        assertEquals(2,data.onlinePaymentRate().currentNumerator()); assertEquals(5,data.onlinePaymentRate().currentDenominator());
         assertEquals(1,data.trends().size());assertEquals(day,data.trends().getFirst().date());
         assertEquals(500,data.trends().getFirst().verifiedOnlineAmount().intValue());
         assertEquals(2000,data.trends().getFirst().completedServiceValue().intValue());
         assertEquals(a.getId(),data.topSalons().getFirst().id());assertEquals(3,data.topSalons().getFirst().bookings());
-        assertEquals(300,data.topSalons().getFirst().verifiedOnlineAmount().intValue(),"salon money follows booking cohort, including later paidAt");
+        assertEquals(200,data.topSalons().getFirst().verifiedOnlineAmount().intValue(),"salon money uses same paidAt period as revenue, excluding later receipts");
         assertEquals(2,data.popularServices().size());assertNotEquals(data.popularServices().get(0).id(),data.popularServices().get(1).id());
         assertEquals(100,data.popularServices().stream().mapToDouble(s->s.percentage()).sum());
         assertNull(data.activePartners().changePercent());assertEquals(2,data.activePartners().value().intValue());
@@ -131,6 +138,38 @@ class AdminDashboardV2IntegrationTest {
         assertEquals(3,tie.topSalons().get(0).bookings());assertEquals(3,tie.topSalons().get(1).bookings());
         assertEquals(a.getId(),tie.topSalons().getFirst().id());
     }
+    @Test void cumulativeUsersAreComparedWithCumulativeUsersNotNewRegistrations() {
+        var old = user("Previous account",Role.STAFF);
+        em.createNativeQuery("update user_accounts set created_at=:created where id=:id").setParameter("created",start.minusSeconds(3600)).setParameter("id",old.getId()).executeUpdate();
+        em.flush(); em.clear();
+        var data=insights.insights(day,day,false,Granularity.DAY);
+        assertEquals(6,data.users().currentValue().intValue()); assertEquals(1,data.users().previousValue().intValue());
+        assertEquals(5,data.users().absoluteChange().intValue());
+        assertTrue(data.users().metricDefinition().contains("Tổng tích lũy"));
+    }
+    @Test void partialCurrentAndPreviousCutoffsExcludeExactlyTheSameElapsedBoundary() {
+        var cutoff=start.plusSeconds(12*3600);
+        ReflectionTestUtils.setField(insights,"clock",Clock.fixed(cutoff,ZoneOffset.UTC));
+        booking(a,sa,pa,BookingStatus.CONFIRMED,PaymentStatus.UNPAID,start.minusSeconds(86400).plusSeconds(1));
+        booking(a,sa,pa,BookingStatus.CONFIRMED,PaymentStatus.UNPAID,cutoff.minusSeconds(86400));
+        booking(a,sa,pa,BookingStatus.CONFIRMED,PaymentStatus.UNPAID,cutoff);
+        em.flush();
+        var data=insights.insights(day,day,false,Granularity.DAY);
+        assertEquals(cutoff,data.asOf());assertEquals(cutoff,data.currentPeriod().endExclusive());
+        assertEquals(cutoff.minusSeconds(86400),data.previousPeriod().endExclusive());
+        assertEquals(5,data.totalBookings().currentValue().intValue());assertEquals(1,data.totalBookings().previousValue().intValue());
+        assertEquals(com.example.backend.dto.AdminV2Dtos.ComparisonStatus.LOW_BASE,data.totalBookings().comparisonStatus());
+    }
+    @Test void chartsReconcileForEveryGrainAndSnapshotCompletesAreNotPeriodCompletions() {
+        for(var grain:Granularity.values()) {
+            var data=insights.insights(day,day.plusDays(1),false,grain);
+            assertEquals(0,data.revenue().currentValue().compareTo(data.trends().stream().map(p->p.verifiedOnlineAmount()).reduce(BigDecimal.ZERO,BigDecimal::add)));
+            assertEquals(data.totalBookings().currentValue().longValue(),data.trends().stream().mapToLong(p->p.bookings()).sum());
+            assertNull(data.completedBookings().currentValue());assertNull(data.returningCustomers().currentValue());
+            assertNull(data.activePartners().previousValue());
+            assertEquals(0,data.completedServiceValue().currentValue().compareTo(data.trends().stream().map(p->p.completedServiceValue()).reduce(BigDecimal.ZERO,BigDecimal::add)));
+        }
+    }
     @ParameterizedTest @EnumSource(value=Role.class,names={"CUSTOMER","SUPPLIER","STAFF"})
     void nonAdminsCannotReadAnyNewAdminResource(Role role) throws Exception {
         String token=jwt.createToken(user("Denied"+role,role));
@@ -139,7 +178,17 @@ class AdminDashboardV2IntegrationTest {
     }
     @Test void adminCanReadAndInvalidDatesPagesAndAnonymousFailSafely() throws Exception {
         String bearer="Bearer "+jwt.createToken(users.findById(admin.getId()).orElseThrow());
-        mvc.perform(get("/api/v1/admin/dashboard/insights").param("from","2026-10-02").param("to","2026-10-02").header("Authorization",bearer)).andExpect(status().isOk()).andExpect(jsonPath("totalBookings.value").value(5));
+        mvc.perform(get("/api/v1/admin/dashboard/insights").param("from","2026-10-02").param("to","2026-10-02").header("Authorization",bearer)).andExpect(status().isOk())
+                .andExpect(jsonPath("totalBookings.value").value(5)).andExpect(jsonPath("totalBookings.currentValue").value(5))
+                .andExpect(jsonPath("totalBookings.previousValue").value(0)).andExpect(jsonPath("totalBookings.absoluteChange").value(5))
+                .andExpect(jsonPath("totalBookings.comparisonStatus").value("NEW_ACTIVITY"))
+                .andExpect(jsonPath("onlinePaymentRate.currentNumerator").value(2)).andExpect(jsonPath("onlinePaymentRate.currentDenominator").value(5))
+                .andExpect(jsonPath("onlinePaymentRate.previousDenominator").value(0)).andExpect(jsonPath("onlinePaymentRate.percentagePointChange").isEmpty())
+                .andExpect(jsonPath("completedBookings.currentValue").isEmpty()).andExpect(jsonPath("completedBookings.comparisonStatus").value("INSUFFICIENT_HISTORY"))
+                .andExpect(jsonPath("currentPeriod.startInclusive").value("2026-10-01T17:00:00Z"))
+                .andExpect(jsonPath("previousPeriod.startInclusive").value("2026-09-30T17:00:00Z"))
+                .andExpect(jsonPath("timezone").value("Asia/Ho_Chi_Minh")).andExpect(jsonPath("asOf").value("2026-11-01T17:00:00Z"));
+        mvc.perform(get("/api/v1/admin/dashboard/insights").param("from","2026-11-03").param("to","2026-11-03").header("Authorization",bearer)).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/admin/users").header("Authorization",bearer).param("size","101")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/admin/users").header("Authorization",bearer).param("page","-1")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/admin/dashboard/insights").header("Authorization",bearer).param("from","2026-10-03").param("to","2026-10-02")).andExpect(status().isBadRequest());
