@@ -4,7 +4,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { alphabetic, compareNames, displayAccount, rowOrdinal } from '../src/lib/adminDisplayProfiles';
-import { mergePersistentPresentationData, presentationBookings, presentationCustomers, presentationCustomerCsv, presentationPage } from '../src/lib/presentationAdminData';
+import { mergePersistentPresentationData, presentationBookings, presentationCustomers, presentationCustomerCsv, customerRowsCsv, presentationSearch, presentationPage } from '../src/lib/presentationAdminData';
 import { selectReturningPresentationCustomers } from '../src/lib/returningPresentationCustomers';
 import { AdminModulesPage } from '../src/components/admin/AdminModulesPage';
 import { adminV2Api } from '../src/services/adminApi';
@@ -59,4 +59,14 @@ test('directory STT uses returned page metadata, IDs remain navigation identitie
   adminV2Api.users=async()=>({content:[{id:91,fullName:'Đặng An',email:'an@gmail.com',role:'CUSTOMER',status:'ACTIVE',createdAt:'2026-10-20T00:00:00Z'}],page:1,size:20,totalElements:40,totalPages:2});
   try{await act(async()=>root.render(React.createElement(AdminModulesPage,{section:'customers',adminName:'Admin',onHome(){},onLogout(){},onNavigate(){},onOpenAccount:id=>selected=id})));assert.equal(document.querySelector('tbody td')!.textContent,'21');await act(async()=>document.querySelector<HTMLButtonElement>('tbody button')!.click());assert.equal(selected,91);
   }finally{adminV2Api.users=original;await act(async()=>root.unmount());dom.window.close();}
+});
+
+
+test('filtered CSV exports the whole sorted result beyond20 rows with consecutive STT and leading phone zero', async()=>{
+  const rows=Array.from({length:45},(_,i)=>({id:45-i,fullName:`An ${45-i}`,email:`an${45-i}@gmail.com`,phone:'0391234567',gender:null,dateOfBirth:null,bookingsPlaced:0,paidBookings:0,completedBookings:0,totalVerifiedOnlineAmount:0,lastBookingAt:null}));
+  const filtered=rows.filter(row=>presentationSearch(row.fullName,'An'));
+  const csv=await customerRowsCsv(filtered).text();const lines=csv.replace('\uFEFF','').split('\r\n');
+  assert.equal(lines.length,46);assert.match(lines[1],/^"1","An 1",/);assert.match(lines[20],/^"20","An 20",/);assert.match(lines[21],/^"21","An 21",/);assert.match(lines[45],/^"45","An 45",/);assert.match(lines[1],/"'0391234567"/);
+  const narrowed=await customerRowsCsv(rows.filter(row=>row.fullName==='An 21')).text();assert.match(narrowed, /"1","An 21",/);
+  assert.equal(rows[0].fullName,'An 45','export never mutates the cached array');
 });
