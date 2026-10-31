@@ -125,7 +125,8 @@ try {
       const detail = page.getByRole('button', { name: /^Chi tiết / }).first(); await detail.waitFor(); await detail.click();
       await page.getByRole('dialog', { name: 'Chi tiết lịch hẹn' }).waitFor(); await page.getByRole('button', { name: 'Đóng', exact: true }).click();
       await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Thanh toán', exact: true }).waitFor();
-      await page.getByRole('heading', { name: 'Bảng doanh thu online đã xác minh', exact: true }).waitFor();
+      await page.getByText('Biên nhận PayOS xác minh và CSV riêng', { exact: true }).click();
+      await page.getByRole('heading', { name: 'Biên nhận thu online PayOS đã xác minh', exact: true }).waitFor();
       await checkLayout();
       const revenueDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Tải CSV', exact: true }).click();
       assert.match((await revenueDownload).suggestedFilename(), /beautylink-revenue.*csv/);

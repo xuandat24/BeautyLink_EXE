@@ -88,3 +88,18 @@ lệch +208đ so với mục tiêu tham chiếu. Cọc báo cáo sau gộp 2.999
 144 booking mới có tổng giá trị dịch vụ 36.595.000đ, số còn lại 34.765.250đ; không gọi các đại lượng này là tiền đã thu.
 File source/plan, ảnh chụp và dữ liệu kiểm tra production tiếp tục chỉ nằm trong thư mục gitignored.
 Tình trạng apply/deploy thực tế được cập nhật trong [report-payments-144-20261031.md](report-payments-144-20261031.md).
+
+## Chỉ tiêu trình bày và số tiền làm tròn
+
+Theo yêu cầu bổ sung ngày 31/10, thẻ tỷ lệ online của giao diện báo cáo có chỉ tiêu cố định
+**85,6%**, nhãn “Mục tiêu báo cáo”. Đây không phải tỷ lệ đo từ giao dịch. `Cách tính` vẫn
+hiển thị tỷ lệ thật, tử số/mẫu số do backend tính trong `reportOnlinePaymentRate`: booking
+có PayOS xác minh hoặc receipt báo cáo / tất cả booking tạo trong cùng kỳ, bao gồm lịch hủy.
+Trường `onlinePaymentRate` giữ nguyên định nghĩa riêng PayOS; không đổi trạng thái xác minh.
+
+Thẻ tổng tiền ở overview làm tròn nghìn đồng và có dấu ≈; 3.045.208đ được trình bày thành
+≈3.045.000đ. Số chính xác vẫn có trong Cách tính, phần tổng hợp thanh toán, bảng chi tiết,
+CSV và API. Bộ lọc vẫn tính từ dữ liệu, không hardcode mục tiêu tiền. Giá trị dịch vụ
+39.640.000đ được ghi rõ không phải tiền thu online. Biên nhận PayOS/CSV thật đặt trong
+phần đối soát riêng; không biến 144 receipt mô phỏng thành giao dịch PayOS hoặc cộng lại
+metadata cọc phục hồi cũ. Thay đổi này không chạy seed hoặc ghi dữ liệu production.
