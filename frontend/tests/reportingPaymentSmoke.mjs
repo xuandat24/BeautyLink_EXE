@@ -18,11 +18,12 @@ try {
       await page.getByRole('navigation', { name: 'Điều hướng quản trị' }).getByRole('button', { name: label, exact: true }).click();
     };
     const selectReportPeriod = async (endpoint) => {
-      // Fixed October fixture must not depend on the current month after SPA navigation.
-      await page.getByLabel('Từ ngày', { exact: true }).fill('2026-10-01');
-      await page.getByLabel('Đến ngày', { exact: true }).fill('2026-10-31');
-      const response = page.waitForResponse(r => { const u = new URL(r.url()); return u.pathname.endsWith(endpoint) && u.searchParams.get('from') === '2026-10-01' && u.searchParams.get('to') === '2026-10-31' && r.status() === 200; });
-      await page.getByRole('button', { name: 'Làm mới', exact: true }).click(); await response;
+      // Arm before changing inputs: the local API may finish before fill() resolves.
+      const from = page.getByLabel('Từ ngày', { exact: true }), to = page.getByLabel('Đến ngày', { exact: true });
+      if (await from.inputValue() !== '2026-10-01' || await to.inputValue() !== '2026-10-31') {
+        const response = page.waitForResponse(r => { const u = new URL(r.url()); return u.pathname.endsWith(endpoint) && u.searchParams.get('from') === '2026-10-01' && u.searchParams.get('to') === '2026-10-31' && r.status() === 200; });
+        await from.fill('2026-10-01'); await to.fill('2026-10-31'); await response;
+      }
       if (endpoint.endsWith('/insights')) await page.locator('[aria-label="Chỉ số kinh doanh"][aria-busy="false"]').waitFor();
     };
     const layout = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: no page overflow`);
