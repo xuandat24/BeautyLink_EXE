@@ -55,6 +55,7 @@ export const BookingDetail = ({ booking, onClose }: { booking: AdminBooking; onC
           ['Hình thức đã xác minh', booking.verifiedPaymentOption || '—'],
         ].map(([label, value]) => <div key={label} className="rounded-2xl bg-slate-50 p-4"><dt className="text-xs font-bold text-slate-400">{label}</dt><dd className="mt-1 font-black text-slate-800">{value}</dd></div>)}
       </dl>
+      {booking.batchId && booking.simulatedPaidAt && <section className="mt-4 rounded-2xl border border-slate-200 p-4 text-sm"><h3 className="font-bold">Thanh toán báo cáo</h3><p className="mt-2">Cọc ghi nhận: {money(booking.simulatedOnlineAmount)} · {dateTime(booking.simulatedPaidAt)}</p><p className="mt-2 text-xs leading-5 text-slate-600">Khoản cọc mô phỏng liên kết hồ sơ báo cáo này, không phải biên nhận PayOS đã xác minh.</p></section>}
       <div className="mt-5 flex flex-wrap gap-2">
         <AdminStatusBadge kind="booking" value={booking.status} />
         <AdminStatusBadge kind="payment" value={booking.paymentStatus} />
@@ -149,7 +150,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
     <AdminNav active={active} adminName={adminName} onNavigate={onNavigate} onHome={onHome} onLogout={onLogout} controls={filters} />
     <main className="min-w-0 px-4 py-5 lg:ml-60 lg:px-6">
       <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
-        <div><h1 className="text-2xl font-extrabold">{mode === 'overview' ? 'Tổng quan kinh doanh' : mode === 'bookings' ? 'Lịch hẹn toàn hệ thống' : 'Thanh toán đã xác minh'}</h1></div>
+        <div><h1 className="text-2xl font-extrabold">{mode === 'overview' ? 'Tổng quan kinh doanh' : mode === 'bookings' ? 'Lịch hẹn toàn hệ thống' : 'Thanh toán'}</h1></div>
         <button type="button" onClick={() => mode === 'overview' ? setOverviewRefresh(v => v + 1) : (summaryCache.current = null, void load())} disabled={loading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black hover:border-pink-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-600 focus-visible:ring-offset-2"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Làm mới</button>
       </div>
 
@@ -169,7 +170,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
         <div className="mt-4 flex justify-end gap-2"><button disabled={page === 0} onClick={() => setPage((v) => Math.max(0, v - 1))} className="rounded-xl border bg-white px-4 py-2 text-xs font-black disabled:opacity-40">Trang trước</button><span className="px-3 py-2 text-xs font-bold">{page + 1}/{Math.max(bookingPage.totalPages, 1)}</span><button disabled={page + 1 >= bookingPage.totalPages} onClick={() => setPage((v) => v + 1)} className="rounded-xl border bg-white px-4 py-2 text-xs font-black disabled:opacity-40">Trang sau</button></div></>}
       </>}
 
-      {mode === 'payments' && <>{loading && <p role="status" className="mt-3 text-xs text-slate-500">Đang cập nhật báo cáo thanh toán…</p>}{payments && <>
+      {mode === 'payments' && <><AdminPaymentLedgerPanel range={requestParams} />{loading && <p role="status" className="mt-3 text-xs text-slate-500">Đang cập nhật báo cáo thanh toán…</p>}{payments && <>
         <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
             ['Đã thu online xác minh', money(payments.verifiedOnlineCollected), `${payments.verifiedPaymentBookings} lịch`],
@@ -187,7 +188,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
           {revenuePage?.content.length ? <div className="overflow-x-auto"><table className="admin-table min-w-[1100px]"><thead className="bg-slate-50 text-xs font-black text-slate-600"><tr><th scope="col">Mã thanh toán</th><th scope="col" className="px-4 py-3">Ngày thanh toán</th><th scope="col" className="px-4 py-3">Mã lịch</th><th scope="col">Salon</th><th scope="col">Dịch vụ</th><th scope="col">Trạng thái</th><th scope="col" className="px-4 py-3">Hình thức</th><th scope="col" className="px-4 py-3 text-right">Đã thu online</th><th scope="col" className="px-4 py-3 text-right">Còn lại tại salon</th></tr></thead><tbody className="divide-y divide-slate-100">{revenuePage.content.map((row) => <tr key={row.paymentId}><td>#{row.paymentId}</td><td className="whitespace-nowrap px-4 py-3">{dateTime(row.paidAt)}</td><td className="px-4 py-3 font-bold">{row.bookingCode}</td><td className="px-4 py-3"><strong className="cell-label" title={row.supplierName}>{row.supplierName}</strong></td><td><span className="cell-label" title={row.serviceName}>{row.serviceName}</span></td><td><AdminStatusBadge kind="payment" value="PAID" /></td><td className="px-4 py-3">{row.paymentOption === 'FULL_100' ? 'Thanh toán 100%' : row.paymentOption === 'DEPOSIT_05' ? 'Đặt cọc 5%' : 'Đặt cọc 50%'}</td><td className="px-4 py-3 text-right whitespace-nowrap tabular-nums font-black text-pink-700">{money(row.amount)}</td><td className="px-4 py-3 text-right">{money(row.remainingAtSalon)}</td></tr>)}</tbody></table></div> : <p className="p-8 text-center text-sm text-slate-500">Chưa có giao dịch đã xác minh trong khoảng ngày này.</p>}
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 p-4"><button type="button" disabled={revenuePageIndex === 0} onClick={() => setRevenuePageIndex((value) => Math.max(0, value - 1))} className="rounded-xl border px-4 py-2 text-xs font-black disabled:opacity-40">Trang trước</button><span className="px-2 text-xs font-bold">{revenuePageIndex + 1}/{Math.max(revenuePage?.totalPages || 0, 1)}</span><button type="button" disabled={revenuePageIndex + 1 >= (revenuePage?.totalPages || 0)} onClick={() => setRevenuePageIndex((value) => value + 1)} className="rounded-xl border px-4 py-2 text-xs font-black disabled:opacity-40">Trang sau</button></div>
         </section>
-      </>}<AdminPaymentLedgerPanel range={requestParams} /></>}
+      </>}</>}
     </main>
     {selected && <BookingDetail booking={selected} onClose={() => setSelected(null)} />}
   </div>;

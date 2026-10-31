@@ -34,6 +34,7 @@ import {
 } from '../types';
 import { beautyApi, getApiErrorMessage } from '../services/beautyApi';
 import { bookingDay } from '../lib/bookingTime';
+import { SupplierReportingPayments } from './SupplierReportingPayments';
 
 interface SupplierDashboardProps {
   onBack: () => void;
@@ -392,6 +393,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
                 </div>
               </div>
 
+              <SupplierReportingPayments />
               {/* Recent Bookings and Status Breakdown */}
               <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
                 <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -17,11 +17,13 @@ export type AdminInsights = {
   totalBookings: Metric; users: Metric; revenue: Metric; activePartners: Metric; onlinePaymentRate: Metric; completedBookings: Metric;
   commissionRevenue?: Metric;
   completedServiceValue?: Metric;
+  reportPayments?: Metric;
+  completedBookingSnapshot?: Metric;
   returningCustomers?: Metric;
   bookingCustomers: number; paymentAttempts: number; successfulAttempts: number; paymentAttemptSuccessRate: number | null;
-  trends: Array<{ date: string; bookings: number; verifiedOnlineAmount: number; commissionAmount?: number; completedServiceValue?: number }>;
+  trends: Array<{ date: string; bookings: number; verifiedOnlineAmount: number; reportPaymentAmount?: number; commissionAmount?: number; completedServiceValue?: number }>;
   statuses: Array<{ status: AdminBooking['status']; count: number }>;
-  topSalons: Array<{ id: number; name: string; location: string | null; bookings: number; verifiedOnlineAmount: number; commissionAmount?: number; completedServiceValue?: number }>;
+  topSalons: Array<{ id: number; name: string; location: string | null; bookings: number; verifiedOnlineAmount: number; reportPaymentAmount?: number; commissionAmount?: number; completedServiceValue?: number }>;
   popularServices: Array<{ id: number; name: string; supplierName: string; bookings: number; percentage: number }>;
 };
 export type AdminUserRow = { id: number; fullName: string; email: string | null; role: 'CUSTOMER' | 'SUPPLIER' | 'STAFF' | 'ADMIN'; status: string; createdAt: string };
@@ -33,6 +35,8 @@ export type AdminProfilePatch = { fullName: string; gender: 'MALE' | 'FEMALE' | 
 export type AdminServiceDetail = { id: number; name: string; category: string; price: number; durationMinutes: number; active: boolean };
 export type AdminPaymentRow = { id: number; orderCode: number; bookingId: number; bookingCode: string; supplierName: string; paymentOption: string; status: string; amount: number; remainingAmount: number; createdAt: string; paidAt: string | null; requiresManualReview: boolean; canonicalVerified: boolean; bookingPaymentStatus: string };
 export type AdminPaymentLedger = { verifiedOnlineAmount: number; deposits: number; fullPayments: number; remainingAtSalon: number; attempts: number; reviewRequiredAttempts: number; failedAttempts: number; rows: import('../types').AdminPage<AdminPaymentRow> };
+export type ReportingPaymentRow = { id: string; source: 'VERIFIED' | 'SIMULATED'; batchId: string | null; bookingId: number; bookingCode: string; customerId: number; customerName: string; supplierId: number; supplierName: string; serviceId: number; serviceName: string; practitionerId: number; practitionerName: string; appointmentDate: string; startTime: string; endTime: string; bookingStatus: AdminBooking['status']; bookingCreatedAt: string; serviceValue: number; paymentOption: string; amount: number; remainingAmount: number; paidAt: string };
+export type ReportingPaymentSummary = { total: number; deposits: number; fullPayments: number; verifiedAmount: number; simulatedAmount: number; remainingAtSalon: number; transactions: number; uniqueBookings: number; asOf: string; rows: import('../types').AdminPage<ReportingPaymentRow> };
 
 export type EditSnapshot<T> = { data: T; revision: string };
 export type PartnerProfileEdit = { id?: number; name: string; businessType: string; description: string | null; addressLine: string; imageUrl: string | null; locationId: number | null; latitude: number | null; longitude: number | null };

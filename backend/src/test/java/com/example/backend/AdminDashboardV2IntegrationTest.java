@@ -40,6 +40,7 @@ class AdminDashboardV2IntegrationTest {
     @Autowired AdminDashboardService dashboard;
     @Autowired AdminDetailService details;
     @Autowired AdminPartnerEditService partnerEdits;
+    @Autowired ReportingPaymentsService reportingPayments;
     @Autowired com.fasterxml.jackson.databind.ObjectMapper json;
     @Autowired org.springframework.security.crypto.password.PasswordEncoder encoder;
     @Autowired MockMvc mvc; @Autowired JwtService jwt;
@@ -76,6 +77,53 @@ class AdminDashboardV2IntegrationTest {
         assertNull(after.completedBookings().currentValue(),"no fabricated completion times");
     }
     UserAccount customer,admin; Supplier a,b,demo; ServiceOffering sa,sb,sd; Practitioner pa,pb,pd;
+    @Test void reportPaymentsJoinTheSameBookingAndReconcileWithoutChangingVerifiedLedger() throws Exception {
+        long originalBookings=bookings.count(),originalPayments=payments.count();
+        var verifiedBefore=dashboard.paymentSummary(day,day,false);
+        var original=Map.of("version",1,"data",Map.of("users",List.of(),"salons",List.of(),"bookings",List.of(),"originalCustomers",List.of()));
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id","beautylink-presentation-20261031").setParameter("payload",json.writeValueAsString(original)).executeUpdate();
+        String batch="beautylink-report-payments-fixture-v1";
+        var reportBookings=new ArrayList<Map<String,Object>>();var reportReceipts=new ArrayList<Map<String,Object>>();
+        for(int i=0;i<2;i++) {
+            var supplier=i==0?a:b;var offering=i==0?sa:sb;var person=i==0?pa:pb;
+            var row=new LinkedHashMap<String,Object>();
+            row.put("id",9100000000L+i);row.put("batchId",batch);row.put("source","SIMULATED");row.put("bookingCode","REPORT-"+i);
+            row.put("customerId",customer.getId());row.put("customerName",customer.getFullName());row.put("supplierId",supplier.getId());row.put("supplierName",supplier.getName());
+            row.put("serviceId",offering.getId());row.put("serviceName",offering.getName());row.put("practitionerId",person.getId());row.put("practitionerName",person.getDisplayName());
+            row.put("appointmentDate",day.toString());row.put("startTime","14:00:00");row.put("endTime","15:00:00");row.put("createdAt",start.plusSeconds(20+i).toString());row.put("status","COMPLETED");row.put("paymentStatus","PARTIALLY_PAID");row.put("totalAmount",200000);
+            reportBookings.add(row);
+            reportReceipts.add(Map.of("id",batch+":"+i,"batchId",batch,"source","SIMULATED","bookingId",9100000000L+i,"paymentOption","DEPOSIT_05","amount",10000,"remainingAmount",190000,"paidAt",start.plusSeconds(100+i).toString()));
+        }
+        var root=Map.of("version",1,"batch",Map.of("id",batch,"version",1),"data",Map.of("bookings",reportBookings,"reportingPayments",reportReceipts));
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",batch).setParameter("payload",json.writeValueAsString(root)).executeUpdate();
+        var report=reportingPayments.summary(day,day,null,0,100);
+        assertEquals(0,report.total().compareTo(verifiedBefore.verifiedOnlineCollected().add(new BigDecimal("20000"))));
+        assertEquals(0,report.deposits().add(report.fullPayments()).compareTo(report.total()));
+        assertEquals(0,report.verifiedAmount().compareTo(verifiedBefore.verifiedOnlineCollected()));assertEquals(20000,report.simulatedAmount().intValue());
+        assertEquals(verifiedBefore.verifiedPaymentBookings()+2,report.uniqueBookings());assertEquals(report.transactions(),report.rows().totalElements());
+        var row=report.rows().content().stream().filter(r->r.source().equals("SIMULATED")).findFirst().orElseThrow();
+        assertEquals(day,row.appointmentDate());assertEquals(LocalTime.of(14,0),row.startTime());assertEquals(BookingStatus.COMPLETED,row.bookingStatus());
+        var paged=reportingPayments.summary(day,day,null,1,1);assertEquals(report.total(),paged.total());assertEquals(1,paged.rows().content().size());
+        assertEquals(0,reportingPayments.summary(day.plusDays(10),day.plusDays(10),null,0,100).simulatedAmount().signum());
+        assertEquals(0,reportingPayments.summary(day,day,a.getId(),0,100).total().add(reportingPayments.summary(day,day,b.getId(),0,100).total()).compareTo(report.total()));
+        for(var grain:Granularity.values()) {
+            var insightsReport=insights.insights(day,day,false,grain);
+            assertEquals(0,report.total().compareTo(insightsReport.reportPayments().currentValue()));
+            assertEquals(0,report.total().compareTo(insightsReport.trends().stream().map(t->t.reportPaymentAmount()).reduce(BigDecimal.ZERO,BigDecimal::add)));
+            assertEquals(0,report.total().compareTo(insightsReport.topSalons().stream().map(t->t.reportPaymentAmount()).reduce(BigDecimal.ZERO,BigDecimal::add)));
+            assertEquals(0,verifiedBefore.verifiedOnlineCollected().compareTo(insightsReport.revenue().currentValue()));
+        }
+        mvc.perform(get("/api/v1/admin/report-payments")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/admin/report-payments").header("Authorization","Bearer "+jwt.createToken(customer))).andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/report-payments").param("from",day.toString()).param("to",day.toString()).header("Authorization","Bearer "+jwt.createToken(admin))).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.simulatedAmount").value(20000));
+        mvc.perform(get("/api/v1/supplier/report-payments").param("from",day.toString()).param("to",day.toString()).param("salonId",b.getId().toString()).header("Authorization","Bearer "+jwt.createToken(a.getOwner()))).andExpect(status().isOk()).andExpect(jsonPath("$.simulatedAmount").value(10000));
+        assertEquals(verifiedBefore.verifiedOnlineCollected(),dashboard.paymentSummary(day,day,false).verifiedOnlineCollected());
+        assertTrue(dashboard.revenue(day,day,false,0,100).content().stream().noneMatch(r->r.bookingCode().startsWith("REPORT-")));
+        assertEquals(originalBookings,bookings.count());assertEquals(originalPayments,payments.count());
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",batch+".rollback").setParameter("payload","{\"version\":1}").executeUpdate();
+        assertEquals(0,reportingPayments.summary(day,day,null,0,100).simulatedAmount().signum());
+        assertEquals(2,((Number)em.createNativeQuery("select count(*) from presentation_recovery where id like :prefix").setParameter("prefix",batch+"%").getSingleResult()).intValue(),"Rollback marker retains immutable batch as audit");
+    }
     @BeforeEach void fixture() {
         ReflectionTestUtils.setField(insights,"clock",Clock.fixed(Instant.parse("2026-11-01T17:00:00Z"),ZoneOffset.UTC));
         customer=user("Customer",Role.CUSTOMER); admin=user("Admin",Role.ADMIN);

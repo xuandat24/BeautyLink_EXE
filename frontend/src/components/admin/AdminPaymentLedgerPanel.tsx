@@ -6,8 +6,14 @@ import { BookingDetail } from './AdminDashboardPage';
 import { AdminStatusBadge } from './AdminStatusBadge';
 import { AdminRegion, AdminPagination, useAdminResource } from './AdminDataRegion';
 import type { AdminBooking } from '../../types';
+import { ReportingPaymentPanel } from './ReportingPaymentPanel';
 
 export function AdminPaymentLedgerPanel({ salonId, range, active = true }: { salonId?: number; range: AdminRange; active?: boolean }) {
+  const [mode, setMode] = useState<'report' | 'verified'>('report');
+  return <div className="min-w-0"><div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Nguồn sổ thanh toán">{(['report', 'verified'] as const).map(value => <button type="button" key={value} aria-pressed={mode === value} onClick={() => setMode(value)} className={`min-h-11 rounded-xl px-4 text-sm font-bold ${mode === value ? 'bg-pink-600 text-white' : 'border border-slate-200 bg-white'}`}>{value === 'report' ? 'Thanh toán báo cáo' : 'Đối soát PayOS'}</button>)}</div>{mode === 'report' ? <ReportingPaymentPanel range={range} salonId={salonId} active={active} /> : <VerifiedPaymentLedgerPanel range={range} salonId={salonId} active={active} />}</div>;
+}
+
+function VerifiedPaymentLedgerPanel({ salonId, range, active = true }: { salonId?: number; range: AdminRange; active?: boolean }) {
   const scope = `${salonId ?? 'all'}:${range.from}:${range.to}`;
   const [paging, setPaging] = useState({ scope, page: 0 }); const page = paging.scope === scope ? paging.page : 0;
   const [booking, setBooking] = useState<AdminBooking | null>(null); const [detailError, setDetailError] = useState(''); const [opening, setOpening] = useState(false);

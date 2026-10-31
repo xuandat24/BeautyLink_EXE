@@ -99,14 +99,17 @@ class RecoveryStore {
         }
         System.out.println((write?"APPLIED":"VALIDATED")+" presentation recovery: synthetic="+ids.size()+", originalCompleted="+liveCompleted+", originalValue="+liveValue+", syntheticValue="+syntheticValue+", total="+(liveValue+syntheticValue)+"; real bookings/payments unchanged");
     }
-    public static void main(String[] args) throws Exception {
-        if (args.length!=2 || !Set.of("export","check","apply").contains(args[0])) throw new IllegalArgumentException("export|check|apply <path>");
+    static Connection open() throws Exception {
         URI uri=URI.create(System.getenv("MYSQL_PUBLIC_URL"));
         if (!"acela.proxy.rlwy.net".equals(uri.getHost()) || uri.getPort()!=10050 || !"/railway".equals(uri.getPath())) throw new IllegalStateException("Unexpected database target");
         var auth=uri.getRawUserInfo().split(":",2); var p=new Properties();
         p.setProperty("user",URLDecoder.decode(auth[0],StandardCharsets.UTF_8)); p.setProperty("password",URLDecoder.decode(auth[1],StandardCharsets.UTF_8));
         p.setProperty("sslMode","REQUIRED"); p.setProperty("connectTimeout","15000"); p.setProperty("socketTimeout","45000"); p.setProperty("connectionTimeZone",ZONE.getId());
-        try(var c=DriverManager.getConnection("jdbc:mysql://"+uri.getHost()+":"+uri.getPort()+uri.getPath(),p)) {
+        return DriverManager.getConnection("jdbc:mysql://"+uri.getHost()+":"+uri.getPort()+uri.getPath(),p);
+    }
+    public static void main(String[] args) throws Exception {
+        if (args.length!=2 || !Set.of("export","check","apply").contains(args[0])) throw new IllegalArgumentException("export|check|apply <path>");
+        try(var c=open()) {
             c.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ); c.setReadOnly(!args[0].equals("apply")); c.setAutoCommit(false);
             if (args[0].equals("export")) export(c,Path.of(args[1])); else apply(c,Path.of(args[1]),args[0].equals("apply"));
             c.rollback();

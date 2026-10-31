@@ -240,6 +240,13 @@ export interface AdminDateRange {
 }
 
 export interface AdminBooking {
+  batchId?: string;
+  source?: 'SIMULATED';
+  practitionerId?: number;
+  completedAt?: string;
+  simulatedOnlineAmount?: number;
+  simulatedPaymentOption?: PaymentOption;
+  simulatedPaidAt?: string;
   id: number;
   bookingCode: string;
   customerId: number;

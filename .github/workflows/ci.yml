@@ -122,6 +122,22 @@ jobs:
           node frontend/tests/checkoutEntrySmoke.mjs
           node frontend/tests/authMobileSmoke.mjs
           node frontend/tests/adminDashboardSmoke.mjs
+      - name: Report deposits and booking calendar reconciliation on desktop and mobile
+        env:
+          PLAYWRIGHT_MODULE_PATH: ${{ runner.temp }}/beautylink-browser/node_modules/playwright
+          SMOKE_REPORT_PAYMENTS: '1'
+        run: |
+          java -cp "backend/target/test-classes:backend/target/classes:$(cat backend/target/test-classpath.txt)" com.example.backend.BookingReviewSmokeServer > backend/target/report-payments-server.log 2>&1 &
+          backend_pid=$!
+          (cd frontend && exec node node_modules/vite/bin/vite.js --host=127.0.0.1 --strictPort) > backend/target/report-payments-vite.log 2>&1 &
+          frontend_pid=$!
+          trap 'kill "$backend_pid" "$frontend_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if grep -q BOOKING_REVIEW_SMOKE_READY backend/target/report-payments-server.log && curl --fail --silent http://localhost:5173 > /dev/null; then break; fi
+            sleep 1
+          done
+          grep -q BOOKING_REVIEW_SMOKE_READY backend/target/report-payments-server.log
+          node frontend/tests/reportingPaymentSmoke.mjs
       - name: Checkout performance and two-context race (isolated fake provider)
         env:
           PLAYWRIGHT_MODULE_PATH: ${{ runner.temp }}/beautylink-browser/node_modules/playwright
@@ -166,6 +182,8 @@ jobs:
           name: admin-v2-browser
           path: |
             backend/target/admin-v2-*.png
+            backend/target/report-payments-*.png
+            backend/target/report-payments-server.log
             backend/target/payos-qr-*.png
             backend/target/review-midpoint-*.png
             backend/target/payos-preparation-*.png

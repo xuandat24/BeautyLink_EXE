@@ -118,6 +118,33 @@ public class BookingReviewSmokeServer {
                 b.setStartTime(LocalTime.of(9 + i % 8, 0)); b.setEndTime(b.getStartTime().plusMinutes(offering.getDurationMinutes()));
                 b.setTotalAmount(offering.getPrice()); b.setStatus(BookingStatus.PENDING); b.setPaymentStatus(PaymentStatus.UNPAID); bookings.save(b);
             }
+            if (System.getenv("SMOKE_REPORT_PAYMENTS") != null) {
+                var json=context.getBean(com.fasterxml.jackson.databind.ObjectMapper.class);
+                var original=json.createObjectNode().put("version",1);var history=original.putObject("data");
+                history.putArray("users");history.set("salons",json.valueToTree(context.getBean(com.example.backend.service.AdminDirectoryService.class).salons(null,false,0,100).content()));history.putArray("bookings");history.putArray("originalCustomers");
+                String batch=com.example.backend.service.PresentationPaymentBatchValidator.BATCH;
+                var payload=json.createObjectNode().put("version",1);payload.putObject("batch").put("id",batch).put("version",1);
+                var data=payload.putObject("data");var reportBookings=data.putArray("bookings");var receipts=data.putArray("reportingPayments");
+                var person=people.findBySupplierIdAndActiveTrue(offering.getSupplier().getId()).getFirst();var customer=users.findByPhone("0900000001").orElseThrow();
+                for(int i=0;i<144;i++) {
+                    var date=LocalDate.of(2026,10,3).plusDays(i/6);int hour=9+i%6;
+                    var created=date.minusDays(1).atTime(8,0).atOffset(ZoneOffset.ofHours(7)).toInstant();var paid=created.plusSeconds(300);
+                    var value=offering.getPrice();var amount=com.example.backend.service.PresentationPaymentBatchValidator.deposit(value);
+                    var b=reportBookings.addObject().put("id",9100000000L+i).put("batchId",batch).put("source","SIMULATED").put("bookingCode","BL2610R"+String.format("%04d",i+1))
+                            .put("customerId",customer.getId()).put("customerName",customer.getFullName()).put("customerPhone",customer.getPhone()).put("supplierId",offering.getSupplier().getId()).put("supplierName",offering.getSupplier().getName())
+                            .put("serviceId",offering.getId()).put("serviceName",offering.getName()).put("practitionerId",person.getId()).put("practitionerName",person.getDisplayName())
+                            .put("appointmentDate",date.toString()).put("startTime",String.format("%02d:00:00",hour)).put("endTime",String.format("%02d:00:00",hour+1)).put("totalAmount",value)
+                            .put("status","COMPLETED").put("paymentStatus","PARTIALLY_PAID").put("createdAt",created.toString()).put("simulatedPaidAt",paid.toString()).put("simulatedOnlineAmount",amount)
+                            .put("remainingAtSalon",value.subtract(amount)).put("commissionAmount",0);
+                    b.putNull("verifiedOnlineAmount").putNull("verifiedPaidAt").putNull("verifiedPaymentOption").put("paymentReviewRequired",false);
+                    receipts.addObject().put("id",batch+":"+i).put("batchId",batch).put("source","SIMULATED").put("bookingId",9100000000L+i).put("paymentOption","DEPOSIT_05").put("amount",amount).put("remainingAmount",value.subtract(amount)).put("paidAt",paid.toString());
+                }
+                var em=context.getBean(jakarta.persistence.EntityManager.class);
+                try {
+                    em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id","beautylink-presentation-20261031").setParameter("payload",json.writeValueAsString(original)).executeUpdate();
+                    em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",batch).setParameter("payload",json.writeValueAsString(payload)).executeUpdate();
+                } catch(com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalStateException(e); }
+            }
             return null;
         });
         var uncertain = payments.findByOrderCode(9100004L).orElseThrow();

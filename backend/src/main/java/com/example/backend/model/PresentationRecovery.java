@@ -8,5 +8,6 @@ import jakarta.persistence.*;
 public class PresentationRecovery {
     @Id @Column(length = 64) private String id;
     @Lob @Column(nullable = false, columnDefinition = "LONGTEXT", updatable = false) private String payload;
+    public String getId() { return id; }
     public String getPayload() { return payload; }
 }

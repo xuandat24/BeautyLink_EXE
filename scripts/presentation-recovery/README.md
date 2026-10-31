@@ -27,3 +27,64 @@ Người dùng đã xác nhận giữ bộ dữ liệu trình bày trước PR #
 6. Xác minh bảng đã lưu đủ bản ghi, tổng tiền/ngày–tuần–tháng và danh sách khớp nhau; dữ liệu thật/PayOS không bị tool chỉnh. Kiểm tra desktop/mobile, quyền ADMIN/SUPPLIER và các API thanh toán thật.
 
 Rollback giao diện: quay về release trước; payload vẫn được giữ làm audit. Không xóa bảng, backup hoặc lịch sử thật. Muốn ngừng phục hồi thì thực hiện thay đổi cấu hình/code có kiểm soát, không sửa dữ liệu tài chính.
+
+## Preflight yêu cầu thêm 72 khoản thanh toán báo cáo
+
+`payment-preflight.sql` chỉ chứa SELECT, không phải công cụ apply. Chạy trong transaction
+READ ONLY / REPEATABLE READ bằng kết nối operator đã xác minh ở trên; DATETIME được
+đọc theo giờ Việt Nam (UTC+7), khoảng ngày là [bắt đầu, ngày sau kết thúc).
+Không chạy lại `prepare.ts` hoặc `RecoveryStore apply` để thêm khoản thanh toán.
+SQL cố ý kiểm tra đúng hai khoảng 01–31/10 và 02–31/10/2026, không phải bộ lọc động cho dashboard.
+Không xuất tên, email, số điện thoại, thông tin tài khoản ngân hàng hoặc secret.
+
+Kết quả và ràng buộc chặn ghi được lưu tại [payment-preflight-20261031.md](payment-preflight-20261031.md).
+Bản đối soát 72 khoản là lịch sử, không phải kế hoạch hiện tại. Người dùng đã đổi yêu cầu thành
+**144 booking báo cáo mới hoàn thành, đặt cọc 5%, tổng thanh toán gần 3.045.000đ**.
+
+## Batch 144 booking và cọc báo cáo
+
+- `PaymentBatchStore.java export` chỉ đọc snapshot nguồn hiện tại, bao gồm partition cũ,
+  catalog, practitioner assignment, lịch làm việc/ngoại lệ, lịch bận và giao dịch xác minh.
+- `prepare-payments.ts` tạo đúng 144 booking và 144 khoản cọc mới bằng giá catalog, không voucher/phí.
+  Dùng dynamic programming để chọn tổ hợp giá hợp lệ gần mục tiêu; không thay amount của dòng cuối.
+  Không tạo lại hồ sơ, chuyên viên hoặc 143 booking phục hồi cũ. Hai salon chỉ có giá 0 không đủ điều kiện cọc;
+  kế hoạch phân bố trên 12 salon có dịch vụ và lịch phù hợp, có ngày cao/thấp/không phát sinh.
+- `PresentationPaymentBatchValidator` kiểm tra ID, quan hệ, label tham chiếu, assignment, giá/duration,
+  cọc HALF_UP 5% và ngưỡng 2.000đ, số còn lại, thời điểm tạo/cọc/hẹn/hoàn thành, working slot,
+  giờ nghỉ, ngoại lệ và xung đột chuyên viên/khách với lịch thật, lịch báo cáo cũ và các dòng mới.
+- `PaymentBatchStore check` dry-run bằng nguồn đọc lại từ DB. `apply` kiểm tra hash baseline, reference,
+  lịch thật và khoản xác minh; ghi nguyên tử trong transaction SERIALIZABLE. Khóa batch cố định:
+  `beautylink-report-payments-144-20261031-v1`. Chạy lại cùng payload là no-op; payload khác bị từ chối.
+- Chỉ INSERT một hàng mới vào `presentation_recovery`, payload version 1 với `batch.version=1`.
+  Không update hàng cũ; không ghi vào bảng vận hành. ID booking mới thuộc vùng 9.100.000.000–9.100.000.143.
+  Payment ID là chuỗi ID báo cáo, không phải transaction/orderCode/paymentLinkID PayOS.
+- `rollback` chỉ INSERT marker `<batchId>.rollback`. Service ngừng hợp nhất đúng batch đó;
+  nguyên payload batch và partition cũ vẫn giữ làm audit. Chạy rollback lại là no-op;
+  apply không tự kích hoạt lại batch đã rollback.
+- `/api/v1/admin/report-payments` trả tổng + phân trang từ cùng danh sách chi tiết.
+  `/api/v1/supplier/report-payments` luôn lấy supplier từ tài khoản đăng nhập, không từ ID phía client.
+  Ngày giờ/service/practitioner trên dòng thanh toán được JOIN từ chính booking, không sao chép lịch riêng.
+- Insights thêm `reportPayments`, `reportPaymentAmount` trên chart/top salon; `revenue`, `verified*`,
+  API ledger/CSV PayOS giữ định nghĩa và nguồn thật. UI dùng nhãn **Tổng thanh toán báo cáo**,
+  nguồn trong Cách tính/chi tiết. CSV báo cáo có source/batch/booking/calendar, không thay CSV PayOS.
+- Card Đơn hoàn thành dùng `completedBookingSnapshot`: trạng thái hiện tại của cohort tạo trong kỳ,
+  không bịa completedAt của đơn cũ hoặc biến snapshot thành thống kê chuyển trạng thái lịch sử.
+
+Thực thi operator từ repo root (Java 21+; dependency JAR Jackson/mysql trong `backend/target/recovery-classpath.txt`):
+
+1. Compile backend và hai tool RecoveryStore/PaymentBatchStore vào thư mục gitignored `backend/target/payment-tools`.
+   Classpath của tool gồm `backend/target/classes`, thư mục tool và các JAR Jackson/mysql, không cần boot Spring.
+2. Qua Railway run đúng project/environment/MySQL service ở mục trên, chạy
+   `PaymentBatchStore export backend/target/report-144-source.json`.
+3. Từ frontend chạy `node --import tsx ../scripts/presentation-recovery/prepare-payments.ts ../backend/target/report-144-source.json ../backend/target/report-144-plan.json`.
+4. Chạy `PaymentBatchStore check backend/target/report-144-plan.json`; xem đủ 144 dòng trong file riêng,
+   tổng trước/sau và ngày/salon, không công bố payload có dữ liệu hồ sơ.
+5. Chỉ sau kiểm thử đạt, chạy `PaymentBatchStore apply backend/target/report-144-plan.json` và chạy lại để xác minh no-op.
+6. Nếu cần rollback đúng batch: `PaymentBatchStore rollback backend/target/report-144-plan.json`.
+   Không chạy rollback như một phép thử trên website chính; kiểm tra cơ chế trên DB cô lập.
+
+Kế hoạch đã dry-run: baseline 1.215.458đ + cọc mô phỏng 1.829.750đ = **3.045.208đ**,
+lệch +208đ so với mục tiêu tham chiếu. Cọc báo cáo sau gộp 2.999.208đ + trả đủ xác minh 46.000đ.
+144 booking mới có tổng giá trị dịch vụ 36.595.000đ, số còn lại 34.765.250đ; không gọi các đại lượng này là tiền đã thu.
+File source/plan, ảnh chụp và dữ liệu kiểm tra production tiếp tục chỉ nằm trong thư mục gitignored.
+Tình trạng apply/deploy thực tế được cập nhật trong [report-payments-144-20261031.md](report-payments-144-20261031.md).

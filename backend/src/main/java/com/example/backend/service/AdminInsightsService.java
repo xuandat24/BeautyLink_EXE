@@ -64,7 +64,18 @@ public class AdminInsightsService {
                 .stream().map(r -> new Receipt(number(r[0]), number(r[1]), (String) r[2], (String) r[3], (Instant) r[4], money(r[5]))).toList();
         JsonNode stored = recovery.data();
         addStoredBookings(facts, stored, combined);
+        var reportReceipts = new ArrayList<>(receipts);
+        var reportSuppliers = new HashMap<Long,Object[]>();
+        read.rows("select s.id,s.name,l.name from Supplier s left join s.location l where (:demo = true or s.demoData = false)",combined,Integer.MAX_VALUE)
+                .forEach(r->reportSuppliers.put(number(r[0]),r));
+        for(var p:recovery.reportingPayments()) {
+            var supplier=reportSuppliers.get(p.supplierId());
+            if(supplier!=null && !p.paidAt().isBefore(combined.from()) && p.paidAt().isBefore(combined.to()))
+                reportReceipts.add(new Receipt(p.bookingId(),p.supplierId(),(String)supplier[1],(String)supplier[2],p.paidAt(),p.amount()));
+        }
         Cohort now = cohort(facts.values(), receipts, current), before = cohort(facts.values(), receipts, previous);
+        BigDecimal reportNow=reportReceipts.stream().filter(p->inside(p.paidAt(),current)).map(Receipt::amount).reduce(BigDecimal.ZERO,BigDecimal::add);
+        BigDecimal reportBefore=reportReceipts.stream().filter(p->inside(p.paidAt(),previous)).map(Receipt::amount).reduce(BigDecimal.ZERO,BigDecimal::add);
         long currentUsers = users(current.endExclusive(), stored, combined), previousUsers = users(previous.endExclusive(), stored, combined);
         long active = read.count("select count(s) from Supplier s where s.verificationStatus = :approval and s.owner.status = :active and (:demo = true or s.demoData = false)", combined);
         var currentRange = new AdminDashboardService.Range(requested.fromDate(), requested.toDate(), current.startInclusive(), current.endExclusive(), demo);
@@ -87,11 +98,13 @@ public class AdminInsightsService {
                 unavailable(null, BOOKING, unavailableCompletion, INSUFFICIENT_HISTORY),
                 unavailable(now.serviceValue(), VND, scope + "Giá trị dịch vụ của booking tạo trong khoảng lọc đang có trạng thái COMPLETED tại asOf (snapshot cohort). Không phải doanh thu phát sinh/tiền thực thu trong kỳ; không so sánh quá khứ khi thiếu lịch sử hoàn thành.", INSUFFICIENT_HISTORY),
                 unavailable(null, CUSTOMER, "Khách duy nhất có đơn hoàn thành trong kỳ và ít nhất một đơn hoàn thành sớm hơn. " + unavailableCompletion, INSUFFICIENT_HISTORY),
+                compare(reportNow,reportBefore,VND,"Tổng thanh toán báo cáo theo thời điểm ghi nhận: tiền PayOS xác minh cộng các khoản mô phỏng trong partition báo cáo. Tổng bằng tiền cọc + thanh toán đủ; không phải giá trị dịch vụ hay tiền PayOS đã xác minh. Metadata cọc phục hồi cũ không phải receipt nên không được cộng lại."),
+                unavailable(BigDecimal.valueOf(now.bookings().stream().filter(b->b.status()==BookingStatus.COMPLETED).count()),BOOKING,"Số booking tạo trong kỳ đang có trạng thái COMPLETED tại mốc chốt, gồm hồ sơ báo cáo. Đây là snapshot trạng thái, không phải số lần chuyển sang hoàn thành phát sinh trong kỳ; không so sánh quá khứ khi thiếu lịch sử.",CURRENT_SNAPSHOT),
                 now.bookings().stream().map(BookingFact::customerId).distinct().count(), attempts, success,
                 attempts == 0 ? null : percentage(success, attempts).doubleValue(),
-                trends(now, receipts, current, requested.fromDate(), granularity),
+                trends(now, receipts, reportReceipts, current, requested.fromDate(), granularity),
                 Arrays.stream(BookingStatus.values()).map(s -> new StatusCount(s, statuses.getOrDefault(s, 0L))).toList(),
-                topSalons(now, receipts, current), popularServices(now));
+                topSalons(now, receipts, reportReceipts, current), popularServices(now));
     }
 
     private Cohort cohort(Collection<BookingFact> all, List<Receipt> receipts, Period period) {
@@ -127,32 +140,40 @@ public class AdminInsightsService {
         }
     }
 
-    private List<Trend> trends(Cohort cohort, List<Receipt> receipts, Period period, LocalDate from, Granularity grain) {
+    private List<Trend> trends(Cohort cohort, List<Receipt> receipts, List<Receipt> reportReceipts, Period period, LocalDate from, Granularity grain) {
         var buckets = new TreeMap<LocalDate, Trend>();
         LocalDate last = period.endExclusive().minusNanos(1).atZone(ZONE).toLocalDate();
         for (LocalDate day = from; !day.isAfter(last); day = day.plusDays(1)) {
-            LocalDate key = bucket(day, from, grain); buckets.putIfAbsent(key, new Trend(key, 0, BigDecimal.ZERO, BigDecimal.ZERO));
+            LocalDate key = bucket(day, from, grain); buckets.putIfAbsent(key, new Trend(key, 0, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
         }
         for (var b : cohort.bookings()) {
             LocalDate key = bucket(b.createdAt().atZone(ZONE).toLocalDate(), from, grain); var p = buckets.get(key);
-            buckets.put(key, new Trend(key, p.bookings() + 1, p.verifiedOnlineAmount(), p.completedServiceValue().add(b.status() == BookingStatus.COMPLETED ? b.value() : BigDecimal.ZERO)));
+            buckets.put(key, new Trend(key, p.bookings() + 1, p.verifiedOnlineAmount(), p.completedServiceValue().add(b.status() == BookingStatus.COMPLETED ? b.value() : BigDecimal.ZERO),p.reportPaymentAmount()));
         }
         for (var r : receipts) if (inside(r.paidAt(), period)) {
             LocalDate key = bucket(r.paidAt().atZone(ZONE).toLocalDate(), from, grain); var p = buckets.get(key);
-            buckets.put(key, new Trend(key, p.bookings(), p.verifiedOnlineAmount().add(r.amount()), p.completedServiceValue()));
+            buckets.put(key, new Trend(key, p.bookings(), p.verifiedOnlineAmount().add(r.amount()), p.completedServiceValue(),p.reportPaymentAmount()));
+        }
+        for(var r:reportReceipts) if(inside(r.paidAt(),period)) {
+            LocalDate key=bucket(r.paidAt().atZone(ZONE).toLocalDate(),from,grain); var p=buckets.get(key);
+            buckets.put(key,new Trend(key,p.bookings(),p.verifiedOnlineAmount(),p.completedServiceValue(),p.reportPaymentAmount().add(r.amount())));
         }
         return List.copyOf(buckets.values());
     }
-    private List<TopSalon> topSalons(Cohort cohort, List<Receipt> receipts, Period period) {
+    private List<TopSalon> topSalons(Cohort cohort, List<Receipt> receipts, List<Receipt> reportReceipts, Period period) {
         var salons = new HashMap<Long, TopSalon>();
         for (var b : cohort.bookings()) {
-            var p = salons.getOrDefault(b.supplierId(), new TopSalon(b.supplierId(), b.supplierName(), b.location(), 0, BigDecimal.ZERO, BigDecimal.ZERO));
-            salons.put(b.supplierId(), new TopSalon(p.id(), p.name(), p.location(), p.bookings() + 1, p.verifiedOnlineAmount(), p.completedServiceValue().add(b.status() == BookingStatus.COMPLETED ? b.value() : BigDecimal.ZERO)));
+            var p = salons.getOrDefault(b.supplierId(), new TopSalon(b.supplierId(), b.supplierName(), b.location(), 0, BigDecimal.ZERO, BigDecimal.ZERO,BigDecimal.ZERO));
+            salons.put(b.supplierId(), new TopSalon(p.id(), p.name(), p.location(), p.bookings() + 1, p.verifiedOnlineAmount(), p.completedServiceValue().add(b.status() == BookingStatus.COMPLETED ? b.value() : BigDecimal.ZERO),p.reportPaymentAmount()));
         }
         // Same receipt period as the revenue card/chart, not the booking-created cohort.
         for (var r : receipts) if (inside(r.paidAt(), period)) {
-            var p = salons.getOrDefault(r.supplierId(), new TopSalon(r.supplierId(), r.supplierName(), r.location(), 0, BigDecimal.ZERO, BigDecimal.ZERO));
-            salons.put(p.id(), new TopSalon(p.id(), p.name(), p.location(), p.bookings(), p.verifiedOnlineAmount().add(r.amount()), p.completedServiceValue()));
+            var p = salons.getOrDefault(r.supplierId(), new TopSalon(r.supplierId(), r.supplierName(), r.location(), 0, BigDecimal.ZERO, BigDecimal.ZERO,BigDecimal.ZERO));
+            salons.put(p.id(), new TopSalon(p.id(), p.name(), p.location(), p.bookings(), p.verifiedOnlineAmount().add(r.amount()), p.completedServiceValue(),p.reportPaymentAmount()));
+        }
+        for(var r:reportReceipts) if(inside(r.paidAt(),period)) {
+            var p=salons.getOrDefault(r.supplierId(),new TopSalon(r.supplierId(),r.supplierName(),r.location(),0,BigDecimal.ZERO,BigDecimal.ZERO,BigDecimal.ZERO));
+            salons.put(p.id(),new TopSalon(p.id(),p.name(),p.location(),p.bookings(),p.verifiedOnlineAmount(),p.completedServiceValue(),p.reportPaymentAmount().add(r.amount())));
         }
         return salons.values().stream().sorted(Comparator.comparingLong(TopSalon::bookings).reversed().thenComparingLong(TopSalon::id)).limit(5).toList();
     }
