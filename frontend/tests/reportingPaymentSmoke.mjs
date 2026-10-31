@@ -44,9 +44,14 @@ try {
         const insight = await get(`/api/v1/admin/dashboard/insights?from=2026-10-01&to=2026-10-31&granularity=${grain}`);
         assert.equal(insight.reportPayments.currentValue, report.total); assert.equal(insight.revenue.currentValue, report.verifiedAmount);
         assert.equal(insight.trends.reduce((n, x) => n + x.reportPaymentAmount, 0), report.total);
+        assert.equal(insight.reportOnlinePaymentRate.currentNumerator, report.uniqueBookings);
+        assert.equal(insight.reportOnlinePaymentRate.currentDenominator, insight.totalBookings.currentValue);
       }
       const amountCard = page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({ has: page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }) });
       await amountCard.waitFor(); await layout(); await page.screenshot({ path: `backend/target/report-payments-${width}-overview.png`, fullPage: true });
+      const rateCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Tỷ lệ thanh toán online',exact:true})});
+      assert.equal(await rateCard.locator('[data-admin-value]').innerText(),'85,6%');
+      assert.ok((await rateCard.innerText()).includes('Mục tiêu báo cáo'));
       await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();
       const paymentRow = page.locator('tbody tr').filter({ hasText: 'BL2610R' }).first(); await paymentRow.waitFor();
       const code = (await paymentRow.locator('strong').first().textContent()).trim(); const expected = data.bookings.find(b => b.bookingCode === code);assert.ok(expected);
@@ -58,6 +63,7 @@ try {
       const downloadReport = page.waitForEvent('download'); await page.getByRole('button', { name: 'Tải báo cáo thanh toán CSV', exact: true }).click();
       const reportFile = await downloadReport;const stream = await reportFile.createReadStream();let csv='';for await(const chunk of stream)csv+=chunk.toString();
       assert.equal((csv.match(/"SIMULATED"/g) || []).length, 144);assert.ok(csv.includes('appointment_date_vietnam'));
+      await page.getByText('Biên nhận PayOS xác minh và CSV riêng', { exact: true }).click();
       const downloadVerified = page.waitForEvent('download');await page.getByRole('button', { name: 'Tải CSV', exact: true }).click();
       const realFile=await downloadVerified;const realStream=await realFile.createReadStream();let realCsv='';for await(const chunk of realStream)realCsv+=chunk.toString();
       assert.ok(!realCsv.includes('BL2610R')&&!realCsv.includes('SIMULATED'));

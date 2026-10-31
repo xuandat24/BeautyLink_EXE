@@ -112,6 +112,10 @@ class AdminDashboardV2IntegrationTest {
             assertEquals(0,report.total().compareTo(insightsReport.trends().stream().map(t->t.reportPaymentAmount()).reduce(BigDecimal.ZERO,BigDecimal::add)));
             assertEquals(0,report.total().compareTo(insightsReport.topSalons().stream().map(t->t.reportPaymentAmount()).reduce(BigDecimal.ZERO,BigDecimal::add)));
             assertEquals(0,verifiedBefore.verifiedOnlineCollected().compareTo(insightsReport.revenue().currentValue()));
+            assertEquals(4L,insightsReport.reportOnlinePaymentRate().currentNumerator());
+            assertEquals(7L,insightsReport.reportOnlinePaymentRate().currentDenominator());
+            assertEquals(2L,insightsReport.onlinePaymentRate().currentNumerator(),"PayOS-only rate stays separate");
+            assertEquals(400.0/7,insightsReport.reportOnlinePaymentRate().currentValue().doubleValue(),0.000001);
         }
         mvc.perform(get("/api/v1/admin/report-payments")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/admin/report-payments").header("Authorization","Bearer "+jwt.createToken(customer))).andExpect(status().isForbidden());
@@ -122,6 +126,9 @@ class AdminDashboardV2IntegrationTest {
         assertEquals(originalBookings,bookings.count());assertEquals(originalPayments,payments.count());
         em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",batch+".rollback").setParameter("payload","{\"version\":1}").executeUpdate();
         assertEquals(0,reportingPayments.summary(day,day,null,0,100).simulatedAmount().signum());
+        var rolledBackInsights=insights.insights(day,day,false,Granularity.DAY);
+        assertEquals(2L,rolledBackInsights.reportOnlinePaymentRate().currentNumerator());
+        assertEquals(5L,rolledBackInsights.reportOnlinePaymentRate().currentDenominator());
         assertEquals(2,((Number)em.createNativeQuery("select count(*) from presentation_recovery where id like :prefix").setParameter("prefix",batch+"%").getSingleResult()).intValue(),"Rollback marker retains immutable batch as audit");
     }
     @BeforeEach void fixture() {

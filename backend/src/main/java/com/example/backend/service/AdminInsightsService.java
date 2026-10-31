@@ -74,6 +74,7 @@ public class AdminInsightsService {
                 reportReceipts.add(new Receipt(p.bookingId(),p.supplierId(),(String)supplier[1],(String)supplier[2],p.paidAt(),p.amount()));
         }
         Cohort now = cohort(facts.values(), receipts, current), before = cohort(facts.values(), receipts, previous);
+        Cohort reportCohort = cohort(facts.values(), reportReceipts, current), previousReportCohort = cohort(facts.values(), reportReceipts, previous);
         BigDecimal reportNow=reportReceipts.stream().filter(p->inside(p.paidAt(),current)).map(Receipt::amount).reduce(BigDecimal.ZERO,BigDecimal::add);
         BigDecimal reportBefore=reportReceipts.stream().filter(p->inside(p.paidAt(),previous)).map(Receipt::amount).reduce(BigDecimal.ZERO,BigDecimal::add);
         long currentUsers = users(current.endExclusive(), stored, combined), previousUsers = users(previous.endExclusive(), stored, combined);
@@ -99,6 +100,8 @@ public class AdminInsightsService {
                 unavailable(now.serviceValue(), VND, scope + "Giá trị dịch vụ của booking tạo trong khoảng lọc đang có trạng thái COMPLETED tại asOf (snapshot cohort). Không phải doanh thu phát sinh/tiền thực thu trong kỳ; không so sánh quá khứ khi thiếu lịch sử hoàn thành.", INSUFFICIENT_HISTORY),
                 unavailable(null, CUSTOMER, "Khách duy nhất có đơn hoàn thành trong kỳ và ít nhất một đơn hoàn thành sớm hơn. " + unavailableCompletion, INSUFFICIENT_HISTORY),
                 compare(reportNow,reportBefore,VND,"Tổng thanh toán báo cáo theo thời điểm ghi nhận: tiền PayOS xác minh cộng các khoản mô phỏng trong partition báo cáo. Tổng bằng tiền cọc + thanh toán đủ; không phải giá trị dịch vụ hay tiền PayOS đã xác minh. Metadata cọc phục hồi cũ không phải receipt nên không được cộng lại."),
+                rate(reportCohort.paidBookings(),reportCohort.bookings().size(),previousReportCohort.paidBookings(),previousReportCohort.bookings().size(),
+                        scope + "Tỷ lệ đo được: booking tạo trong kỳ có khoản PayOS xác minh hoặc receipt mô phỏng trước mốc chốt / mọi booking tạo trong cùng kỳ, gồm lịch hủy. Đếm booking duy nhất, không đếm lượt thử; metadata cọc cũ không có receipt không được tính. Đây không phải chỉ tiêu trình bày hoặc tỷ lệ riêng PayOS.",smallDenominator),
                 unavailable(BigDecimal.valueOf(now.bookings().stream().filter(b->b.status()==BookingStatus.COMPLETED).count()),BOOKING,"Số booking tạo trong kỳ đang có trạng thái COMPLETED tại mốc chốt, gồm hồ sơ báo cáo. Đây là snapshot trạng thái, không phải số lần chuyển sang hoàn thành phát sinh trong kỳ; không so sánh quá khứ khi thiếu lịch sử.",CURRENT_SNAPSHOT),
                 now.bookings().stream().map(BookingFact::customerId).distinct().count(), attempts, success,
                 attempts == 0 ? null : percentage(success, attempts).doubleValue(),

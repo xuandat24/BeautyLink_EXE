@@ -2,6 +2,7 @@ import type { Metric, ReportingPeriod } from '../types/adminV2';
 
 export const reportNumber = (value: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value);
 export const reportMoney = (value: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
+export const roundedReportMoney = (value: number) => value % 1000 === 0 ? reportMoney(value) : `≈ ${reportMoney(Math.round(value / 1000) * 1000)}`;
 const units = { BOOKING: 'đơn', ACCOUNT: 'tài khoản', PARTNER: 'đối tác', CUSTOMER: 'khách', VND: '₫', PERCENT: '%' };
 export function metricValue(metric: Metric, value: number | null): string {
   if (value == null) return '—';

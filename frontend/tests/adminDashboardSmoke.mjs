@@ -88,7 +88,7 @@ try {
       await page.route('**/api/v1/admin/dashboard/insights?*', async route => { const response = await route.fetch(); const json = await response.json(); const metric = json.reportPayments ?? json.revenue; metric.currentValue = metric.value = 1234567890123; await route.fulfill({ response, json }); }, { times: 1 });
       const stress = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?'));
       await page.getByRole('button', { name: 'Làm mới', exact: true }).click(); await stress;
-      const formatted = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(1234567890123);
+      const formatted = `${data.reportPayments ? '≈ ' : ''}${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(data.reportPayments ? 1234567890000 : 1234567890123)}`;
       await page.waitForFunction(value => document.querySelectorAll('[data-admin-value]')[2]?.textContent === value, formatted); await checkLayout();
       const restored = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?'));
       await page.getByRole('button', { name: 'Làm mới', exact: true }).click(); await restored; await page.getByTestId('admin-overview').waitFor();
@@ -125,7 +125,8 @@ try {
       const detail = page.getByRole('button', { name: /^Chi tiết / }).first(); await detail.waitFor(); await detail.click();
       await page.getByRole('dialog', { name: 'Chi tiết lịch hẹn' }).waitFor(); await page.getByRole('button', { name: 'Đóng', exact: true }).click();
       await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Thanh toán', exact: true }).waitFor();
-      await page.getByRole('heading', { name: 'Bảng doanh thu online đã xác minh', exact: true }).waitFor();
+      await page.getByText('Biên nhận PayOS xác minh và CSV riêng', { exact: true }).click();
+      await page.getByRole('heading', { name: 'Biên nhận thu online PayOS đã xác minh', exact: true }).waitFor();
       await checkLayout();
       const revenueDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Tải CSV', exact: true }).click();
       assert.match((await revenueDownload).suggestedFilename(), /beautylink-revenue.*csv/);

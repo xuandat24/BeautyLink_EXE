@@ -18,6 +18,7 @@ export type AdminInsights = {
   commissionRevenue?: Metric;
   completedServiceValue?: Metric;
   reportPayments?: Metric;
+  reportOnlinePaymentRate?: Metric;
   completedBookingSnapshot?: Metric;
   returningCustomers?: Metric;
   bookingCustomers: number; paymentAttempts: number; successfulAttempts: number; paymentAttemptSuccessRate: number | null;
