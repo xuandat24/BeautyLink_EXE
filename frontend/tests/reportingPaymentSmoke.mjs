@@ -40,8 +40,10 @@ try {
         assert.equal(r.bookingStatus, b.status); assert.equal(r.amount, Math.round(b.totalAmount * 0.05)); assert.equal(r.amount + r.remainingAmount, b.totalAmount);
         assert.equal(b.verifiedOnlineAmount, null);
       }
+      let measured;
       for (const grain of ['DAY', 'WEEK', 'MONTH']) {
         const insight = await get(`/api/v1/admin/dashboard/insights?from=2026-10-01&to=2026-10-31&granularity=${grain}`);
+        measured=insight;
         assert.equal(insight.reportPayments.currentValue, report.total); assert.equal(insight.revenue.currentValue, report.verifiedAmount);
         assert.equal(insight.trends.reduce((n, x) => n + x.reportPaymentAmount, 0), report.total);
         assert.equal(insight.reportOnlinePaymentRate.currentNumerator, report.uniqueBookings);
@@ -55,6 +57,11 @@ try {
       assert.ok((await rateCard.innerText()).includes('Mục tiêu báo cáo'));
       const partnerCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Đối tác hoạt động',exact:true})});
       assert.equal(await partnerCard.locator('[data-admin-value]').innerText(),String(new Set(data.salons.filter(s=>s.active&&s.approvalStatus==='VERIFIED').map(s=>s.id)).size));
+      const returningCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Khách hàng quay lại',exact:true})});
+      assert.equal(await returningCard.locator('[data-admin-value]').innerText(),'72');
+      const bookingCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Tổng đơn đặt lịch',exact:true})});
+      assert.ok((await bookingCard.locator('.flex-1.text-xs').innerText()).includes(String(Math.round(measured.totalBookings.absoluteChange/2+16))));
+      for(const card of [bookingCard,amountCard])assert.ok(!(await card.locator('.flex-1.text-xs').innerText()).includes('Kỳ trước:'));
       await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();
       const paymentRow = page.locator('tbody tr').filter({ hasText: 'BL2610R' }).first(); await paymentRow.waitFor();
       const code = (await paymentRow.locator('strong').first().textContent()).trim(); const expected = data.bookings.find(b => b.bookingCode === code);assert.ok(expected);

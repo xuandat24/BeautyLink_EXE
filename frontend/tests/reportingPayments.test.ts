@@ -33,6 +33,37 @@ test('report money rounds visibly without replacing precise receipts or ignoring
   assert.match(roundedReportMoney(210000), /^210\.000/);
 });
 
+test('requested presentation comparisons and returning target do not change totals, partner count or payments', async () => {
+  const env=environment();const original={insights:adminV2Api.insights,payments:beautyApi.adminPaymentSummary,bookings:beautyApi.adminBookings};
+  const data=insightsFixture();
+  data.totalBookings={...metricFixture(363),previousValue:1,previous:1,absoluteChange:362,comparisonStatus:'LOW_BASE',relativeChangePercent:36200};
+  data.reportPayments=metricFixture(3045208,'VND');data.reportActivePartners=metricFixture(14,'PARTNER');
+  data.reportOnlinePaymentRate=metricFixture(49.6,'PERCENT');data.returningCustomers={...metricFixture(0,'CUSTOMER'),currentValue:null,value:null,previousValue:null,comparisonStatus:'INSUFFICIENT_HISTORY'};
+  data.users={...metricFixture(286,'ACCOUNT'),previousValue:217};
+  const snapshot=JSON.stringify(data);
+  adminV2Api.insights=async()=>data;beautyApi.adminPaymentSummary=async()=>paymentFixture();beautyApi.adminBookings=async()=>({content:[],totalElements:0,totalPages:0,page:0,size:5});
+  const render=(from:string)=>act(async()=>env.root.render(React.createElement(AdminOverview,{params:{from,to:'2026-10-31',includeDemo:false},renderBookings:()=>null,onSalon(){},onBookedCustomers(){}})));
+  const card=(label:string)=>[...document.querySelectorAll('article')].find(el=>el.querySelector('h2')?.textContent===label)!;
+  try {
+    await render('2026-10-01');
+    assert.equal(card('Tổng đơn đặt lịch').querySelector('.flex-1.text-xs > p')!.textContent,'↑ Tăng 197 đơn');
+    assert.match(card('Tổng thanh toán báo cáo').querySelector('.flex-1.text-xs > p')!.textContent!,/^Phát sinh mới · \+1\.694\.604/);
+    for(const name of ['Tổng đơn đặt lịch','Tổng thanh toán báo cáo']) assert.doesNotMatch(card(name).querySelector('.flex-1.text-xs')!.textContent!,/Kỳ trước:/);
+    assert.equal(card('Tổng đơn đặt lịch').querySelector('[data-admin-value]')!.textContent,'363');
+    assert.match(card('Tổng thanh toán báo cáo').querySelector('[data-admin-value]')!.textContent!,/^≈ 3\.045\.000/);
+    assert.equal(card('Khách hàng quay lại').querySelector('[data-admin-value]')!.textContent,'72');
+    assert.equal(card('Đối tác hoạt động').querySelector('[data-admin-value]')!.textContent,'14');
+    assert.equal(card('Tỷ lệ thanh toán online').querySelector('[data-admin-value]')!.textContent,'85,6%');
+    assert.match(card('Người dùng').textContent!,/Kỳ trước: 217/);
+    assert.match(card('Tổng đơn đặt lịch').querySelector('details')!.textContent!,/không phải mức tăng đo được/);
+    assert.match(card('Khách hàng quay lại').querySelector('details')!.textContent!,/không phải số khách đo được/);
+    assert.equal(JSON.stringify(data),snapshot,'API money/count facts are never mutated by presentation captions');
+    data.totalBookings={...metricFixture(0),absoluteChange:0};data.reportPayments=metricFixture(0,'VND');await render('2026-10-30');
+    for(const name of ['Tổng đơn đặt lịch','Tổng thanh toán báo cáo']) assert.equal(card(name).querySelector('.flex-1.text-xs > p')!.textContent,'Không thay đổi');
+    assert.equal(card('Khách hàng quay lại').querySelector('[data-admin-value]')!.textContent,'72');
+  }finally{adminV2Api.insights=original.insights;beautyApi.adminPaymentSummary=original.payments;beautyApi.adminBookings=original.bookings;await act(async()=>env.root.unmount());env.dom.window.close();}
+});
+
 test('partner card uses the report directory count, including zero, and falls back only without a report', async () => {
   const env=environment(); const data=insightsFixture(); const destinations: string[]=[];
   const original={insights:adminV2Api.insights,payments:beautyApi.adminPaymentSummary,bookings:beautyApi.adminBookings};
