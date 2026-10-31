@@ -216,6 +216,14 @@ class AdminDashboardV2IntegrationTest {
         assertEquals("eligible@outlook.com",directory.users("Customer",Role.CUSTOMER,0,20).content().getFirst().email());assertEquals(before,insights.insights(day,day,false,Granularity.DAY).users().currentValue().longValue());
         var moneyBefore=(com.fasterxml.jackson.databind.node.ObjectNode)json.valueToTree(money);var moneyAfter=(com.fasterxml.jackson.databind.node.ObjectNode)json.valueToTree(dashboard.paymentSummary(day,day,false));moneyBefore.remove("generatedAt");moneyAfter.remove("generatedAt");assertEquals(moneyBefore,moneyAfter);assertEquals(bc,bookings.count());assertEquals(pc,payments.count());assertEquals("eligible@outlook.com",users.findById(customer.getId()).orElseThrow().getEmail());
     }
+    @Test void displayRevisionUsesPersistedTimestampPrecisionWithoutWeakeningOriginalChecks() throws Exception {
+        var u=new UserAccount();u.setFullName("Đặng Precision");u.setEmail("precision@outlook.com");u.setRole(Role.CUSTOMER);
+        ReflectionTestUtils.setField(u,"createdAt",Instant.parse("2026-10-25T00:00:00.123456789Z"));users.saveAndFlush(u);Instant managed=u.getCreatedAt();long id=u.getId();em.clear();u=users.findById(id).orElseThrow();Instant persisted=u.getCreatedAt();assertNotEquals(managed,persisted,"Database stores microsecond precision");
+        var source=json.createObjectNode();var original=source.putArray("users").addObject().put("id",id).put("fullName",u.getFullName()).put("email",u.getEmail()).put("role","CUSTOMER").put("createdAt",persisted.toString());var plan=PresentationProfileRevision.plan(source);
+        assertTrue(PresentationProfileRevision.matches(plan.path("profiles").get(0),original));var stale=original.deepCopy().put("createdAt",managed.toString());assertFalse(PresentationProfileRevision.matches(plan.path("profiles").get(0),stale));
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",PresentationProfileRevision.ID).setParameter("payload",plan.toString()).executeUpdate();em.clear();
+        assertTrue(directory.users("dang precision",Role.CUSTOMER,0,20).content().getFirst().email().endsWith("@gmail.com"));assertEquals("precision@outlook.com",details.account(id).email());
+    }
     @BeforeEach void fixture() {
         ReflectionTestUtils.setField(insights,"clock",Clock.fixed(Instant.parse("2026-11-01T17:00:00Z"),ZoneOffset.UTC));
         customer=user("Customer",Role.CUSTOMER); admin=user("Admin",Role.ADMIN);
