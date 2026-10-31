@@ -58,6 +58,14 @@ test('requested presentation comparisons and returning target do not change tota
     assert.match(card('Tổng đơn đặt lịch').querySelector('details')!.textContent!,/không phải mức tăng đo được/);
     assert.match(card('Khách hàng quay lại').querySelector('details')!.textContent!,/không phải số khách đo được/);
     assert.equal(JSON.stringify(data),snapshot,'API money/count facts are never mutated by presentation captions');
+    data.totalBookings={...data.totalBookings,currentValue:219,value:219,absoluteChange:218};
+    data.reportPayments=metricFixture(3043208,'VND');data.completedBookingSnapshot=metricFixture(147);
+    await render('2026-10-02');
+    assert.equal(card('Tổng đơn đặt lịch').querySelector('[data-admin-value]')!.textContent,'219');
+    assert.equal(card('Đơn hoàn thành').querySelector('[data-admin-value]')!.textContent,'147');
+    assert.equal(card('Tổng đơn đặt lịch').querySelector('.flex-1.text-xs > p')!.textContent,'↑ Tăng 197 đơn');
+    assert.match(card('Tổng thanh toán báo cáo').querySelector('[data-admin-value]')!.textContent!,/^≈ 3\.043\.000/);
+    for(const [name,value] of [['Người dùng','286'],['Khách hàng quay lại','72'],['Đối tác hoạt động','14'],['Tỷ lệ thanh toán online','85,6%']]) assert.equal(card(name).querySelector('[data-admin-value]')!.textContent,value);
     data.totalBookings={...metricFixture(0),absoluteChange:0};data.reportPayments=metricFixture(0,'VND');await render('2026-10-30');
     for(const name of ['Tổng đơn đặt lịch','Tổng thanh toán báo cáo']) assert.equal(card(name).querySelector('.flex-1.text-xs > p')!.textContent,'Không thay đổi');
     assert.equal(card('Khách hàng quay lại').querySelector('[data-admin-value]')!.textContent,'72');

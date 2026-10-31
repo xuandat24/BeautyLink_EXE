@@ -143,6 +143,12 @@ public class BookingReviewSmokeServer {
                 try {
                     em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id","beautylink-presentation-20261031").setParameter("payload",json.writeValueAsString(original)).executeUpdate();
                     em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",batch).setParameter("payload",json.writeValueAsString(payload)).executeUpdate();
+                    if(System.getenv("SMOKE_REPORT_SELECTION")!=null) {
+                        String id="beautylink-report-payments-selection-smoke-v1";
+                        var selection=json.createObjectNode().put("version",1);selection.putObject("batch").put("id",id).put("version",1).put("kind","REPORT_SELECTION").put("source","SIMULATED");
+                        selection.putObject("data").putArray("excludedBookingIds").add(9100000078L);
+                        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",id).setParameter("payload",json.writeValueAsString(selection)).executeUpdate();
+                    }
                 } catch(com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalStateException(e); }
             }
             return null;

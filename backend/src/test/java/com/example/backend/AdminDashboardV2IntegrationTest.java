@@ -150,6 +150,26 @@ class AdminDashboardV2IntegrationTest {
         assertEquals(verifiedBefore.verifiedOnlineCollected(),dashboard.paymentSummary(day,day,false).verifiedOnlineCollected());
         assertTrue(dashboard.revenue(day,day,false,0,100).content().stream().noneMatch(r->r.bookingCode().startsWith("REPORT-")));
         assertEquals(originalBookings,bookings.count());assertEquals(originalPayments,payments.count());
+        String selection="beautylink-report-payments-selection-fixture-v1";
+        var selectionPayload=Map.of("version",1,"batch",Map.of("id",selection,"version",1,"kind","REPORT_SELECTION","source","SIMULATED"),"data",Map.of("excludedBookingIds",List.of(9100000000L)));
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",selection).setParameter("payload",json.writeValueAsString(selectionPayload)).executeUpdate();
+        var compact=reportingPayments.summary(day,day,null,0,100);
+        assertEquals(report.total().subtract(new BigDecimal("10000")),compact.total());
+        assertEquals(report.uniqueBookings()-1,compact.uniqueBookings());
+        assertEquals(6,insights.insights(day,day,false,Granularity.DAY).totalBookings().currentValue().intValue());
+        mvc.perform(get("/api/v1/admin/presentation").header("Authorization","Bearer "+jwt.createToken(admin))).andExpect(status().isOk()).andExpect(jsonPath("$.bookings.length()").value(1)).andExpect(jsonPath("$.reportingPayments.length()").value(1));
+        mvc.perform(get("/api/v1/supplier/presentation-bookings").header("Authorization","Bearer "+jwt.createToken(a.getOwner()))).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        assertEquals(0,reportingPayments.summary(day,day,a.getId(),0,100).simulatedAmount().signum());
+        for(var grain:Granularity.values()) {
+            var selectedInsights=insights.insights(day,day,false,grain);
+            assertEquals(compact.total(),selectedInsights.reportPayments().currentValue());
+            assertEquals(0,compact.total().compareTo(selectedInsights.trends().stream().map(t->t.reportPaymentAmount()).reduce(BigDecimal.ZERO,BigDecimal::add)));
+            assertEquals(0,compact.total().compareTo(selectedInsights.topSalons().stream().map(t->t.reportPaymentAmount()).reduce(BigDecimal.ZERO,BigDecimal::add)));
+        }
+        assertEquals(verifiedBefore.verifiedOnlineCollected(),dashboard.paymentSummary(day,day,false).verifiedOnlineCollected());
+        assertEquals(originalBookings,bookings.count());assertEquals(originalPayments,payments.count());
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",selection+".rollback").setParameter("payload","{\"version\":1}").executeUpdate();
+        assertEquals(report.total(),reportingPayments.summary(day,day,null,0,100).total(),"Selection rollback restores exact records and receipts without deleting audit");
         em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",batch+".rollback").setParameter("payload","{\"version\":1}").executeUpdate();
         assertEquals(0,reportingPayments.summary(day,day,null,0,100).simulatedAmount().signum());
         var rolledBackInsights=insights.insights(day,day,false,Granularity.DAY);
