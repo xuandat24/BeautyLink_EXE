@@ -175,12 +175,30 @@ jobs:
           done
           grep -q COMMUNITY_SMOKE_READY backend/target/community-server.log
           node frontend/tests/communitySmoke.mjs
+      - name: Admin display profiles, A–Z and ordinals (isolated fixtures only)
+        env:
+          PLAYWRIGHT_MODULE_PATH: ${{ runner.temp }}/beautylink-browser/node_modules/playwright
+          SMOKE_DISPLAY_PROFILES: '1'
+        run: |
+          java -cp "backend/target/test-classes:backend/target/classes:$(cat backend/target/test-classpath.txt)" com.example.backend.BookingReviewSmokeServer > backend/target/display-browser-server.log 2>&1 &
+          backend_pid=$!
+          (cd frontend && exec node node_modules/vite/bin/vite.js --host=127.0.0.1 --strictPort) > backend/target/display-browser-vite.log 2>&1 &
+          frontend_pid=$!
+          trap 'kill "$backend_pid" "$frontend_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if grep -q BOOKING_REVIEW_SMOKE_READY backend/target/display-browser-server.log && curl --fail --silent http://localhost:5173 > /dev/null; then break; fi
+            sleep 1
+          done
+          grep -q BOOKING_REVIEW_SMOKE_READY backend/target/display-browser-server.log
+          node frontend/tests/adminDisplayProfilesSmoke.mjs
       - name: Admin V2 screenshots and isolated browser diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: admin-v2-browser
           path: |
+            backend/target/admin-display-*.png
+            backend/target/display-browser-server.log
             backend/target/admin-v2-*.png
             backend/target/report-payments-*.png
             backend/target/report-payments-server.log

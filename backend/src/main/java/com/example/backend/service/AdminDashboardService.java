@@ -49,15 +49,21 @@ public class AdminDashboardService {
     private final PaymentTransactionRepository payments;
     private final UserAccountRepository users;
     private final Clock clock;
+    private final PresentationDisplayProfiles displayProfiles;
+
+    public AdminDashboardService(BookingRepository bookings, PaymentTransactionRepository payments, UserAccountRepository users) { this(bookings,payments,users,Clock.systemUTC(),null); }
 
     @Autowired
     public AdminDashboardService(BookingRepository bookings, PaymentTransactionRepository payments,
-            UserAccountRepository users) {
-        this(bookings, payments, users, Clock.systemUTC());
+            UserAccountRepository users, PresentationDisplayProfiles displayProfiles) {
+        this(bookings, payments, users, Clock.systemUTC(), displayProfiles);
     }
 
     AdminDashboardService(BookingRepository bookings, PaymentTransactionRepository payments,
-            UserAccountRepository users, Clock clock) {
+            UserAccountRepository users, Clock clock) { this(bookings,payments,users,clock,null); }
+
+    private AdminDashboardService(BookingRepository bookings, PaymentTransactionRepository payments, UserAccountRepository users, Clock clock, PresentationDisplayProfiles displayProfiles) {
+        this.displayProfiles=displayProfiles;
         this.bookings = bookings;
         this.payments = payments;
         this.users = users;
@@ -190,10 +196,12 @@ public class AdminDashboardService {
         payments.findCanonicalPaidByBookingIds(ids, PaymentTransactionStatus.PAID)
                 .forEach(payment -> canonical.put(payment.getBooking().getId(), payment));
         Set<Long> reviewIds = new HashSet<>(payments.findReviewBookingIds(ids, PaymentTransactionStatus.REVIEW_REQUIRED));
+        var profiles=displayProfiles==null?Map.<Long,com.fasterxml.jackson.databind.JsonNode>of():displayProfiles.profiles();
         return source.stream().map(booking -> {
+            var profile=profiles.get(booking.getCustomer().getId());
             PaymentTransaction paid = canonical.get(booking.getId());
             return new AdminBookingResponse(booking.getId(), booking.getBookingCode(), booking.getCustomer().getId(),
-                    booking.getCustomer().getFullName(), booking.getCustomer().getPhone(), booking.getSupplier().getId(),
+                    profile==null?booking.getCustomer().getFullName():profile.path("fullName").asText(), booking.getCustomer().getPhone(), booking.getSupplier().getId(),
                     booking.getSupplier().getName(), booking.getService().getName(), booking.getPractitioner().getDisplayName(),
                     booking.getAppointmentDate(), booking.getStartTime(), booking.getEndTime(), booking.getTotalAmount(),
                     booking.getStatus(), booking.getPaymentStatus(), booking.getCreatedAt(),

@@ -193,11 +193,11 @@ class PlatformApiIntegrationTest {
                     .andReturn().getResponse().getContentAsString();
 
             JsonNode rows = objectMapper.readTree(body);
-            long previousId = 0;
+            long previousId = 0; String previousName = null;
             for (JsonNode row : rows) {
                 long id = row.path("id").asLong();
-                assertTrue(id > previousId);
-                previousId = id;
+                if (previousName != null) { int order = com.example.backend.service.VietnameseDirectoryOrder.compare(previousName, row.path("fullName").asText()); assertTrue(order < 0 || order == 0 && id > previousId); }
+                previousName = row.path("fullName").asText(); previousId = id;
                 org.junit.jupiter.api.Assertions.assertEquals(
                         com.example.backend.model.DomainEnums.Role.CUSTOMER,
                         users.findById(id).orElseThrow().getRole());

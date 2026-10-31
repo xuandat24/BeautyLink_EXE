@@ -41,7 +41,7 @@ test('admin overview renders authoritative booking people separately from bookin
     assert.match(document.body.textContent || '', /Đơn hoàn thành1/);
     assert.equal(document.querySelector('[aria-label="Chỉ số kinh doanh"]')?.querySelectorAll('article').length, 6);
     assert.equal(bookedRange, null);
-    await act(async () => [...document.querySelectorAll('button')].find(button => button.textContent === 'Hôm nay')!.click());
+    await act(async () => [...document.querySelectorAll('button')].find(button => button.textContent === '30 ngày')!.click());
     assert.notEqual(requests.at(-1)?.from, requests[0].from, 'date preset forwards a different range to the backend');
     const paymentNav = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Thanh toán'));
     assert.ok(paymentNav);

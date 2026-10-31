@@ -21,7 +21,8 @@ public class PresentationRecoveryService {
     @PersistenceContext private EntityManager em;
     private final ObjectMapper json;
     private final SupplierRepository suppliers;
-    public PresentationRecoveryService(ObjectMapper json, SupplierRepository suppliers) { this.json = json; this.suppliers = suppliers; }
+    private final PresentationDisplayProfiles profiles;
+    public PresentationRecoveryService(ObjectMapper json, SupplierRepository suppliers, PresentationDisplayProfiles profiles) { this.json = json; this.suppliers = suppliers; this.profiles = profiles; }
     public JsonNode data() {
         var row = em.find(PresentationRecovery.class, "beautylink-presentation-20261031");
         if (row == null) return null;
@@ -44,6 +45,7 @@ public class PresentationRecoveryService {
                 payload.path("data").path("reportingPayments").forEach(payments::add);
             }
             selections.forEach(selection -> PresentationReportSelection.apply(data, selection));
+            profiles.decorate(data);
             return data;
         } catch (com.fasterxml.jackson.core.JsonProcessingException error) { throw new IllegalStateException("Invalid presentation recovery", error); }
     }

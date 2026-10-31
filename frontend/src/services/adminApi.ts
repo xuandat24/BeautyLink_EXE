@@ -1,6 +1,6 @@
 import type { EditSnapshot, PartnerProfileEdit, PartnerServiceEdit, PartnerPersonEdit, PartnerScheduleEdit } from '../types/adminV2';
 import { apiClient, adminPresentationData } from './beautyApi';
-import { presentationAccount } from '../lib/presentationData';
+import { alphabetic, displayAccount, displaySalon, type DisplayMetadata } from '../lib/adminDisplayProfiles';
 import { isPresentationUser, mergePresentationBookings, presentationBookings, presentationPage, presentationSearch } from '../lib/presentationAdminData';
 import type { AdminPage } from '../types';
 import type { AdminInsights, AdminUserRow, AdminSalonRow, AdminSalonDetail, AdminReviewRow } from '../types/adminV2';
@@ -17,7 +17,12 @@ export function adminRangeError({ from, to }: Pick<AdminRange, 'from' | 'to'>): 
   return null;
 }
 export const adminV2Api = {
-  reportPayments: async (params: { from: string; to: string; salonId?: number; page: number; size?: number }): Promise<ReportingPaymentSummary> => (await apiClient.get('/v1/admin/report-payments', { params: { size: 20, ...params } })).data,
+  displayProfiles: async (): Promise<DisplayMetadata> => (await apiClient.get('/v1/admin/presentation/profiles')).data,
+  reportPayments: async (params: { from: string; to: string; salonId?: number; page: number; size?: number }): Promise<ReportingPaymentSummary> => {
+    const data: ReportingPaymentSummary = (await apiClient.get('/v1/admin/report-payments', { params: { size: 20, ...params } })).data;
+    const snapshot = await adminPresentationData(params); const users = new Map(snapshot?.users.map(user => [user.id, user]));
+    return { ...data, rows: { ...data.rows, content: data.rows.content.map(row => ({ ...row, customerName: users.get(row.customerId)?.fullName ?? row.customerName })) } };
+  },
   partnerProfile: async (id: number): Promise<EditSnapshot<PartnerProfileEdit>> => (await apiClient.get(`/v1/admin/salons/${id}/edit`)).data,
   updatePartnerProfile: async (id: number, data: PartnerProfileEdit, expectedRevision: string): Promise<EditSnapshot<PartnerProfileEdit>> => (await apiClient.put(`/v1/admin/salons/${id}/edit`, { data: { name: data.name, businessType: data.businessType, description: data.description, addressLine: data.addressLine, imageUrl: data.imageUrl, locationId: data.locationId, latitude: data.latitude, longitude: data.longitude }, expectedRevision })).data,
   partnerService: async (sid: number, id: number): Promise<EditSnapshot<PartnerServiceEdit>> => (await apiClient.get(`/v1/admin/salons/${sid}/services/${id}/edit`)).data,
@@ -32,7 +37,7 @@ export const adminV2Api = {
       await apiClient.get('/v1/admin/users', { params: { page: 0, size: 1 } });
       return (await adminPresentationData())!.users.find(user => user.id === id)!;
     }
-    const account = (await apiClient.get(`/v1/admin/users/${id}`)).data; return forEdit ? account : presentationAccount(account);
+    const account = (await apiClient.get(`/v1/admin/users/${id}`)).data; return forEdit ? account : displayAccount(account, await adminV2Api.displayProfiles());
   },
   updateAccount: async (id: number, data: AdminProfilePatch): Promise<AdminAccountDetail> => {
     if (isPresentationUser(id)) throw new Error('Hồ sơ báo cáo chỉ hỗ trợ xem.');
@@ -41,7 +46,7 @@ export const adminV2Api = {
   salonHeader: async (id: number): Promise<AdminSalonDetail> => {
     const data: AdminSalonDetail = (await apiClient.get(`/v1/admin/salons/${id}`, { params: { includeDemo: false, headerOnly: true } })).data;
     const snapshot = await adminPresentationData(); const salon = snapshot?.salons.find(row => row.id === id);
-    return salon ? { ...data, salon: { ...salon, name: data.salon.name } } : data;
+    return { ...data, salon: displaySalon({ ...data.salon, ...salon, ownerUserId: data.salon.ownerUserId, name: data.salon.name }, new Map(snapshot?.users.map(u => [u.id, u]))) };
   },
   salonServices: async (id: number, page = 0): Promise<AdminPage<AdminServiceDetail>> => (await apiClient.get(`/v1/admin/salons/${id}/services`, { params: { page, size: 20 } })).data,
   salonPractitioners: async (id: number, page = 0): Promise<AdminPage<AdminSalonDetail['practitioners'][number]>> => (await apiClient.get(`/v1/admin/salons/${id}/practitioners`, { params: { page, size: 20 } })).data,
@@ -58,22 +63,26 @@ export const adminV2Api = {
     return data;
   },
   users: async (params: { query?: string; role?: string; page: number; size: number }, forEdit = false): Promise<AdminPage<AdminUserRow>> => {
-    const data = (await apiClient.get<AdminPage<AdminUserRow>>('/v1/admin/users', { params })).data;
+    const data = (await apiClient.get<AdminPage<AdminUserRow>>('/v1/admin/users', { params: { ...params, forEdit } })).data;
     if (forEdit) return data;
     const snapshot = await adminPresentationData();
-    return snapshot ? presentationPage(snapshot.users.filter(user => (!params.role || user.role === params.role) && presentationSearch(`${user.fullName} ${user.email}`, params.query))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id), params.page, params.size) : { ...data, content: data.content.map(presentationAccount) };
+    return snapshot ? presentationPage(alphabetic(snapshot.users, user => user.fullName).filter(user => (!params.role || user.role === params.role) && presentationSearch(`${user.fullName} ${user.email}`, params.query)), params.page, params.size) : data;
   },
   returningUsers: async (params: { query?: string; page: number; size: number }): Promise<AdminPage<AdminUserRow>> => {
-    const first = await adminV2Api.users({ page: 0, size: 100 });
-    const rest = await Promise.all(Array.from({ length: Math.max(0, first.totalPages - 1) }, (_, index) => adminV2Api.users({ page: index + 1, size: 100 })));
-    const rows = selectReturningPresentationCustomers([...first.content, ...rest.flatMap(page => page.content)]);
-    return presentationPage(rows.filter(user => presentationSearch(`${user.fullName} ${user.email}`, params.query)), params.page, params.size);
+    const snapshot = await adminPresentationData();
+    let users: AdminUserRow[] = snapshot?.users ?? [];
+    if (!snapshot) {
+      const first = await adminV2Api.users({ page: 0, size: 100 });
+      const rest = await Promise.all(Array.from({ length: Math.max(0, first.totalPages - 1) }, (_, index) => adminV2Api.users({ page: index + 1, size: 100 })));
+      users = [...first.content, ...rest.flatMap(page => page.content)];
+    }
+    const rows = snapshot?.returningCustomerIds ? users.filter(user => snapshot.returningCustomerIds!.includes(user.id)) : selectReturningPresentationCustomers(users);
+    return presentationPage(alphabetic(rows.filter(user => presentationSearch(`${user.fullName} ${user.email}`, params.query)), user => user.fullName), params.page, params.size);
   },
   salons: async (params: { query?: string; includeDemo: boolean; page: number; size: number }): Promise<AdminPage<AdminSalonRow>> => {
     const data = (await apiClient.get('/v1/admin/salons', { params })).data;
     const snapshot = await adminPresentationData();
-    return snapshot ? presentationPage(snapshot.salons.filter(salon => presentationSearch(`${salon.name} ${salon.ownerName}`, params.query)), params.page, params.size) : data;
+    return snapshot ? presentationPage(alphabetic(snapshot.salons, salon => salon.name).filter(salon => presentationSearch(`${salon.name} ${salon.ownerName} ${salon.ownerEmail}`, params.query)), params.page, params.size) : data;
   },
   salon: async (id: number, includeDemo = false): Promise<AdminSalonDetail> => {
     const data: AdminSalonDetail = (await apiClient.get(`/v1/admin/salons/${id}`, { params: { includeDemo } })).data;

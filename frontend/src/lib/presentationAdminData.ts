@@ -1,14 +1,15 @@
 // Restored presentation history comes from an admin-authorized database partition, never the payment ledger.
 import type { AdminBooking, AdminCustomer, AdminPage, BackendService } from '../types';
 import type { AdminAccountDetail, AdminSalonRow, AdminUserRow } from '../types/adminV2';
+import { alphabetic, displayAccount, displayBooking, displaySalon, type DisplayMetadata } from './adminDisplayProfiles';
 import { presentationEmail, presentationReport } from './presentationData';
 
 // Reserved IDs keep presentation records out of account edits and payment APIs.
 const userBase = 8_000_000_000, bookingBase = 9_000_000_000;
 export const isPresentationUser = (id: number) => Number.isSafeInteger(id) && id >= userBase && id < userBase + presentationReport.users;
 export const isPresentationBooking = (id: number) => Number.isSafeInteger(id) && id >= bookingBase && id < 10_000_000_000;
-export type PresentationAdminData = { users: AdminAccountDetail[]; salons: AdminSalonRow[]; bookings: Array<AdminBooking & { serviceId: number; commissionAmount: number }>; originalCustomers: AdminCustomer[] };
-export type PresentationSource = { users?: AdminUserRow[]; customers?: AdminCustomer[]; bookings?: AdminBooking[] };
+export type PresentationAdminData = DisplayMetadata & { users: AdminAccountDetail[]; salons: AdminSalonRow[]; bookings: Array<AdminBooking & { serviceId: number; commissionAmount: number }>; originalCustomers: AdminCustomer[] };
+export type PresentationSource = { users?: AdminUserRow[]; customers?: AdminCustomer[]; bookings?: AdminBooking[]; salons?: AdminSalonRow[] };
 export const bookingDay = (booking: AdminBooking) => new Date(Date.parse(booking.createdAt) + 7 * 3600000).toISOString().slice(0, 10);
 const surnames = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Huỳnh', 'Phan', 'Vũ', 'Võ', 'Đặng', 'Bùi', 'Đỗ', 'Hồ', 'Ngô'];
 const names = ['Minh Anh', 'Thanh Hằng', 'Ngọc Linh', 'Thu Trang', 'Hoàng Nam', 'Quốc Bảo', 'Gia Hân', 'Minh Khang', 'Khánh Vy', 'Anh Tuấn', 'Thảo Nguyên', 'Đức Minh', 'Phương Thảo', 'Trung Hiếu', 'Hải Yến', 'Quang Huy', 'Bảo Ngọc', 'Tuấn Kiệt', 'Mai Chi', 'Nhật Minh', 'Diệu Linh'];
@@ -57,8 +58,8 @@ export function createPresentationAdminData(salons: AdminSalonRow[], catalog: Ba
     if (users.length >= presentationReport.users) break;
     if (!users.some(user => user.id === sample.id || user.email === sample.email)) users.push(sample);
   }
-  const partners = salons.slice(0, presentationReport.partners).map((salon, index) => {
-    const owner = users.find(user => user.email === presentationEmail(salon.ownerEmail, true)) ?? users.filter(user => user.role === 'SUPPLIER')[index];
+  const partners = salons.slice(0, presentationReport.partners).map(salon => {
+    const owner = salon.ownerUserId == null ? undefined : users.find(user => user.id === salon.ownerUserId);
     if (owner) owner.salons.push({ id: salon.id, name: salon.name, approvalStatus: 'VERIFIED' });
     return { ...salon, active: true, approvalStatus: 'VERIFIED', ownerName: owner?.fullName ?? salon.ownerName, ownerEmail: owner?.email ?? presentationEmail(salon.ownerEmail, true)! };
   });
@@ -101,17 +102,21 @@ export function mergePersistentPresentationData(recovered: PresentationAdminData
   const users = new Map(recovered.users.map(user => [user.id, user]));
   for (const user of source.users ?? []) {
     const contact = source.customers?.find(customer => customer.id === user.id);
-    users.set(user.id, { ...user, email: presentationEmail(user.email, true), phone: contact?.phone ?? null,
-      gender: contact?.gender ?? null, dateOfBirth: contact?.dateOfBirth ?? null, updatedAt: user.createdAt, salons: [] });
+    users.set(user.id, { ...user, phone: contact?.phone ?? null, gender: contact?.gender ?? null,
+      dateOfBirth: contact?.dateOfBirth ?? null, updatedAt: user.createdAt, salons: recovered.users.find(row => row.id === user.id)?.salons ?? [] });
   }
-  const bookings = mergePresentationBookings(recovered.bookings, source.bookings ?? []);
-  return { users: [...users.values()], bookings, originalCustomers: source.customers ?? [],
-    salons: recovered.salons.map(salon => ({ ...salon, bookingCount: bookings.filter(booking => booking.supplierId === salon.id).length })) };
+  const salons = new Map(recovered.salons.map(salon => [salon.id, salon]));
+  for (const salon of source.salons ?? []) salons.set(salon.id, salon);
+  const mapped = new Map([...users.values()].map(user => [user.id, displayAccount(user, recovered)]));
+  const bookings = mergePresentationBookings(recovered.bookings, source.bookings ?? []).map(booking => displayBooking(booking, mapped));
+  return { ...recovered, users: alphabetic([...mapped.values()], user => user.fullName), bookings, originalCustomers: source.customers ?? [],
+    salons: alphabetic([...salons.values()].map(salon => ({ ...displaySalon(salon, mapped), bookingCount: bookings.filter(booking => booking.supplierId === salon.id).length })), salon => salon.name) };
 }
 
 export type PresentationBookingFilter = { from?: string; to?: string; status?: string; paymentStatus?: string; query?: string; customerId?: number; supplierId?: number };
 export function presentationBookings(data: PresentationAdminData, filter: PresentationBookingFilter = {}) {
-  return data.bookings.filter(booking => (!filter.from || bookingDay(booking) >= filter.from)
+  const users = new Map(data.users.map(user => [user.id, user]));
+  return data.bookings.map(booking => displayBooking(booking, users)).filter(booking => (!filter.from || bookingDay(booking) >= filter.from)
     && (!filter.to || bookingDay(booking) <= filter.to) && (!filter.status || booking.status === filter.status)
     && (!filter.paymentStatus || booking.paymentStatus === filter.paymentStatus)
     && (filter.customerId === undefined || booking.customerId === filter.customerId) && (filter.supplierId === undefined || booking.supplierId === filter.supplierId)
@@ -120,7 +125,7 @@ export function presentationBookings(data: PresentationAdminData, filter: Presen
 }
 export function presentationCustomers(data: PresentationAdminData, filter: { from?: string; to?: string; bookedOnly?: boolean } = {}): AdminCustomer[] {
   const bookings = presentationBookings(data, filter);
-  return data.users.filter(user => user.role === 'CUSTOMER').map(user => {
+  return alphabetic(data.users.filter(user => user.role === 'CUSTOMER'), user => user.fullName).map(user => {
     const history = bookings.filter(booking => booking.customerId === user.id);
     const original = !filter.from && !filter.to ? data.originalCustomers.find(customer => customer.id === user.id) : undefined;
     const real = history.filter(booking => !isPresentationBooking(booking.id));
@@ -136,9 +141,10 @@ export function presentationCustomers(data: PresentationAdminData, filter: { fro
       lastBookingAt: [history[0]?.createdAt, original?.lastBookingAt].filter((value): value is string => Boolean(value)).sort().at(-1) ?? null };
   }).filter(customer => !filter.bookedOnly || customer.bookingsPlaced > 0);
 }
-export function presentationCustomerCsv(data: PresentationAdminData): Blob {
+export function presentationCustomerCsv(data: PresentationAdminData): Blob { return customerRowsCsv(presentationCustomers(data)); }
+export function customerRowsCsv(customers: AdminCustomer[]): Blob {
   const lines = [['STT', 'Tên người dùng', 'Giới tính', 'Ngày sinh', 'Số điện thoại', 'Email', 'Lịch đã đặt', 'Lịch đã thanh toán', 'Lịch hoàn thành', 'Lần đặt gần nhất', 'Đã thu online xác minh'],
-    ...presentationCustomers(data).map((user, index) => [index + 1, user.fullName, user.gender === 'FEMALE' ? 'Nữ' : 'Nam', user.dateOfBirth ?? '', `'${user.phone}`, user.email,
+    ...alphabetic(customers, user => user.fullName).map((user, index) => [index + 1, user.fullName, user.gender === 'FEMALE' ? 'Nữ' : user.gender === 'MALE' ? 'Nam' : user.gender === 'OTHER' ? 'Khác' : 'Chưa cập nhật', user.dateOfBirth ?? '', `'${user.phone}`, user.email,
       user.bookingsPlaced, user.paidBookings, user.completedBookings, user.lastBookingAt ?? '', user.totalVerifiedOnlineAmount])];
   const cell = (value: string | number) => { let safe = String(value); if (/^\s*[=+\-@]/.test(safe) || /^[\t\r\n]/.test(safe)) safe = `'${safe}`; return `"${safe.replaceAll('"', '""')}"`; };
   return new Blob(['\uFEFF', lines.map(row => row.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });

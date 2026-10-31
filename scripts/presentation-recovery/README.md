@@ -161,3 +161,93 @@ công thức và vẫn giữ số liệu đối soát gốc. Không đổi tổn
 Thẻ Khách hàng quay lại hiển thị cố định 72, nguồn mô phỏng ghi trong Cách tính; không
 thay số liệu khách hàng đo được từ backend hoặc tạo thêm hồ sơ. Kỳ không tăng không tự
 phát sinh thêm 16 đơn hoặc 172.000đ. Không thay 14 đối tác, chỉ tiêu 85,6% hay dữ liệu thanh toán.
+
+
+## Display profiles v1 — tên/email, ngày báo cáo và nhóm71 (không đổi identity)
+
+Base đã rà soát: `cb28605a20e69aa4a799596d55c48b63ec978e53`.
+Patch riêng `beautylink-display-profiles-20261101-v1` được loader đọc độc lập với batch thanh toán.
+Không chạy lại `prepare.ts`, seeder hoặc sửa payload recovery bất biến.
+
+- Phân loại: ID report trong vùng8tỷ; CUSTOMER dùng namespace dành riêng `@seed.beautylink.test`;
+  SUPPLIER có owner_user_id thật và email đúng mẫu `catalog.*`/`demo.*@beautylink.local`.
+  Các email khác giữ nguyên, ghi ngoại lệ `REAL_CONTACT_PRESERVED`; không suy ra email ngoài Gmail là giả.
+- Alias chỉ là nhãn báo cáo, **không phải hộp thư đã xác minh** và không được dùng gửi email/OTP/reset/biên nhận.
+  Local part dùng tên không dấu và hậu tố số ổn định, không dấu chấm/gạch; kiểm tra canonical Gmail dot/plus
+  với mọi identity đã hợp nhất. Tên hợp lệ giữ nguyên; handle được tách thành các từ, không đoán dấu tiếng Việt.
+- Plan lưu một lần theo ID, nguồn và giá trị gốc. Apply phải đúng fingerprint toàn nguồn và plan tái tính;
+  chạy lại là no-op; không overwrite file khác/payload khác, không tự kích hoạt patch đã rollback.
+  Khi contact/tên thật thay đổi về sau, loader bỏ alias cũ (`SOURCE_CHANGED`); nếu tài khoản thật mới trùng
+  canonical alias, bỏ alias đó (`EMAIL_COLLISION`) để ưu tiên contact thật. Ngoại lệ trả trong metadata Admin.
+- Nhóm71: chốt ID theo createdAt giảm dần/ID giảm dần, skip85 rồi CUSTOMER/take71 **trước** đổi ngày/A–Z.
+  UI dùng chính `returningCustomerIds` đã lưu, không chọn lại nhóm khi tìm kiếm/phân trang.
+- Chỉ REPORT có `reportCreatedAt` riêng: thời điểm HCM từ20/10 đến hết30/10/2026, không sau hoạt động đầu tiên.
+  Đọc mọi booking vận hành và mọi lịch sử báo cáo còn lưu, kể cả booking bị loại khỏi tập báo cáo hiện hành.
+  `ACTIVITY_BEFORE_WINDOW` giữ ngày cũ. Tài khoản vận hành luôn giữ ngày đăng ký thật
+  (`OPERATIONAL_REGISTRATION_PRESERVED`). Loader và KPI users đọc cùng reportCreatedAt của REPORT.
+- Hợp nhất theo ID → áp dụng hồ sơ → tìm/lọc → Vietnamese A–Z cả tập → phân trang → STT.
+  Backend dùng projection toàn directory để có cùng collation/natural-number order với frontend, không chỉ sort
+  trang hiện tại. Không tải booking ledger để sort directory. Với directory lớn cần đo và cân nhắc indexed read model.
+- `ownerUserId` lấy từ `suppliers.owner_user_id`; không ghép bằng email/tên/vị trí.
+  Form edit dùng account API raw và `/admin/users?forEdit=true`. Raw edit response không qua overlay.
+- CSV khách xuất toàn bộ **kết quả đang lọc**, STT1..N, cùng tên/email/A–Z, giữ escape CSV và số0 đầu điện thoại.
+  Các API ledger/receipt không bị ghi; chỉ customerName trong read model báo cáo được đổi nhãn.
+
+### Compile và inventory/check — chỉ đọc database
+
+PowerShell, từ repository root, Java21 và Maven có trong PATH:
+
+```powershell
+Set-Location backend
+mvn --batch-mode --no-transfer-progress -DskipTests compile dependency:build-classpath -Dmdep.outputFile=target/display-classpath.txt -Dmdep.includeScope=test
+if ($LASTEXITCODE) { throw 'Maven failed' }
+$displayJars = (Get-Content target/display-classpath.txt -Raw).Trim() -split ';' | Where-Object { $_ -match 'jackson-|mysql-connector' }
+$displayCp = 'target/classes;target/display-tools;' + ($displayJars -join ';')
+New-Item -ItemType Directory -Force target/display-tools | Out-Null
+javac -cp $displayCp -d target/display-tools ../scripts/presentation-recovery/RecoveryStore.java ../scripts/presentation-recovery/DisplayProfileStore.java
+if ($LASTEXITCODE) { throw 'Tool compile failed' }
+# Dùng Railway CLI đã đăng nhập, project/environment/MySQL service đã xác minh ở trên.
+# MYSQL_PUBLIC_URL chỉ được truyền vào tiến trình con; không printenv, không paste vào chat.
+railway run --project 050a0c1e-b9c1-4711-abe0-41d4249292d2 --environment c0daf535-7ad3-43ed-8701-8a9550850dd1 --service f47c2fcd-f435-49ba-bd63-5f3254e5cf77 --no-local -- java -cp $displayCp DisplayProfileStore export target/display-source-v1.json
+if ($LASTEXITCODE) { throw 'Inventory failed' }
+java -cp $displayCp DisplayProfileStore plan target/display-source-v1.json target/display-plan-v1.json
+if ($LASTEXITCODE) { throw 'Plan failed' }
+railway run --project 050a0c1e-b9c1-4711-abe0-41d4249292d2 --environment c0daf535-7ad3-43ed-8701-8a9550850dd1 --service f47c2fcd-f435-49ba-bd63-5f3254e5cf77 --no-local -- java -cp $displayCp DisplayProfileStore check target/display-plan-v1.json
+if ($LASTEXITCODE) { throw 'Dry-run failed; do not apply' }
+```
+
+File trong target là private/gitignored, không upload vào CI/artifact. Dùng thư mục operator được giới hạn quyền.
+Tool giữ guard hostname/port/schema/SSL của RecoveryStore; target thay đổi thì dừng xác minh, không bỏ guard.
+Inventory không xuất password/token; integrity hash được tính nội bộ trên account/supplier/booking/payment.
+Không hardcode tổng hồ sơ/booking/tiền. Plan in tổng theo nguồn và ngoại lệ, không in địa chỉ email.
+Nếu dữ liệu nguồn thay đổi giữa export/check/apply, dừng; xuất file mới, review lại cả cohort và ngoại lệ.
+
+### Apply / rollback — chỉ sau phê duyệt riêng
+
+Backend mới → API smoke → frontend mới. Không có migration/schema mới.
+Trước ghi: xác minh backup/restore usable, target, inventory/counts, plan và phê duyệt chủ tài khoản.
+Chưa chạy apply trong đợt code này trên production.
+
+```powershell
+$env:APPROVE_DISPLAY_PROFILE_WRITE = 'beautylink-display-profiles-20261101-v1'
+try {
+  railway run --project 050a0c1e-b9c1-4711-abe0-41d4249292d2 --environment c0daf535-7ad3-43ed-8701-8a9550850dd1 --service f47c2fcd-f435-49ba-bd63-5f3254e5cf77 --no-local -- java -cp $displayCp DisplayProfileStore apply target/display-plan-v1.json
+  if ($LASTEXITCODE) { throw 'Apply failed; inspect commit/no-op status before retry' }
+} finally { Remove-Item Env:APPROVE_DISPLAY_PROFILE_WRITE -ErrorAction SilentlyContinue }
+```
+
+Rollback dùng cùng command/gate, thay `apply` bằng `rollback`: chỉ INSERT marker `<id>.rollback`,
+không xóa patch/base/payment batch, không restore DB. Loader ngừng áp dụng đúng overlay, timestamp và cohort đó.
+Đối soát UI/list/detail/history/report payment/CSV sau apply; chạy lại apply phải NO-OP.
+Tài khoản/owner/salon/booking/payment ID, role/status, password, Google identity, session, OTP và mọi khoản tiền không đổi.
+
+### Bằng chứng và phạm vi hiện tại
+
+- Test backend/Frontend và browser dùng DB cô lập, không ghi production.
+- Tool đã thử MySQL8.4 cô lập:48 profiles (2REPORT,45SEED_CUSTOMER,1SEED_PARTNER),
+  1contact thật giữ nguyên, 1ngoại lệ hoạt động trước20/10, 46ngày đăng ký vận hành giữ nguyên.
+  Dry-run/apply/apply-no-op/rollback/rollback-no-op và fingerprint4bảng đạt.
+- Các số trên chỉ là fixture. Chưa kiểm kê/apply dữ liệu production vì phiên làm việc không có kết nối DB
+  được cấu hình; connector Railway không cung cấp SQL query. Owner chạy inventory/check để lấy số thật.
+- Postman collection `postman/admin-display-profiles.postman_collection.json` chỉ nhận loopback,
+  kiểm tra401, ADMIN metadata, trang2 và raw editor; token test chỉ lưu trong file target tạm.
