@@ -22,15 +22,15 @@ public final class AdminV2Dtos {
         @JsonProperty public Double changePercent() { return relativeChangePercent == null ? null : relativeChangePercent.doubleValue(); }
         @JsonProperty public String basis() { return metricDefinition; }
     }
-    public record Trend(LocalDate date, long bookings, BigDecimal verifiedOnlineAmount, BigDecimal completedServiceValue) {}
+    public record Trend(LocalDate date, long bookings, BigDecimal verifiedOnlineAmount, BigDecimal completedServiceValue, BigDecimal reportPaymentAmount) {}
     public record StatusCount(BookingStatus status, long count) {}
-    public record TopSalon(Long id, String name, String location, long bookings, BigDecimal verifiedOnlineAmount, BigDecimal completedServiceValue) {}
+    public record TopSalon(Long id, String name, String location, long bookings, BigDecimal verifiedOnlineAmount, BigDecimal completedServiceValue, BigDecimal reportPaymentAmount) {}
     public record PopularService(Long id, String name, String supplierName, long bookings, double percentage) {}
     public record Insights(AdminDashboardDtos.AdminDateRange range, Granularity granularity,
             Period currentPeriod, Period previousPeriod, String timezone, Instant asOf,
             int lowBaseThreshold, int smallRateDenominator,
             Metric totalBookings, Metric users, Metric revenue, Metric activePartners, Metric onlinePaymentRate,
-            Metric completedBookings, Metric completedServiceValue, Metric returningCustomers, long bookingCustomers, long paymentAttempts, long successfulAttempts, Double paymentAttemptSuccessRate,
+            Metric completedBookings, Metric completedServiceValue, Metric returningCustomers, Metric reportPayments, Metric completedBookingSnapshot, long bookingCustomers, long paymentAttempts, long successfulAttempts, Double paymentAttemptSuccessRate,
             List<Trend> trends, List<StatusCount> statuses, List<TopSalon> topSalons, List<PopularService> popularServices) {}
     public record UserRow(Long id, String fullName, String email, Role role, AccountStatus status, Instant createdAt) {}
     public record SalonRow(Long id, String name, String ownerName, String ownerEmail, String businessType,

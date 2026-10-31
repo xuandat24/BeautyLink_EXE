@@ -6,6 +6,7 @@ import type { AdminPage } from '../types';
 import type { AdminInsights, AdminUserRow, AdminSalonRow, AdminSalonDetail, AdminReviewRow } from '../types/adminV2';
 import type { AdminAccountDetail, AdminProfilePatch, AdminServiceDetail, AdminPaymentLedger } from '../types/adminV2';
 import type { AdminBooking } from '../types';
+import type { ReportingPaymentSummary } from '../types/adminV2';
 export type AdminRange = { from: string; to: string; includeDemo: boolean };
 export function adminRangeError({ from, to }: Pick<AdminRange, 'from' | 'to'>): string | null {
   const valid = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
@@ -15,6 +16,7 @@ export function adminRangeError({ from, to }: Pick<AdminRange, 'from' | 'to'>): 
   return null;
 }
 export const adminV2Api = {
+  reportPayments: async (params: { from: string; to: string; salonId?: number; page: number; size?: number }): Promise<ReportingPaymentSummary> => (await apiClient.get('/v1/admin/report-payments', { params: { size: 20, ...params } })).data,
   partnerProfile: async (id: number): Promise<EditSnapshot<PartnerProfileEdit>> => (await apiClient.get(`/v1/admin/salons/${id}/edit`)).data,
   updatePartnerProfile: async (id: number, data: PartnerProfileEdit, expectedRevision: string): Promise<EditSnapshot<PartnerProfileEdit>> => (await apiClient.put(`/v1/admin/salons/${id}/edit`, { data: { name: data.name, businessType: data.businessType, description: data.description, addressLine: data.addressLine, imageUrl: data.imageUrl, locationId: data.locationId, latitude: data.latitude, longitude: data.longitude }, expectedRevision })).data,
   partnerService: async (sid: number, id: number): Promise<EditSnapshot<PartnerServiceEdit>> => (await apiClient.get(`/v1/admin/salons/${sid}/services/${id}/edit`)).data,
@@ -38,7 +40,7 @@ export const adminV2Api = {
   salonHeader: async (id: number): Promise<AdminSalonDetail> => {
     const data: AdminSalonDetail = (await apiClient.get(`/v1/admin/salons/${id}`, { params: { includeDemo: false, headerOnly: true } })).data;
     const snapshot = await adminPresentationData(); const salon = snapshot?.salons.find(row => row.id === id);
-    return salon ? { ...data, salon } : data;
+    return salon ? { ...data, salon: { ...salon, name: data.salon.name } } : data;
   },
   salonServices: async (id: number, page = 0): Promise<AdminPage<AdminServiceDetail>> => (await apiClient.get(`/v1/admin/salons/${id}/services`, { params: { page, size: 20 } })).data,
   salonPractitioners: async (id: number, page = 0): Promise<AdminPage<AdminSalonDetail['practitioners'][number]>> => (await apiClient.get(`/v1/admin/salons/${id}/practitioners`, { params: { page, size: 20 } })).data,
@@ -69,7 +71,7 @@ export const adminV2Api = {
   salon: async (id: number, includeDemo = false): Promise<AdminSalonDetail> => {
     const data: AdminSalonDetail = (await apiClient.get(`/v1/admin/salons/${id}`, { params: { includeDemo } })).data;
     const snapshot = await adminPresentationData(); const salon = snapshot?.salons.find(row => row.id === id);
-    return salon ? { ...data, salon, recentBookings: presentationBookings(snapshot!, { supplierId: id }).slice(0, 10) } : data;
+    return salon ? { ...data, salon: { ...salon, name: data.salon.name }, recentBookings: presentationBookings(snapshot!, { supplierId: id }).slice(0, 10) } : data;
   },
   reviews: async (params: { includeDemo: boolean; page: number; size: number }): Promise<AdminPage<AdminReviewRow>> => (await apiClient.get('/v1/admin/reviews', { params })).data,
 };

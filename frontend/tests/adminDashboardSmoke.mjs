@@ -79,13 +79,13 @@ try {
         assert.equal(await page.getByRole('button', { name: label, exact: true }).getAttribute('aria-pressed'), 'true');
       }
       assert.equal(unrelatedCalls(), beforeGrain, 'chart grain never refetches payment summary/recent bookings'); assert.equal(documentLoads, 1, 'SPA controls do not reload document');
-      const point = page.locator('circle[aria-label^="Thu online"]').first(); await point.focus();
+      const point = page.locator('circle[aria-label^="Thanh toán báo cáo"], circle[aria-label^="Thu online"]').first(); await point.focus();
       assert.equal(await point.evaluate(el => document.activeElement === el), true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `${width}: whole page must not overflow`);
       assert.equal(await cards.locator('article').evaluateAll(nodes => nodes.every(n => n.getBoundingClientRect().height < 310)), true, 'KPI cards remain compact with comparison context');
       await capture('');
       // Deliberate UI-only stress response in this isolated test: not accounting evidence.
-      await page.route('**/api/v1/admin/dashboard/insights?*', async route => { const response = await route.fetch(); const json = await response.json(); json.revenue.currentValue = json.revenue.value = 1234567890123; await route.fulfill({ response, json }); }, { times: 1 });
+      await page.route('**/api/v1/admin/dashboard/insights?*', async route => { const response = await route.fetch(); const json = await response.json(); const metric = json.reportPayments ?? json.revenue; metric.currentValue = metric.value = 1234567890123; await route.fulfill({ response, json }); }, { times: 1 });
       const stress = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?'));
       await page.getByRole('button', { name: 'Làm mới', exact: true }).click(); await stress;
       const formatted = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(1234567890123);
@@ -105,10 +105,10 @@ try {
       await salonNav.getByRole('button', { name: 'Chuyên viên', exact: true }).click(); await page.getByText('Xem lịch tuần', { exact: true }).first().waitFor(); await page.getByText('Xem lịch tuần', { exact: true }).first().click();
       await page.getByRole('columnheader', { name: 'Giờ làm', exact: true }).waitFor(); assert.equal(await page.locator('details[open] tbody tr').first().locator('td').first().textContent(), 'Thứ Hai'); await capture('salon-people');
       await salonNav.getByRole('button', { name: 'Lịch đặt', exact: true }).click(); await page.getByRole('heading', { name: 'Lịch đặt của salon', exact: true }).waitFor();
-      await checkLayout(); await salonNav.getByRole('button', { name: 'Thanh toán', exact: true }).click(); await page.getByRole('heading', { name: 'Lượt thanh toán & đối soát', exact: true }).waitFor();
+      await checkLayout(); await salonNav.getByRole('button', { name: 'Thanh toán', exact: true }).click(); await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Xem lịch', exact: true }).first().waitFor(); await checkLayout();
       const salonUrl = page.url(); await page.reload(); await page.getByRole('heading', { name: data.topSalons[0].name, exact: true }).waitFor(); assert.equal(page.url(), salonUrl);
-      await page.getByRole('heading', { name: 'Lượt thanh toán & đối soát', exact: true }).waitFor();
+      await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();
       await page.getByRole('button', { name: '← Danh sách salon', exact: true }).click(); await page.getByRole('button', { name: 'Xem chi tiết', exact: true }).first().waitFor(); await capture('salons');
       await navigate('Tổng quan'); await page.getByTestId('admin-overview').waitFor();
       await page.getByRole('button', { name: 'Xem chi tiết Đơn hoàn thành', exact: true }).click();
@@ -124,7 +124,7 @@ try {
       await navigate('Lịch đặt');
       const detail = page.getByRole('button', { name: /^Chi tiết / }).first(); await detail.waitFor(); await detail.click();
       await page.getByRole('dialog', { name: 'Chi tiết lịch hẹn' }).waitFor(); await page.getByRole('button', { name: 'Đóng', exact: true }).click();
-      await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Thanh toán đã xác minh', exact: true }).waitFor();
+      await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Thanh toán', exact: true }).waitFor();
       await page.getByRole('heading', { name: 'Bảng doanh thu online đã xác minh', exact: true }).waitFor();
       await checkLayout();
       const revenueDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Tải CSV', exact: true }).click();

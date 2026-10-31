@@ -6,7 +6,7 @@ import { presentationEmail, presentationReport } from './presentationData';
 // Reserved IDs keep presentation records out of account edits and payment APIs.
 const userBase = 8_000_000_000, bookingBase = 9_000_000_000;
 export const isPresentationUser = (id: number) => Number.isSafeInteger(id) && id >= userBase && id < userBase + presentationReport.users;
-export const isPresentationBooking = (id: number) => Number.isSafeInteger(id) && id >= bookingBase && id < bookingBase + presentationReport.bookings;
+export const isPresentationBooking = (id: number) => Number.isSafeInteger(id) && id >= bookingBase && id < 10_000_000_000;
 export type PresentationAdminData = { users: AdminAccountDetail[]; salons: AdminSalonRow[]; bookings: Array<AdminBooking & { serviceId: number; commissionAmount: number }>; originalCustomers: AdminCustomer[] };
 export type PresentationSource = { users?: AdminUserRow[]; customers?: AdminCustomer[]; bookings?: AdminBooking[] };
 export const bookingDay = (booking: AdminBooking) => new Date(Date.parse(booking.createdAt) + 7 * 3600000).toISOString().slice(0, 10);
