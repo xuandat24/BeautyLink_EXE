@@ -1,6 +1,6 @@
 import type { AdminBooking } from '../types';
 import type { AdminSalonRow } from '../types/adminV2';
-export type DisplayProfile = { id: number; source: 'REPORT' | 'SEED_CUSTOMER' | 'SEED_PARTNER'; fullName: string; email: string; reportCreatedAt?: string };
+export type DisplayProfile = { id: number; source: 'REPORT' | 'SEED_CUSTOMER' | 'SEED_PARTNER' | 'CONTACT_DISPLAY'; fullName: string; email: string; reportCreatedAt?: string; original?: { createdAt?: string } };
 export type DisplayMetadata = { displayProfiles?: DisplayProfile[]; returningCustomerIds?: number[]; profileVersion?: number };
 const collator = new Intl.Collator('vi', { sensitivity: 'base', numeric: true });
 export const cleanName = (value?: string | null) => (value ?? '').normalize('NFC').trim().replace(/\s+/g, ' ');
@@ -13,7 +13,7 @@ export function alphabetic<T extends { id: number }>(rows: readonly T[], name: (
 }
 export function displayAccount<T extends { id: number; fullName: string; email: string | null; createdAt?: string }>(user: T, metadata: DisplayMetadata): T {
   const profile = metadata.displayProfiles?.find(p => p.id === user.id);
-  return profile ? { ...user, fullName: profile.fullName, email: profile.email, ...(profile.reportCreatedAt && { createdAt: profile.reportCreatedAt }) } : user;
+  return profile ? { ...user, fullName: profile.fullName, email: profile.email, ...(profile.reportCreatedAt && { createdAt: profile.reportCreatedAt, reportCreatedAt: profile.reportCreatedAt, actualCreatedAt: profile.original?.createdAt ?? user.createdAt }) } : user;
 }
 export function displaySalon(salon: AdminSalonRow, users: ReadonlyMap<number, { fullName: string; email: string | null }>): AdminSalonRow {
   const owner = salon.ownerUserId == null ? undefined : users.get(salon.ownerUserId);

@@ -28,7 +28,7 @@ export type AdminInsights = {
   topSalons: Array<{ id: number; name: string; location: string | null; bookings: number; verifiedOnlineAmount: number; reportPaymentAmount?: number; commissionAmount?: number; completedServiceValue?: number }>;
   popularServices: Array<{ id: number; name: string; supplierName: string; bookings: number; percentage: number }>;
 };
-export type AdminUserRow = { id: number; fullName: string; email: string | null; role: 'CUSTOMER' | 'SUPPLIER' | 'STAFF' | 'ADMIN'; status: string; createdAt: string };
+export type AdminUserRow = { reportCreatedAt?: string; actualCreatedAt?: string; id: number; fullName: string; email: string | null; role: 'CUSTOMER' | 'SUPPLIER' | 'STAFF' | 'ADMIN'; status: string; createdAt: string };
 export type AdminSalonRow = { ownerUserId?: number; id: number; name: string; ownerName: string; ownerEmail: string; businessType: string; location: string | null; address: string; approvalStatus: string; active: boolean; serviceCount: number; practitionerCount: number; bookingCount: number };
 export type AdminSalonDetail = { salon: AdminSalonRow; services: Array<{ id: number; name: string; price: number; durationMinutes: number; active: boolean }>; practitioners: Array<{ id: number; name: string; specialty: string | null; active: boolean }>; schedules: Array<{ practitionerId: number; day: string; start: string; end: string; breakStart: string | null; breakEnd: string | null; active: boolean }>; recentBookings: AdminBooking[] };
 export type AdminReviewRow = { id: number; targetType: string; supplierName: string; serviceName: string; rating: number; comment: string | null; createdAt: string };

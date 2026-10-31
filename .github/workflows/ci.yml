@@ -22,6 +22,12 @@ jobs:
           java-version: '21'
           cache: maven
       - run: mvn --batch-mode --no-transfer-progress verify
+      - name: Isolated operator-plan and backup gates (no production connection)
+        run: |
+          mvn --batch-mode --no-transfer-progress dependency:build-classpath -Dmdep.outputFile=target/operator-test-classpath.txt -Dmdep.includeScope=test
+          mkdir -p target/operator-tests
+          javac -cp "target/classes:$(cat target/operator-test-classpath.txt)" -d target/operator-tests ../scripts/presentation-recovery/{RecoveryStore,DisplayProfileStore,DisplayProfileRevisionStore,VerifiedBackupEvidence,PartnerActivationStore,ProfileOperationsTest}.java
+          java -cp "target/operator-tests:target/classes:$(cat target/operator-test-classpath.txt)" ProfileOperationsTest
       - uses: actions/upload-artifact@v4
         with:
           name: checkout-backend-performance

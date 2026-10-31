@@ -168,6 +168,8 @@ public class BookingReviewSmokeServer {
                 var salons=source.putArray("salons");for(var salon:context.getBean(SupplierRepository.class).findAll())salons.addObject().put("id",salon.getId()).put("ownerUserId",salon.getOwner().getId());
                 var patch=com.example.backend.service.PresentationProfilePatch.plan(source);
                 em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",com.example.backend.service.PresentationProfilePatch.ID).setParameter("payload",patch.toString()).executeUpdate();
+                source.set("priorProfilePlan",patch);var revision=com.example.backend.service.PresentationProfileRevision.plan(source);
+                em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",com.example.backend.service.PresentationProfileRevision.ID).setParameter("payload",revision.toString()).executeUpdate();
             }
             return null;
         });

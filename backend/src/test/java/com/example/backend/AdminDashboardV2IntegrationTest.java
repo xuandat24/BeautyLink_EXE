@@ -201,6 +201,21 @@ class AdminDashboardV2IntegrationTest {
         em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",PresentationProfilePatch.ID+".rollback").setParameter("payload","{\"version\":1}").executeUpdate();em.clear();
         assertEquals(before,directory.users("khoi+001",Role.CUSTOMER,0,20).content().getFirst().email());
     }
+    @Test void displayV2PrecedenceRollbackAndRegistrationCohortsKeepRawContactsAndLedger() throws Exception {
+        customer.setEmail("eligible@outlook.com");users.saveAndFlush(customer);
+        var source=json.createObjectNode();var rows=source.putArray("users");for(var u:users.findAll())rows.addObject().put("id",u.getId()).put("fullName",u.getFullName()).put("email",u.getEmail()).put("role",u.getRole().name()).put("createdAt",u.getCreatedAt().toString());
+        source.putArray("salons");var v1=PresentationProfilePatch.plan(source);source.set("priorProfilePlan",v1);var v2=PresentationProfileRevision.plan(source);((com.fasterxml.jackson.databind.node.ObjectNode)v2.path("profiles").get(0)).put("reportCreatedAt",PresentationProfileRevision.START.toString());
+        long before=insights.insights(day,day,false,Granularity.DAY).users().currentValue().longValue(),beforePrevious=insights.insights(day,day,false,Granularity.DAY).users().previousValue().longValue();var money=dashboard.paymentSummary(day,day,false);long bc=bookings.count(),pc=payments.count();
+        for(var plan:List.of(v1,v2))em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",plan.path("id").asText()).setParameter("payload",plan.toString()).executeUpdate();em.clear();
+        var profile=v2.path("profiles").get(0);assertEquals(customer.getId().longValue(),profile.path("id").asLong());
+        var view=directory.users("Customer",Role.CUSTOMER,0,20).content().getFirst();assertEquals(profile.path("email").asText(),view.email());assertEquals(Instant.parse(profile.path("reportCreatedAt").asText()),view.createdAt());
+        assertEquals("eligible@outlook.com",details.account(customer.getId()).email());assertEquals(customer.getCreatedAt(),directory.users("eligible@",Role.CUSTOMER,0,20,true).content().getFirst().createdAt());
+        assertEquals(before,insights.insights(day,day,false,Granularity.DAY).users().currentValue().longValue(),"Same cumulative total at current cutoff");assertEquals(beforePrevious+1,insights.insights(day,day,false,Granularity.DAY).users().previousValue().longValue(),"Earlier display date shifts prior cutoff once; real registration unchanged");
+        mvc.perform(get("/api/v1/admin/presentation/profiles").header("Authorization","Bearer "+jwt.createToken(admin))).andExpect(status().isOk()).andExpect(jsonPath("$.profileVersion").value(2));
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",PresentationProfileRevision.ID+".rollback").setParameter("payload","{}").executeUpdate();em.clear();
+        assertEquals("eligible@outlook.com",directory.users("Customer",Role.CUSTOMER,0,20).content().getFirst().email());assertEquals(before,insights.insights(day,day,false,Granularity.DAY).users().currentValue().longValue());
+        var moneyBefore=(com.fasterxml.jackson.databind.node.ObjectNode)json.valueToTree(money);var moneyAfter=(com.fasterxml.jackson.databind.node.ObjectNode)json.valueToTree(dashboard.paymentSummary(day,day,false));moneyBefore.remove("generatedAt");moneyAfter.remove("generatedAt");assertEquals(moneyBefore,moneyAfter);assertEquals(bc,bookings.count());assertEquals(pc,payments.count());assertEquals("eligible@outlook.com",users.findById(customer.getId()).orElseThrow().getEmail());
+    }
     @BeforeEach void fixture() {
         ReflectionTestUtils.setField(insights,"clock",Clock.fixed(Instant.parse("2026-11-01T17:00:00Z"),ZoneOffset.UTC));
         customer=user("Customer",Role.CUSTOMER); admin=user("Admin",Role.ADMIN);

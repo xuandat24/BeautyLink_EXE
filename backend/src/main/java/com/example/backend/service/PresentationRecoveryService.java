@@ -23,6 +23,7 @@ public class PresentationRecoveryService {
     private final SupplierRepository suppliers;
     private final PresentationDisplayProfiles profiles;
     public PresentationRecoveryService(ObjectMapper json, SupplierRepository suppliers, PresentationDisplayProfiles profiles) { this.json = json; this.suppliers = suppliers; this.profiles = profiles; }
+    public JsonNode profileMetadata() { return profiles.metadata(); }
     public JsonNode data() {
         var row = em.find(PresentationRecovery.class, "beautylink-presentation-20261031");
         if (row == null) return null;

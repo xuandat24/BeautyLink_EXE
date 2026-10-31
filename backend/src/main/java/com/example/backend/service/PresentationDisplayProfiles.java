@@ -14,20 +14,21 @@ public class PresentationDisplayProfiles {
     public PresentationDisplayProfiles(ObjectMapper json){this.json=json;}
     public ObjectNode metadata() {
         var out=json.createObjectNode();out.putArray("displayProfiles");out.putArray("profileExceptions");
-        var row=em.find(PresentationRecovery.class,PresentationProfilePatch.ID);
-        if(row==null||em.find(PresentationRecovery.class,PresentationProfilePatch.ID+".rollback")!=null)return out;
+        var row=em.find(PresentationRecovery.class,PresentationProfileRevision.ID);
+        if(row==null||em.find(PresentationRecovery.class,PresentationProfileRevision.ID+".rollback")!=null)row=em.find(PresentationRecovery.class,PresentationProfilePatch.ID);
+        if(row==null||em.find(PresentationRecovery.class,row.getId()+".rollback")!=null)return out;
         try {
-            var plan=json.readTree(row.getPayload());PresentationProfilePatch.validate(plan);
+            var plan=json.readTree(row.getPayload());boolean revision=plan.path("version").asInt()==2;if(revision)PresentationProfileRevision.validate(plan);else PresentationProfilePatch.validate(plan);
             var originals=new HashMap<Long,JsonNode>();
             var base=em.find(PresentationRecovery.class,"beautylink-presentation-20261031");
             if(base!=null)json.readTree(base.getPayload()).path("data").path("users").forEach(u->originals.put(u.path("id").asLong(),u));
-            @SuppressWarnings("unchecked") List<Object[]> live=em.createQuery("select u.id,u.fullName,u.email,u.role from UserAccount u").getResultList();
-            for(var u:live)originals.put((Long)u[0],json.createObjectNode().put("id",(Long)u[0]).put("fullName",(String)u[1]).put("email",(String)u[2]).put("role",u[3].toString()));
+            @SuppressWarnings("unchecked") List<Object[]> live=em.createQuery("select u.id,u.fullName,u.email,u.role,u.createdAt from UserAccount u").getResultList();
+            for(var u:live)originals.put((Long)u[0],json.createObjectNode().put("id",(Long)u[0]).put("fullName",(String)u[1]).put("email",(String)u[2]).put("role",u[3].toString()).put("createdAt",((java.time.Instant)u[4]).toString()));
             var owners=new HashSet<Long>();for(Object id:em.createQuery("select s.owner.id from Supplier s").getResultList())owners.add(((Number)id).longValue());
             var candidates=new HashMap<Long,JsonNode>();
             for(var p:plan.path("profiles")) {
                 long id=p.path("id").asLong();var original=originals.get(id);
-                if(PresentationProfilePatch.matches(p,original)&&p.path("source").asText().equals(PresentationProfilePatch.source(original,owners)))candidates.put(id,p);
+                if((revision?PresentationProfileRevision.matches(p,original):PresentationProfilePatch.matches(p,original))&&p.path("source").asText().equals(revision?PresentationProfileRevision.source(original,owners):PresentationProfilePatch.source(original,owners)))candidates.put(id,p);
                 else out.withArray("profileExceptions").addObject().put("id",id).put("reason","SOURCE_CHANGED");
             }
             // A later real account may claim an alias: keep its real contact and suppress conflicting display aliases.
@@ -38,7 +39,7 @@ public class PresentationDisplayProfiles {
                 for(var ids:keys.values())if(ids.size()>1)for(Long id:ids)if(candidates.remove(id)!=null){changed=true;out.withArray("profileExceptions").addObject().put("id",id).put("reason","EMAIL_COLLISION");}
             }while(changed);
             candidates.values().stream().sorted(Comparator.comparingLong(p->p.path("id").asLong())).forEach(p->out.withArray("displayProfiles").add(p));
-            out.set("returningCustomerIds",plan.path("returningCustomerIds"));out.set("profilePlanExceptions",plan.path("exceptions"));out.put("profileVersion",1);
+            out.set("returningCustomerIds",plan.path("returningCustomerIds"));out.set("profilePlanExceptions",plan.path("exceptions"));out.put("profileVersion",plan.path("version").asInt());out.put("profilePlanId",row.getId());
             return out;
         }catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException("Invalid display profile partition",e);}
     }
