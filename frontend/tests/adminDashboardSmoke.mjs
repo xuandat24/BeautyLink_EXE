@@ -69,7 +69,7 @@ try {
         assert.equal(await page.getByRole('button', { name: label, exact: true }).getAttribute('aria-pressed'), 'true');
       }
       assert.equal(unrelatedCalls(), beforeGrain, 'chart grain never refetches payment summary/recent bookings'); assert.equal(documentLoads, 1, 'SPA controls do not reload document');
-      const point = page.locator('circle[aria-label^="Thu online"]').first(); await point.focus();
+      const point = page.locator(`circle[aria-label^="${data.completedServiceValue ? 'Giá trị dịch vụ' : 'Thu online'}"]`).first(); await point.focus();
       assert.equal(await point.evaluate(el => document.activeElement === el), true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `${width}: whole page must not overflow`);
       assert.equal(await cards.locator('article').evaluateAll(nodes => nodes.every(n => n.getBoundingClientRect().height < 250)), true, 'KPI cards remain compact');
