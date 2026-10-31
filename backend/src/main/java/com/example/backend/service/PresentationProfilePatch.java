@@ -37,7 +37,9 @@ public final class PresentationProfilePatch {
         var all=new TreeMap<Long,JsonNode>();source.path("data").path("users").forEach(u->all.put(u.path("id").asLong(),u));source.path("users").forEach(u->all.put(u.path("id").asLong(),u));
         var descending=new ArrayList<>(all.values());descending.sort(Comparator.comparing((JsonNode u)->u.path("createdAt").asText()).reversed().thenComparing(Comparator.comparingLong((JsonNode u)->u.path("id").asLong()).reversed()));
         var cohort=plan.putArray("returningCustomerIds");descending.stream().skip(85).filter(u->u.path("role").asText().equals("CUSTOMER")).limit(71).forEach(u->cohort.add(u.path("id").asLong()));
-        var used=new HashSet<String>();all.values().stream().filter(u->source(u,owners).equals("REAL")).forEach(u->used.add(canonical(u.path("email").asText())));
+        var used=new HashSet<String>();var realKeys=new HashMap<String,List<Long>>();
+        for(var u:all.values())if(source(u,owners).equals("REAL")){String key=canonical(u.path("email").asText());if(!key.isBlank()){used.add(key);realKeys.computeIfAbsent(key,k->new ArrayList<>()).add(u.path("id").asLong());}}
+        for(var ids:realKeys.values())if(ids.size()>1)for(Long id:ids)exceptions.addObject().put("id",id).put("reason","EXISTING_REAL_CANONICAL_COLLISION");
         var first=new HashMap<Long,Instant>();for(String field:List.of("bookings","activity"))for(var b:source.path(field))remember(first,b);for(var b:source.path("data").path("bookings"))remember(first,b);
         for(var u:all.values()) {
             long id=u.path("id").asLong();String scope=source(u,owners);

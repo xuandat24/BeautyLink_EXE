@@ -63,9 +63,16 @@ try {
       const expectedColumns = width >= 1800 ? 6 : width >= 1280 ? 3 : width >= 640 ? 2 : 1;
       assert.equal(await cards.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length), expectedColumns, `${width}: responsive KPI columns`);
       assert.ok((await cards.locator('article').first().textContent()).includes(String(data.totalBookings.value)));
+      // On the first of a month the initial month already equals Today. Establish a real 30-day cohort first.
+      let wide = data;
+      const wideButton = page.getByRole('button', { name: '30 ngày', exact: true });
+      if (await wideButton.getAttribute('aria-pressed') !== 'true') {
+        const response = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?') && r.url().includes('includeDemo=false'));
+        await wideButton.click(); wide = await (await response).json();
+      }
       const todayResponse = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?') && r.url().includes('includeDemo=false'));
       await page.getByRole('button', { name: 'Hôm nay', exact: true }).click();
-      const today = await (await todayResponse).json(); assert.ok(today.totalBookings.value < data.totalBookings.value, 'date range changes actual DB cohort');
+      const today = await (await todayResponse).json(); assert.ok(today.totalBookings.value < wide.totalBookings.value, 'date range changes actual DB cohort');
       await page.getByTestId('admin-overview').waitFor();
       const monthResponse = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?') && r.url().includes('includeDemo=false'));
       await page.getByRole('button', { name: '30 ngày', exact: true }).click(); await monthResponse; await page.getByTestId('admin-overview').waitFor();

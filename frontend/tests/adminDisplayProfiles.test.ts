@@ -16,7 +16,7 @@ test('Vietnamese whole names, natural numbers, empty last and stable ID ties acr
   const names = ['Salon 10','đặng',' An  ','Đặng','Dương','Salon 2','Ánh','Bình',null,''];
   const rows = names.map((fullName,id)=>({id,fullName}));const original=structuredClone(rows);
   assert.deepEqual(alphabetic(rows,r=>r.fullName).map(r=>r.fullName),[' An  ','Ánh','Bình','Dương','đặng','Đặng','Salon 2','Salon 10',null,'']);
-  assert.deepEqual(rows,original);assert.equal(compareNames('ĐẶNG','Đa\u0323\u0306ng'),0);
+  assert.deepEqual(rows,original);assert.equal(compareNames('  An\u00a0 2 ','An 2'),0);assert.equal(compareNames('ĐẶNG','Đa\u0323\u0306ng'),0);
   const all=alphabetic(Array.from({length:45},(_,i)=>({id:45-i,fullName:i%3===0?'Đặng An':`An ${45-i}`})),r=>r.fullName);
   const first=presentationPage(all,0,20),second=presentationPage(all,1,20);
   assert.equal(new Set([...first.content,...second.content].map(r=>r.id)).size,40);

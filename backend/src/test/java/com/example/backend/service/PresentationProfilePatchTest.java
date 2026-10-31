@@ -33,9 +33,15 @@ class PresentationProfilePatchTest {
         assertEquals("lean1@gmail.com",PresentationProfilePatch.canonical("Le.An1+owned@googlemail.com"));
         ((com.fasterxml.jackson.databind.node.ObjectNode)p.path("profiles").get(0)).put("email","a.b@gmail.com");assertThrows(IllegalStateException.class,()->PresentationProfilePatch.validate(p));
     }
+    @Test void existingRealCanonicalDuplicatesAreReportedWithoutRewritingEitherContact() throws Exception {
+        var source=json.readTree("{\"users\":[{\"id\":1,\"email\":\"real.person@gmail.com\",\"role\":\"CUSTOMER\"},{\"id\":2,\"email\":\"realperson+owned@gmail.com\",\"role\":\"CUSTOMER\"}]}");
+        var plan=PresentationProfilePatch.plan(source);assertEquals(0,plan.path("profiles").size());
+        assertEquals(2,java.util.stream.StreamSupport.stream(plan.path("exceptions").spliterator(),false).filter(e->e.path("reason").asText().equals("EXISTING_REAL_CANONICAL_COLLISION")).count());
+    }
     @Test void vietnameseNaturalOrderIncludesDDiacriticsEmptyAndStableIdTies() {
         var names=new ArrayList<>(Arrays.asList("Salon 10","đặng"," An  ","Đặng","Dương","Salon 2","Ánh","Bình",null,""));names.sort(VietnameseDirectoryOrder::compare);
         assertEquals(Arrays.asList(" An  ","Ánh","Bình","Dương","đặng","Đặng","Salon 2","Salon 10",null,""),names);
+        assertEquals(0,VietnameseDirectoryOrder.compare("  An\u00a0 2 ","An 2"));
         assertEquals(0,VietnameseDirectoryOrder.compare("ĐẶNG","Đa\u0323\u0306ng"));
     }
 }

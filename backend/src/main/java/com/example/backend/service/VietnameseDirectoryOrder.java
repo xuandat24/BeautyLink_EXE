@@ -4,7 +4,7 @@ import java.util.*;
 /** Whole-name Vietnamese ordering; natural numbers; empty last; caller adds ID tie-breaker. */
 public final class VietnameseDirectoryOrder {
     private VietnameseDirectoryOrder() {}
-    public static String clean(String value) {return value==null?"":Normalizer.normalize(value,Normalizer.Form.NFC).strip().replaceAll("\\s+"," ");}
+    public static String clean(String value) {return value==null?"":Normalizer.normalize(value,Normalizer.Form.NFC).replaceAll("(?U)[\\s\\uFEFF]+"," ").strip();}
     public static int compare(String left,String right) {
         String a=clean(left),b=clean(right);if(a.isEmpty()||b.isEmpty())return a.isEmpty()?(b.isEmpty()?0:1):-1;
         Collator c=Collator.getInstance(Locale.forLanguageTag("vi"));c.setStrength(Collator.PRIMARY);
