@@ -33,14 +33,17 @@ public class PresentationRecoveryService {
                     .setParameter("prefix", "beautylink-report-payments-%").getResultList();
             var markers = new HashSet<String>(); batches.forEach(b -> markers.add(b.getId()));
             var bookings = data.withArray("bookings"); var payments = data.withArray("reportingPayments");
+            var selections = new ArrayList<JsonNode>();
             for (var batch : batches) {
                 if (batch.getId().endsWith(".rollback") || markers.contains(batch.getId()+".rollback")) continue;
                 var payload = json.readTree(batch.getPayload());
                 if (payload.path("version").asInt()!=1 || !batch.getId().equals(payload.path("batch").path("id").asText()))
                     throw new IllegalStateException("Invalid report payment batch");
+                if ("REPORT_SELECTION".equals(payload.path("batch").path("kind").asText())) { selections.add(payload); continue; }
                 payload.path("data").path("bookings").forEach(bookings::add);
                 payload.path("data").path("reportingPayments").forEach(payments::add);
             }
+            selections.forEach(selection -> PresentationReportSelection.apply(data, selection));
             return data;
         } catch (com.fasterxml.jackson.core.JsonProcessingException error) { throw new IllegalStateException("Invalid presentation recovery", error); }
     }

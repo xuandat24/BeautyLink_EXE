@@ -1,5 +1,31 @@
 # Khôi phục lịch sử trình bày trên database BeautyLink hiện tại
 
+## Chọn lại danh sách 219 đơn / 147 hoàn thành (31/10)
+
+`ReportSelectionStore` thêm **một payload chọn lọc**, không sửa/xóa payload cũ, không chạy seed.
+Loại khỏi danh sách hiện hành 143 booking phục hồi cũ chưa có receipt chuẩn và booking
+`9100000078` (cọc 2.000đ); giữ 143 booking mới đúng catalog cùng 143 receipt liên kết.
+Mọi API Admin/Supplier, insights, ledger báo cáo và CSV báo cáo dùng chung selection.
+Người dùng/salon không bị lọc. PayOS thật và CSV xác minh không bị thay đổi.
+
+Baseline tháng 01–31/10: 363 đơn / 291 hoàn thành / 180 receipt / 3.045.208đ.
+Sau chọn: **219 / 147 / 179 / 3.043.208đ**, gồm cọc 2.997.208đ và trả đủ 46.000đ;
+PayOS xác minh vẫn 1.215.458đ / 36 booking. Chênh mục tiêu 3.045.000đ là -1.792đ.
+Giá trị dịch vụ và tỷ trọng trạng thái phải tính lại từ đơn còn hiển thị, không đóng băng
+để tạo số mâu thuẫn. Các chỉ tiêu trình bày 85,6%, 72 và chú thích 197 đơn tháng 10 giữ riêng,
+có nguồn trong Cách tính, không biến thành số đo thực tế.
+
+Compile `ReportSelectionStore.java` cùng hai tool hiện có. Với source export mới:
+
+1. `ReportSelectionStore plan <private-source.json> <private-selection.json>` (offline).
+2. `ReportSelectionStore check <private-selection.json>` (SELECT-only dry-run).
+3. Sau kiểm thử/deploy loader: `ReportSelectionStore apply <private-selection.json>`.
+4. Chạy lại apply cùng file phải NO-OP; `rollback` chỉ thêm marker riêng selection.
+
+Batch cố định `beautylink-report-payments-select219-20261031-v1`; v1/kind REPORT_SELECTION.
+Apply SERIALIZABLE kiểm tra snapshot/recovery/verified/booking hash và số đơn thực tế,
+chỉ INSERT partition; rollback không xóa dữ liệu audit. Không khôi phục bằng seed cũ.
+
 Người dùng đã xác nhận giữ bộ dữ liệu trình bày trước PR #40, chỉ điều chỉnh tiền mô phỏng để cộng với các đơn hoàn thành thật thành **3.045.000đ**; có ngày cao và thấp. Không sử dụng phương án thay bằng 10 booking. Cho phép lưu partition trong chính MySQL production, không tạo database hoặc website khác.
 
 `prepare.ts` tái sử dụng bộ sinh dữ liệu trước đó (`createPresentationAdminData`, nguồn commit `f9e46a2`). Giữ mã, người dùng, salon, dịch vụ, chuyên viên hiển thị, ngày, giờ và trạng thái của các bản ghi trình bày. Chỉ định giá lại bản ghi mô phỏng bằng trọng số ngày và giá trị cũ; dùng đơn vị 1.000đ, phân phối phần dư chính xác. Đây là **giá trị báo cáo mô phỏng**, không phải giá niêm yết hiện hành hay biên nhận dịch vụ/PayOS đã xác minh. Không sửa giá dịch vụ hoặc tiền của đơn thật. Lịch trình được giữ theo bản trình bày cũ, không đưa vào hệ thống đặt chỗ thực tế.

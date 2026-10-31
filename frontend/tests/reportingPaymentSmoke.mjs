@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
 const base = process.env.BEAUTYLINK_SMOKE_URL || 'http://localhost:5173';
+const expectedSimulated = process.env.SMOKE_REPORT_SELECTION ? 143 : 144;
 assert.ok(['localhost', '127.0.0.1'].includes(new URL(base).hostname), 'Isolated local browser fixture only');
 const browser = await chromium.launch({ headless: true });
 try {
@@ -30,10 +31,11 @@ try {
       const verified = await get('/api/v1/admin/dashboard/payments?from=2026-10-01&to=2026-10-31');
       const rows = [];
       for (let p = 0; p < report.rows.totalPages; p++) rows.push(...(await get(`/api/v1/admin/report-payments?from=2026-10-01&to=2026-10-31&size=100&page=${p}`)).rows.content);
-      assert.equal(rows.filter(r => r.source === 'SIMULATED').length, 144);
+      assert.equal(rows.filter(r => r.source === 'SIMULATED').length, expectedSimulated);
+      if(expectedSimulated===143) {assert.ok(!data.bookings.some(b=>b.id===9100000078));assert.ok(!rows.some(r=>r.bookingId===9100000078));}
       assert.equal(new Set(rows.map(r => r.id)).size, rows.length); assert.equal(new Set(rows.map(r => r.bookingId)).size, rows.length);
       assert.equal(report.total, report.deposits + report.fullPayments); assert.equal(report.verifiedAmount, verified.verifiedOnlineCollected);
-      assert.equal(report.uniqueBookings, verified.verifiedPaymentBookings + 144);
+      assert.equal(report.uniqueBookings, verified.verifiedPaymentBookings + expectedSimulated);
       for (const r of rows.filter(r => r.source === 'SIMULATED')) {
         const b = data.bookings.find(b => b.id === r.bookingId); assert.ok(b);
         for (const field of ['bookingCode', 'customerId', 'supplierId', 'serviceId', 'practitionerId', 'appointmentDate', 'startTime', 'endTime']) assert.equal(r[field], b[field], field);
@@ -72,7 +74,7 @@ try {
       await page.screenshot({ path: `backend/target/report-payments-${width}-ledger.png`, fullPage: true });
       const downloadReport = page.waitForEvent('download'); await page.getByRole('button', { name: 'Tải báo cáo thanh toán CSV', exact: true }).click();
       const reportFile = await downloadReport;const stream = await reportFile.createReadStream();let csv='';for await(const chunk of stream)csv+=chunk.toString();
-      assert.equal((csv.match(/"SIMULATED"/g) || []).length, 144);assert.ok(csv.includes('appointment_date_vietnam'));
+      assert.equal((csv.match(/"SIMULATED"/g) || []).length, expectedSimulated);assert.ok(csv.includes('appointment_date_vietnam'));
       await page.getByText('Biên nhận PayOS xác minh và CSV riêng', { exact: true }).click();
       const downloadVerified = page.waitForEvent('download');await page.getByRole('button', { name: 'Tải CSV', exact: true }).click();
       const realFile=await downloadVerified;const realStream=await realFile.createReadStream();let realCsv='';for await(const chunk of realStream)realCsv+=chunk.toString();
@@ -83,7 +85,7 @@ try {
       await page.getByRole('button', { name: 'Đóng', exact: true }).click();await layout();
       await page.screenshot({ path: `backend/target/report-payments-${width}-booking.png`, fullPage: true });
       const changed = await get('/api/v1/admin/report-payments?from=2026-10-25&to=2026-10-31&size=100');assert.ok(changed.total<report.total,'Date filter derives totals from rows');
-      assert.deepEqual(errors,[]);console.log(`PASS report payments ${width}: 144 linked records, real JWT/API/H2, money, DAY/WEEK/MONTH, payment↔booking calendar, scoped dates, separate CSVs, layout; verified ledger unchanged`);
+      assert.deepEqual(errors,[]);console.log(`PASS report payments ${width}: ${expectedSimulated} linked records, real JWT/API/H2, money, DAY/WEEK/MONTH, payment↔booking calendar, scoped dates, separate CSVs, layout; verified ledger unchanged`);
     } finally { await context.close(); }
   }
 } finally { await browser.close(); }
