@@ -65,4 +65,3 @@ class ProfileOperationsTest {
   System.out.println("PASS isolated profile-operations: backup hash/age/schema gates; exact approval; target-only activation; session revocation; immutable contacts/passwords/Google/finance; ownership/demo/role/approval/suspension guards; audit atomicity; rollback. Synthetic backup fixtures only.");
  }
 }
-
