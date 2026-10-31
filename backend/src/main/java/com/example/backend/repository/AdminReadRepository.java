@@ -25,6 +25,8 @@ public class AdminReadRepository {
         if (hql.contains(":paid")) query.setParameter("paid", PaymentTransactionStatus.PAID);
         if (hql.contains(":approval")) query.setParameter("approval", VerificationStatus.VERIFIED);
         if (hql.contains(":active")) query.setParameter("active", AccountStatus.ACTIVE);
+        if (hql.contains(":completed")) query.setParameter("completed", BookingStatus.COMPLETED);
+        if (hql.contains(":cancelled")) query.setParameter("cancelled", BookingStatus.CANCELLED);
         return query;
     }
     public long count(String hql, Range range) { return ((Number) query(hql, range).getSingleResult()).longValue(); }

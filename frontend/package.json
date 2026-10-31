@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite --port=5173 --host=0.0.0.0",
+    "presentation": "vite --mode presentation --host 127.0.0.1 --port 5173 --strictPort",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",

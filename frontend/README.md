@@ -13,32 +13,16 @@ npm run dev
 
 Open <http://localhost:5173>.
 
-For the classroom presentation deployment, set `VITE_PRESENTATION_DATA=true`
-before building. This supplies stable sample rating summaries only where there
-are no reviews, preserves original accounts and pads the directory to 286 users,
-displays 14 active partners, supplements October 2026 bookings to 147 completed
-while retaining original pending, confirmed and cancelled bookings, and reports
-1,906,000 VNĐ in commission revenue. Original customers are retained, with sample
-bookings distributed across at least 78 customers where available. It also
-replaces `@seed.beautylink.test` emails in admin account views and customer CSV
-exports. Actual review contents, booking records, login emails and notification
-recipients stay in the backend. Disable the flag and rebuild to show only live
-values again. The overview status counts, trend totals and partner/service
-rankings reconcile to the report. Sample service reviews use confirmed/completed
-booking counts first and share a catalog-wide maximum of 147; once the count is
-used, remaining unbooked services show zero reviews. Supplier summaries reuse
-the service counts. Commission is a separate field from actual
-gross online receipts. Sample rating totals and report summaries do not create matching
-public review records. Admin lists, account details, customer CSV and booking
-histories merge original records by ID with a shared presentation dataset dated
-October 2026 and respect date,
-search, role and booking-status filters. Synthetic accounts are read-only and
-never sent to account editing or authentication APIs. Admin access is still
-required before presentation data is returned; edit mode uses live accounts.
-Sample bookings each have a stable pseudo-random 5,000–15,000 VNĐ online deposit;
-customer totals sum their bookings. Original payment amounts and payment ledger
-transactions are never replaced. The returning-customer card counts distinct
-customers with at least two non-cancelled bookings in the selected period.
+For the isolated, record-backed presentation environment, see
+[the reconciliation report and launch instructions](../docs/presentation-revenue-20261031.md).
+Run `npm run presentation` with the dedicated local Spring presentation server.
+The target and record plan belong to the isolated seed, not dashboard components.
+Admin metrics, histories, exports and Supplier summaries now read backend records;
+the old frontend-generated Admin dataset is no longer connected to runtime APIs.
+
+`VITE_PRESENTATION_DATA=true` only retains legacy public rating summaries and seeded
+email display aliases. It never replaces Admin booking counts or financial totals.
+The isolated frontend mode disables it and forces its API to the local proxy.
 
 Useful checks:
 

@@ -3,8 +3,12 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
   return {
+    define: mode === 'presentation' ? {
+      'import.meta.env.VITE_PRESENTATION_DATA': JSON.stringify('false'),
+      'import.meta.env.VITE_API_BASE_URL': JSON.stringify('/api'),
+    } : {},
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

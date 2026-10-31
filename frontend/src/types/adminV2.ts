@@ -4,11 +4,12 @@ export type AdminInsights = {
   range: AdminDateRange; granularity: 'DAY' | 'WEEK' | 'MONTH';
   totalBookings: Metric; users: Metric; revenue: Metric; activePartners: Metric; onlinePaymentRate: Metric; completedBookings: Metric;
   commissionRevenue?: Metric;
+  completedServiceValue?: Metric;
   returningCustomers?: Metric;
   bookingCustomers: number; paymentAttempts: number; successfulAttempts: number; paymentAttemptSuccessRate: number | null;
-  trends: Array<{ date: string; bookings: number; verifiedOnlineAmount: number; commissionAmount?: number }>;
+  trends: Array<{ date: string; bookings: number; verifiedOnlineAmount: number; commissionAmount?: number; completedServiceValue?: number }>;
   statuses: Array<{ status: AdminBooking['status']; count: number }>;
-  topSalons: Array<{ id: number; name: string; location: string | null; bookings: number; verifiedOnlineAmount: number; commissionAmount?: number }>;
+  topSalons: Array<{ id: number; name: string; location: string | null; bookings: number; verifiedOnlineAmount: number; commissionAmount?: number; completedServiceValue?: number }>;
   popularServices: Array<{ id: number; name: string; supplierName: string; bookings: number; percentage: number }>;
 };
 export type AdminUserRow = { id: number; fullName: string; email: string | null; role: 'CUSTOMER' | 'SUPPLIER' | 'STAFF' | 'ADMIN'; status: string; createdAt: string };

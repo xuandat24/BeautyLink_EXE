@@ -174,8 +174,8 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
   );
 
   const totalRevenue = useMemo(
-    () => bookings.filter((b) => b.status !== 'CANCELLED').reduce((sum, b) => sum + (b.totalAmount || 0), 0),
-    [bookings]
+    () => completedBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0),
+    [completedBookings]
   );
 
   const completionRate = bookings.length > 0
@@ -251,9 +251,9 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
       </header>
 
       {/* Main Layout */}
-      <div className="mx-auto grid max-w-[1440px] lg:grid-cols-[250px_1fr]">
+      <div className="mx-auto grid max-w-[1440px] grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)]">
         {/* Sidebar */}
-        <aside className="border-b border-slate-200 bg-white p-4 lg:min-h-[calc(100vh-65px)] lg:border-b-0 lg:border-r lg:p-5">
+        <aside className="min-w-0 border-b border-slate-200 bg-white p-4 lg:min-h-[calc(100vh-65px)] lg:border-b-0 lg:border-r lg:p-5">
           <div className="mb-5 hidden rounded-2xl bg-[#FFF0F3] p-4 lg:block">
             <div className="flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-[#EB0F51] shadow-sm">
@@ -369,7 +369,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
                     <Calendar className="h-5 w-5" />
                   </div>
                   <p className="mt-5 text-2xl font-black">{bookings.length}</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">Tổng lịch hẹn</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">Tổng đơn đặt lịch</p>
                 </div>
                 <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="grid h-10 w-10 place-items-center rounded-xl text-violet-600 bg-violet-50">
@@ -387,7 +387,8 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
                 </div>
                 <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="mt-5 text-2xl font-black">{formatCurrency(totalRevenue)}</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">Tổng giá trị đơn</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">Tổng giá trị dịch vụ</p>
+                  <p className="mt-1 text-xs text-slate-500">Tất cả thời gian · chỉ tính đơn hoàn thành · không phải tiền online đã thu</p>
                 </div>
               </div>
 

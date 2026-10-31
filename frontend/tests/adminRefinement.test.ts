@@ -36,7 +36,7 @@ test('KPI actions use real destinations once; definitions never navigate; salon 
   env.data.topSalons = [{ id: 73, name: 'Salon thật', location: 'Hà Nội', bookings: 5, verifiedOnlineAmount: 30000 }];
   try {
     await act(async () => env.root.render(React.createElement(AdminOverview, { ...overviewProps, onNavigate: (...args) => destinations.push(args), onSalon: id => { salonId = id; } })));
-    for (const label of ['Tổng đơn đặt lịch', 'Người dùng', 'Doanh thu', 'Đối tác hoạt động', 'Tỷ lệ thanh toán online', 'Lịch hẹn hoàn thành']) await click(`Xem chi tiết ${label}`);
+    for (const label of ['Tổng đơn đặt lịch', 'Người dùng', 'Doanh thu', 'Đối tác hoạt động', 'Tỷ lệ thanh toán online', 'Đơn hoàn thành']) await click(`Xem chi tiết ${label}`);
     assert.deepEqual(destinations, [['bookings', undefined], ['customers', undefined], ['payments', undefined], ['salons', undefined], ['payments', undefined], ['bookings', 'COMPLETED']]);
     await act(async () => document.querySelector<HTMLElement>('summary')!.click()); assert.equal(destinations.length, 6);
     await click('Xem salon Salon thật'); assert.equal(salonId, 73);
@@ -54,7 +54,7 @@ test('completed KPI and view-all preserve date/demo cohort and send supported bo
     await act(async () => env.root.render(React.createElement(Harness)));
     await click('7 ngày'); assert.equal([...document.querySelectorAll('button')].find(b => b.textContent === '7 ngày')?.getAttribute('aria-pressed'), 'true');
     assert.equal(document.querySelector('input[type="checkbox"]'), null); const range = env.requests.at(-1)!;
-    await click('Xem chi tiết Lịch hẹn hoàn thành');
+    await click('Xem chi tiết Đơn hoàn thành');
     assert.equal(env.requests.at(-1)?.status, 'COMPLETED'); assert.equal(env.requests.at(-1)?.includeDemo, false);
     assert.equal(env.requests.at(-1)?.from, range.from); assert.equal(env.requests.at(-1)?.to, range.to);
     assert.equal(document.querySelector<HTMLSelectElement>('[aria-label="Trạng thái lịch"]')?.value, 'COMPLETED');
@@ -157,7 +157,7 @@ test('compact KPI keeps full definitions in closed disclosures, real currency an
     assert.equal(revenue.querySelector('[data-admin-value]')?.textContent, new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(1234567890123));
     assert.match(revenue.querySelector('details')?.textContent ?? '', /Test metric from backend/);
     assert.equal(revenue.querySelectorAll('button').length, 1);
-    assert.match(revenue.textContent ?? '', /Chưa có so sánh/);
-    assert.ok([...document.querySelectorAll('button')].some(b => b.textContent?.includes('Khách đã đặt lịch')));
+    assert.doesNotMatch(revenue.textContent ?? '', /Chưa có so sánh/);
+    assert.ok(![...document.querySelectorAll('button')].some(b => b.textContent?.includes('Khách đã đặt lịch')));
   } finally { await env.close(); }
 });

@@ -72,11 +72,13 @@ class AdminDashboardV2IntegrationTest {
         assertEquals(5,data.totalBookings().value().longValue());
         assertEquals(5,data.statuses().stream().mapToLong(s->s.count()).sum());
         assertEquals(2,data.completedBookings().value().longValue());
+        assertEquals(2000,data.completedServiceValue().value().intValue(),"completed service value is independent of verified receipt amount and refund status");
         assertEquals(500,data.revenue().value().intValue(),"gross first verified receipt, no duplicate/manual/demo or next-day receipt");
         assertEquals(500,dashboard.paymentSummary(day,day,false).verifiedOnlineCollected().intValue(),"legacy payment summary and CSV policy remain consistent");
         assertEquals(60,data.onlinePaymentRate().value().intValue());
         assertEquals(1,data.trends().size());assertEquals(day,data.trends().getFirst().date());
         assertEquals(500,data.trends().getFirst().verifiedOnlineAmount().intValue());
+        assertEquals(2000,data.trends().getFirst().completedServiceValue().intValue());
         assertEquals(a.getId(),data.topSalons().getFirst().id());assertEquals(3,data.topSalons().getFirst().bookings());
         assertEquals(300,data.topSalons().getFirst().verifiedOnlineAmount().intValue(),"salon money follows booking cohort, including later paidAt");
         assertEquals(2,data.popularServices().size());assertNotEquals(data.popularServices().get(0).id(),data.popularServices().get(1).id());
