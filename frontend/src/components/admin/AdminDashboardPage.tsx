@@ -66,7 +66,7 @@ export const BookingDetail = ({ booking, onClose }: { booking: AdminBooking; onC
 );
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, adminName, onNavigate, onHome, onLogout, onOpenBookedCustomers, onOpenSalon, initialSearch = '' }) => {
-  const [from, setFrom] = useState(daysAgo(29));
+  const [from, setFrom] = useState(() => `${daysAgo(0).slice(0, 7)}-01`);
   const [to, setTo] = useState(daysAgo(0));
   const [payments, setPayments] = useState<AdminPaymentSummary | null>(null);
   const [revenuePage, setRevenuePage] = useState<{ content: AdminRevenueRow[]; totalElements: number; totalPages: number } | null>(null);

@@ -1,5 +1,9 @@
 # Đối soát dữ liệu trình bày BeautyLink — 31/10/2026
 
+## Yêu cầu mới nhất: khôi phục bộ dữ liệu trước đây trên chính database hiện tại
+
+Sau bản phát hành dùng dữ liệu thật, người dùng đã xác nhận muốn giữ lại bộ dữ liệu trình bày trước đây, chỉ điều chỉnh tiền để tổng là 3.045.000đ, có ngày cao/thấp. Không thay bằng bộ 10 đơn; không tạo database hoặc website khác. Phương án mới và đối soát được ghi tại [scripts/presentation-recovery/README.md](../scripts/presentation-recovery/README.md). Các mục bên dưới là bằng chứng của môi trường cô lập trước đó, **không phải kết quả production của lần khôi phục mới**. Chỉ công bố đã nhập/deploy sau khi kiểm tra thực tế.
+
 Ghi nhận dưới đây thuộc giai đoạn kiểm thử cô lập. Sau đó người dùng đã chọn cập nhật **beautylink.cloud với giao diện/cách tính mới, dùng dữ liệu thật**. Bản phát hành không mang bộ dữ liệu 3.045.000đ vào production và không bảo đảm production hiển thị số tiền này; seed H2 vẫn chỉ nằm trong test classpath.
 
 ## Phạm vi và định nghĩa
