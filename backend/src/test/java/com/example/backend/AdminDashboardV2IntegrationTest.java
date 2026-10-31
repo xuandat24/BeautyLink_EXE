@@ -77,6 +77,32 @@ class AdminDashboardV2IntegrationTest {
         assertNull(after.completedBookings().currentValue(),"no fabricated completion times");
     }
     UserAccount customer,admin; Supplier a,b,demo; ServiceOffering sa,sb,sd; Practitioner pa,pb,pd;
+    @Test void reportingPartnersMatchStoredDirectoryWithoutEnablingOwnerAccounts() throws Exception {
+        b.getOwner().setStatus(AccountStatus.SUSPENDED); users.saveAndFlush(b.getOwner());
+        assertNull(insights.insights(day,day,false,Granularity.DAY).reportActivePartners(),"No reporting directory uses operational fallback");
+        var root=json.createObjectNode().put("version",1);var data=root.putObject("data");data.putArray("users");data.putArray("bookings");
+        var salons=data.putArray("salons");
+        for(long id:List.of(a.getId(),a.getId(),b.getId(),demo.getId(),999999L))
+            salons.addObject().put("id",id).put("active",true).put("approvalStatus","VERIFIED");
+        salons.addObject().put("id",999998L).put("active",false).put("approvalStatus","VERIFIED");
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)")
+                .setParameter("id","beautylink-presentation-20261031").setParameter("payload",json.writeValueAsString(root)).executeUpdate();
+        var result=insights.insights(day,day,false,Granularity.DAY);
+        assertEquals(2,result.reportActivePartners().currentValue().intValue(),"Two valid report IDs; no duplicate, orphan or demo count");
+        assertEquals(1,result.activePartners().currentValue().intValue(),"Operational account status stays separate");
+        assertNull(result.reportActivePartners().previousValue());
+        assertEquals(AccountStatus.SUSPENDED,users.findById(b.getOwner().getId()).orElseThrow().getStatus());
+        assertEquals(2,insights.insights(day.minusDays(7),day.minusDays(7),false,Granularity.DAY).reportActivePartners().currentValue().intValue(),"Snapshot does not change with booking date filters");
+        assertEquals(3,insights.insights(day,day,true,Granularity.DAY).reportActivePartners().currentValue().intValue(),"Demo scope is explicit");
+        mvc.perform(get("/api/v1/admin/dashboard/insights").param("from",day.toString()).param("to",day.toString()).header("Authorization","Bearer "+jwt.createToken(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.reportActivePartners.currentValue").value(2)).andExpect(jsonPath("$.activePartners.currentValue").value(1));
+        salons.forEach(row->((com.fasterxml.jackson.databind.node.ObjectNode)row).put("active",false));
+        em.createNativeQuery("delete from presentation_recovery where id=:id").setParameter("id","beautylink-presentation-20261031").executeUpdate();em.clear();
+        em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)")
+                .setParameter("id","beautylink-presentation-20261031").setParameter("payload",json.writeValueAsString(root)).executeUpdate();
+        assertEquals(0,insights.insights(day,day,false,Granularity.DAY).reportActivePartners().currentValue().intValue(),"A zero report count must not fall back to operational active accounts");
+    }
+
     @Test void reportPaymentsJoinTheSameBookingAndReconcileWithoutChangingVerifiedLedger() throws Exception {
         long originalBookings=bookings.count(),originalPayments=payments.count();
         var verifiedBefore=dashboard.paymentSummary(day,day,false);

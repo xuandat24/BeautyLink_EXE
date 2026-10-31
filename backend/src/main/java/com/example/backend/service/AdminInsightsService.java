@@ -103,11 +103,22 @@ public class AdminInsightsService {
                 rate(reportCohort.paidBookings(),reportCohort.bookings().size(),previousReportCohort.paidBookings(),previousReportCohort.bookings().size(),
                         scope + "Tỷ lệ đo được: booking tạo trong kỳ có khoản PayOS xác minh hoặc receipt mô phỏng trước mốc chốt / mọi booking tạo trong cùng kỳ, gồm lịch hủy. Đếm booking duy nhất, không đếm lượt thử; metadata cọc cũ không có receipt không được tính. Đây không phải chỉ tiêu trình bày hoặc tỷ lệ riêng PayOS.",smallDenominator),
                 unavailable(BigDecimal.valueOf(now.bookings().stream().filter(b->b.status()==BookingStatus.COMPLETED).count()),BOOKING,"Số booking tạo trong kỳ đang có trạng thái COMPLETED tại mốc chốt, gồm hồ sơ báo cáo. Đây là snapshot trạng thái, không phải số lần chuyển sang hoàn thành phát sinh trong kỳ; không so sánh quá khứ khi thiếu lịch sử.",CURRENT_SNAPSHOT),
+                reportActivePartners(stored,reportSuppliers.keySet()),
                 now.bookings().stream().map(BookingFact::customerId).distinct().count(), attempts, success,
                 attempts == 0 ? null : percentage(success, attempts).doubleValue(),
                 trends(now, receipts, reportReceipts, current, requested.fromDate(), granularity),
                 Arrays.stream(BookingStatus.values()).map(s -> new StatusCount(s, statuses.getOrDefault(s, 0L))).toList(),
                 topSalons(now, receipts, reportReceipts, current), popularServices(now));
+    }
+
+    private Metric reportActivePartners(JsonNode stored, Set<Long> supplierIds) {
+        if (stored == null || !stored.path("salons").isArray() || stored.path("salons").isEmpty()) return null;
+        var activeIds = new HashSet<Long>();
+        for (var salon : stored.path("salons"))
+            if (supplierIds.contains(salon.path("id").asLong()) && salon.path("active").asBoolean() && "VERIFIED".equals(salon.path("approvalStatus").asText()))
+                activeIds.add(salon.path("id").asLong());
+        return unavailable(BigDecimal.valueOf(activeIds.size()), PARTNER,
+                "Snapshot danh sách Đối tác trong hồ sơ báo cáo: đếm ID salon duy nhất được đánh dấu active và VERIFIED, còn tồn tại trong danh mục và thuộc phạm vi bộ lọc. Không phụ thuộc ngày đặt lịch; không phải trạng thái quyền đăng nhập của chủ salon. Trạng thái vận hành được giữ riêng trong activePartners; không so sánh lịch sử khi thiếu dữ liệu.", CURRENT_SNAPSHOT);
     }
 
     private Cohort cohort(Collection<BookingFact> all, List<Receipt> receipts, Period period) {

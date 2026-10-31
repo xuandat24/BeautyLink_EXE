@@ -46,12 +46,15 @@ try {
         assert.equal(insight.trends.reduce((n, x) => n + x.reportPaymentAmount, 0), report.total);
         assert.equal(insight.reportOnlinePaymentRate.currentNumerator, report.uniqueBookings);
         assert.equal(insight.reportOnlinePaymentRate.currentDenominator, insight.totalBookings.currentValue);
+        assert.equal(insight.reportActivePartners.currentValue,new Set(data.salons.filter(s=>s.active&&s.approvalStatus==='VERIFIED').map(s=>s.id)).size);
       }
       const amountCard = page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({ has: page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }) });
       await amountCard.waitFor(); await layout(); await page.screenshot({ path: `backend/target/report-payments-${width}-overview.png`, fullPage: true });
       const rateCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Tỷ lệ thanh toán online',exact:true})});
       assert.equal(await rateCard.locator('[data-admin-value]').innerText(),'85,6%');
       assert.ok((await rateCard.innerText()).includes('Mục tiêu báo cáo'));
+      const partnerCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Đối tác hoạt động',exact:true})});
+      assert.equal(await partnerCard.locator('[data-admin-value]').innerText(),String(new Set(data.salons.filter(s=>s.active&&s.approvalStatus==='VERIFIED').map(s=>s.id)).size));
       await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();
       const paymentRow = page.locator('tbody tr').filter({ hasText: 'BL2610R' }).first(); await paymentRow.waitFor();
       const code = (await paymentRow.locator('strong').first().textContent()).trim(); const expected = data.bookings.find(b => b.bookingCode === code);assert.ok(expected);
