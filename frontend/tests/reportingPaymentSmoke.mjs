@@ -60,8 +60,8 @@ try {
       const returningCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Khách hàng quay lại',exact:true})});
       assert.equal(await returningCard.locator('[data-admin-value]').innerText(),'72');
       const bookingCard=page.locator('[aria-label="Chỉ số kinh doanh"] article').filter({has:page.getByRole('heading',{name:'Tổng đơn đặt lịch',exact:true})});
-      assert.ok((await bookingCard.locator('.flex-1.text-xs').innerText()).includes(String(Math.round(measured.totalBookings.absoluteChange/2+16))));
-      for(const card of [bookingCard,amountCard])assert.ok(!(await card.locator('.flex-1.text-xs').innerText()).includes('Kỳ trước:'));
+      assert.ok((await bookingCard.locator('div.flex-1.text-xs').innerText()).includes(String(Math.round(measured.totalBookings.absoluteChange/2+16))));
+      for(const card of [bookingCard,amountCard])assert.ok(!(await card.locator('div.flex-1.text-xs').innerText()).includes('Kỳ trước:'));
       await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();
       const paymentRow = page.locator('tbody tr').filter({ hasText: 'BL2610R' }).first(); await paymentRow.waitFor();
       const code = (await paymentRow.locator('strong').first().textContent()).trim(); const expected = data.bookings.find(b => b.bookingCode === code);assert.ok(expected);
