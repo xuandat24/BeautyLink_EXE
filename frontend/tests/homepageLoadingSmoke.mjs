@@ -34,6 +34,14 @@ try {
     releaseHome();
     await page.getByTitle('Thêm vào giỏ', { exact: true }).first().waitFor();
     assert.equal(new Set(homeQueries).size, homeReads, 'no duplicate reads for the same location; validated onboarding may replace initial all-location scope');
+    // Cards may be painted from the location-specific response while the earlier all-location
+    // response is still pending. Reload only after both snapshots are persisted; otherwise
+    // aborting the first document legitimately requires fetching that missing scope again.
+    await page.waitForFunction(async locationId => {
+      const { beautyApi } = await import('/src/services/beautyApi.ts');
+      return beautyApi.cachedHomepageServices() !== null && beautyApi.cachedHomepageServices(locationId) !== null;
+    }, locations[0].id);
+    await page.screenshot({ path: `backend/target/homepage-loading-home-${width}.png`, fullPage: true });
     const initialReads = homeReads;
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByTitle('Thêm vào giỏ', { exact: true }).first().waitFor();
