@@ -10,6 +10,7 @@ import { adminRangeError } from '../../services/adminApi';
 import { AdminStatusBadge } from './AdminStatusBadge';
 import { AdminPaymentLedgerPanel } from './AdminPaymentLedgerPanel';
 import { adminStatusGroups } from './adminStatus';
+import { BOOKING_TABLE_COLUMNS, bookingAppointment, bookingOnlineAmount } from '../../lib/adminBookingCsv';
 
 type DashboardMode = 'overview' | 'bookings' | 'payments';
 
@@ -73,6 +74,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
   const [revenuePage, setRevenuePage] = useState<{ content: AdminRevenueRow[]; totalElements: number; totalPages: number } | null>(null);
   const [revenuePageIndex, setRevenuePageIndex] = useState(0);
   const [exportingRevenue, setExportingRevenue] = useState(false);
+  const [exportingBookings, setExportingBookings] = useState(false);
+  const [bookingExportError, setBookingExportError] = useState('');
   const [bookingPage, setBookingPage] = useState<{ content: AdminBooking[]; totalElements: number; totalPages: number; page: number } | null>(null);
   const [query, setQuery] = useState(initialSearch);
   const [overviewRefresh, setOverviewRefresh] = useState(0);
@@ -86,6 +89,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
   const deferredQuery = useDeferredValue(query);
 
   const requestParams = useMemo(() => ({ from, to, includeDemo: false }), [from, to]);
+  const exportMounted = useRef(true), exportRun = useRef(0), exportBusy = useRef(false);
+  const exportScope = useRef({ key: '', version: 0 });
+  const exportKey = JSON.stringify([mode, from, to, query, status, paymentStatus]);
+  if (exportScope.current.key !== exportKey) exportScope.current = { key: exportKey, version: exportScope.current.version + 1 };
+  useEffect(() => { exportMounted.current = true; return () => { exportMounted.current = false; exportRun.current++; }; }, []);
+  useEffect(() => { setBookingExportError(''); }, [exportKey]);
+  const downloadBookings = async () => {
+    if (exportBusy.current || loading || error || !bookingPage || query !== deferredQuery) return;
+    const run = ++exportRun.current, scope = exportScope.current.version, token = getAccessToken();
+    const current = () => exportMounted.current && run === exportRun.current && scope === exportScope.current.version && token === getAccessToken();
+    exportBusy.current = true; setExportingBookings(true); setBookingExportError('');
+    try {
+      const blob = await beautyApi.exportAdminBookingsCsv({ from, to, query: query.trim() || undefined, status: status || undefined, paymentStatus: paymentStatus || undefined }, current);
+      if (!current()) return;
+      const url = URL.createObjectURL(blob), anchor = document.createElement('a');
+      try { anchor.href = url; anchor.download = `beautylink-lich-dat-${from}-den-${to}.csv`; document.body.appendChild(anchor); anchor.click(); }
+      finally { anchor.remove(); URL.revokeObjectURL(url); }
+    } catch (err) { if (current()) setBookingExportError(getApiErrorMessage(err, 'Không thể tải đầy đủ lịch đặt.')); }
+    finally { exportBusy.current = false; if (exportMounted.current && run === exportRun.current) setExportingBookings(false); }
+  };
+
   const load = useCallback(async () => {
     const requestId = ++requestSequence.current; const token = getAccessToken();
     setLoading(true); setError('');
@@ -166,6 +190,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
           <select aria-label="Trạng thái lịch" value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm font-bold"><option value="">Mọi trạng thái lịch</option>{Object.entries(bookingLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <select aria-label="Trạng thái thanh toán" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className="rounded-xl border border-slate-200 px-3 text-sm font-bold"><option value="">Mọi trạng thái thanh toán</option>{Object.entries(paymentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         </section>
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
+          <button type="button" onClick={() => void downloadBookings()} disabled={exportingBookings || loading || Boolean(error) || !bookingPage || query !== deferredQuery} title="CSV mở bằng Excel · toàn bộ kết quả đang lọc" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-pink-600 px-4 py-2 text-sm font-bold text-white hover:bg-pink-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-600 disabled:opacity-50">{exportingBookings ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}{exportingBookings ? 'Đang tải lịch đặt…' : 'Tải danh sách lịch đặt (CSV)'}</button>
+        </div>
+        {bookingExportError && <p role="alert" className="mt-3 text-sm text-rose-700">{bookingExportError}</p>}
         {loading && <p role="status" className="mt-3 text-xs text-slate-500">Đang cập nhật danh sách lịch…</p>}{bookingPage && <><BookingTable title={`${bookingPage.totalElements.toLocaleString('vi-VN')} lịch phù hợp`} bookings={bookingPage.content} onSelect={setSelected} />
         <div className="mt-4 flex justify-end gap-2"><button disabled={page === 0} onClick={() => setPage((v) => Math.max(0, v - 1))} className="rounded-xl border bg-white px-4 py-2 text-xs font-black disabled:opacity-40">Trang trước</button><span className="px-3 py-2 text-xs font-bold">{page + 1}/{Math.max(bookingPage.totalPages, 1)}</span><button disabled={page + 1 >= bookingPage.totalPages} onClick={() => setPage((v) => v + 1)} className="rounded-xl border bg-white px-4 py-2 text-xs font-black disabled:opacity-40">Trang sau</button></div></>}
       </>}
@@ -196,7 +224,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
 
 export const BookingTable = ({ title, bookings, onSelect, onViewAll }: { title: string; bookings: AdminBooking[]; onSelect: (booking: AdminBooking) => void; onViewAll?: () => void }) => <section className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4"><h2 className="font-bold">{title}</h2>{onViewAll && <button type="button" onClick={onViewAll} className="admin-action">Xem tất cả lịch đặt →</button>}</div>
-  {bookings.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">Không có lịch hẹn trong khoảng này.</p> : <div className="overflow-x-auto"><table className="admin-table min-w-[1280px]"><thead><tr>{['Mã lịch', 'Khách hàng', 'Salon', 'Dịch vụ', 'Chuyên viên', 'Lịch hẹn', 'Trạng thái lịch', 'Thanh toán', 'Thu online xác minh', 'Thao tác'].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{bookings.map(booking => <tr key={booking.id}>
-    <td><strong>{booking.bookingCode}</strong></td><td><span className="cell-label" title={booking.customerName}>{booking.customerName}</span></td><td><span className="cell-label" title={booking.supplierName}>{booking.supplierName}</span></td><td><span className="cell-label" title={booking.serviceName}>{booking.serviceName}</span></td><td>{booking.practitionerName || '—'}</td><td className="whitespace-nowrap">{booking.appointmentDate} · {booking.startTime.slice(0, 5)}</td><td><AdminStatusBadge kind="booking" value={booking.status} /></td><td><AdminStatusBadge kind="payment" value={booking.paymentStatus} />{booking.paymentReviewRequired && <div className="mt-1"><AdminStatusBadge kind="paymentReview" value="REVIEW_REQUIRED" /></div>}</td><td className="numeric">{booking.verifiedOnlineAmount == null ? '—' : money(booking.verifiedOnlineAmount)}</td><td><button type="button" className="admin-action" aria-label={`Chi tiết ${booking.bookingCode}`} onClick={() => onSelect(booking)}>Xem chi tiết</button></td>
+  {bookings.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">Không có lịch hẹn trong khoảng này.</p> : <div className="overflow-x-auto"><table className="admin-table min-w-[1280px]"><thead><tr>{BOOKING_TABLE_COLUMNS.map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{bookings.map(booking => <tr key={booking.id}>
+    <td><strong>{booking.bookingCode}</strong></td><td><span className="cell-label" title={booking.customerName}>{booking.customerName}</span></td><td><span className="cell-label" title={booking.supplierName}>{booking.supplierName}</span></td><td><span className="cell-label" title={booking.serviceName}>{booking.serviceName}</span></td><td>{booking.practitionerName || '—'}</td><td className="whitespace-nowrap">{bookingAppointment(booking)}</td><td><AdminStatusBadge kind="booking" value={booking.status} /></td><td><AdminStatusBadge kind="payment" value={booking.paymentStatus} />{booking.paymentReviewRequired && <div className="mt-1"><AdminStatusBadge kind="paymentReview" value="REVIEW_REQUIRED" /></div>}</td><td className="numeric">{bookingOnlineAmount(booking.verifiedOnlineAmount)}</td><td><button type="button" className="admin-action" aria-label={`Chi tiết ${booking.bookingCode}`} onClick={() => onSelect(booking)}>Xem chi tiết</button></td>
   </tr>)}</tbody></table></div>}
 </section>;

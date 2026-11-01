@@ -154,7 +154,7 @@ export function accountRowsCsv(users: readonly AdminUserRow[]): Blob {
   return csvRowsBlob([['STT', 'Tên người dùng', 'Email', 'Vai trò', 'Trạng thái', 'Ngày tạo'],
     ...alphabetic(users, user => user.fullName).map((user, index) => [index + 1, user.fullName, user.email, adminStatusPresentation('role', user.role).label, adminStatusPresentation('account', user.status).label, user.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : ''])]);
 }
-function csvRowsBlob(lines: Array<Array<string | number | null | undefined>>): Blob {
+export function csvRowsBlob(lines: Array<Array<string | number | null | undefined>>): Blob {
   const cell = (value: string | number | null | undefined) => { let safe = String(value ?? ''); if (/^\s*[=+\-@]/.test(safe) || /^[\t\r\n]/.test(safe)) safe = `'${safe}`; return `"${safe.replaceAll('"', '""')}"`; };
   return new Blob(['\uFEFF', lines.map(row => row.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
 }
