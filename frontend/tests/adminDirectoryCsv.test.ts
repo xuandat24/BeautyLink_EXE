@@ -32,7 +32,7 @@ test('fallback export loads all205 filtered rows in bulk pages; partial, duplica
 
 test('cached snapshot uses exact frozen membership and filters without fetching account details',async()=>{
  const dom=env(),get=apiClient.get;const all=rows(145);const selected=all.slice(30,101).map(u=>u.id);const requests:string[]=[];
- apiClient.get=(async(path:string)=>{requests.push(path);if(path.endsWith('/presentation'))return{status:200,data:{users:all,bookings:[],salons:[],originalCustomers:[],returningCustomerIds:selected}};if(path.endsWith('/customers'))return{status:200,data:[]};return{status:200,data:path.endsWith('/users')?presentationPage(all,0,200):presentationPage([],0,100)};}) as typeof apiClient.get;
+ apiClient.get=(async(path:string,config?:{params?:{page?:number;size?:number}})=>{requests.push(path);if(path.endsWith('/presentation'))return{status:200,data:{users:all,bookings:[],salons:[],originalCustomers:[],returningCustomerIds:selected}};if(path.endsWith('/customers'))return{status:200,data:[]};return{status:200,data:path.endsWith('/users')?presentationPage(all,config?.params?.page??0,100):presentationPage([],0,100)};}) as typeof apiClient.get;
  try{const csv=await(await adminV2Api.exportDirectory({returning:true},()=>true)).text();assert.equal(csv.split('\r\n').length,72);for(const id of selected)assert.ok(csv.includes(`dangan${id}@gmail.com`));assert.equal(requests.some(url=>/users\/\d+/.test(url)),false);
   requests.length=0;const filtered=await(await adminV2Api.exportDirectory({returning:true,query:'dangan100@gmail.com'},()=>true)).text();assert.equal(filtered.split('\r\n').length,2);assert.match(filtered,/"1","Đặng An 100"/);assert.equal(requests.length,0,'same loaded snapshot is reused');
  }finally{apiClient.get=get;clearSession(false);dom.window.close();}
@@ -53,4 +53,11 @@ test('visible main/returning toolbar actions cancel download when filters change
  try{await act(async()=>root.render(React.createElement(AdminModulesPage,props)));const button=()=>[...document.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent==='Tải danh sách tài khoản')!;assert.ok(button());await act(async()=>button().click());const role=document.querySelector<HTMLSelectElement>('[aria-label="Lọc vai trò"]')!;await act(async()=>{role.value='CUSTOMER';role.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});await act(async()=>finish(new Blob(['not-downloaded'])));assert.equal(downloads,0);
   await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent==='Khách hàng quay lại')!.click());assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent==='Tải danh sách khách'));
  }finally{adminV2Api.users=users;adminV2Api.returningUsers=returning;adminV2Api.exportDirectory=exporter;URL.createObjectURL=oldCreate;URL.revokeObjectURL=oldRevoke;await act(async()=>root.unmount());clearSession(false);dom.window.close();}
+});
+
+
+test('an incomplete bulk API page cannot become a partial presentation snapshot export',async()=>{
+ const dom=env(),get=apiClient.get;const users=rows(145);
+ apiClient.get=(async(path:string,config?:{params?:{page?:number}})=>{if(path.endsWith('/presentation'))return{status:200,data:{users:[],bookings:[],salons:[],originalCustomers:[]}};if(path.endsWith('/customers'))return{status:200,data:[]};if(path.endsWith('/users')){const result=presentationPage(users,config?.params?.page??0,100);return{status:200,data:{...result,content:result.content.slice(0,20)}};}return{status:200,data:presentationPage([],0,100)};}) as typeof apiClient.get;
+ try{await assert.rejects(adminV2Api.exportDirectory({},()=>true),/thiếu|đầy đủ|thay đổi/);}finally{apiClient.get=get;clearSession(false);dom.window.close();}
 });
