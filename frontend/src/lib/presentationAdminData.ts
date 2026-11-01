@@ -3,6 +3,7 @@ import type { AdminBooking, AdminCustomer, AdminPage, BackendService } from '../
 import type { AdminAccountDetail, AdminSalonRow, AdminUserRow } from '../types/adminV2';
 import { alphabetic, displayAccount, displayBooking, displaySalon, type DisplayMetadata } from './adminDisplayProfiles';
 import { presentationEmail, presentationReport } from './presentationData';
+import { adminStatusPresentation } from '../components/admin/adminStatus';
 
 // Reserved IDs keep presentation records out of account edits and payment APIs.
 const userBase = 8_000_000_000, bookingBase = 9_000_000_000;
@@ -146,6 +147,14 @@ export function customerRowsCsv(customers: AdminCustomer[]): Blob {
   const lines = [['STT', 'Tên người dùng', 'Giới tính', 'Ngày sinh', 'Số điện thoại', 'Email', 'Lịch đã đặt', 'Lịch đã thanh toán', 'Lịch hoàn thành', 'Lần đặt gần nhất', 'Đã thu online xác minh'],
     ...alphabetic(customers, user => user.fullName).map((user, index) => [index + 1, user.fullName, user.gender === 'FEMALE' ? 'Nữ' : user.gender === 'MALE' ? 'Nam' : user.gender === 'OTHER' ? 'Khác' : 'Chưa cập nhật', user.dateOfBirth ?? '', `'${user.phone}`, user.email,
       user.bookingsPlaced, user.paidBookings, user.completedBookings, user.lastBookingAt ?? '', user.totalVerifiedOnlineAmount])];
-  const cell = (value: string | number) => { let safe = String(value); if (/^\s*[=+\-@]/.test(safe) || /^[\t\r\n]/.test(safe)) safe = `'${safe}`; return `"${safe.replaceAll('"', '""')}"`; };
+  return csvRowsBlob(lines);
+}
+export function accountRowsCsv(users: readonly AdminUserRow[]): Blob {
+  if (users.some(user => !Number.isSafeInteger(user.id) || typeof user.fullName !== 'string' || typeof user.role !== 'string' || typeof user.status !== 'string' || !Number.isFinite(Date.parse(user.createdAt)))) throw new Error('Hồ sơ tải về thiếu dữ liệu; đã hủy xuất.');
+  return csvRowsBlob([['STT', 'Tên người dùng', 'Email', 'Vai trò', 'Trạng thái', 'Ngày tạo'],
+    ...alphabetic(users, user => user.fullName).map((user, index) => [index + 1, user.fullName, user.email, adminStatusPresentation('role', user.role).label, adminStatusPresentation('account', user.status).label, user.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : ''])]);
+}
+function csvRowsBlob(lines: Array<Array<string | number | null | undefined>>): Blob {
+  const cell = (value: string | number | null | undefined) => { let safe = String(value ?? ''); if (/^\s*[=+\-@]/.test(safe) || /^[\t\r\n]/.test(safe)) safe = `'${safe}`; return `"${safe.replaceAll('"', '""')}"`; };
   return new Blob(['\uFEFF', lines.map(row => row.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
 }

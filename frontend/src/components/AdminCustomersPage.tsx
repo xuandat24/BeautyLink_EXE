@@ -11,6 +11,7 @@ import {
 import { AdminBooking, AdminCustomer } from '../types';
 import { beautyApi, getAccessToken, getApiErrorMessage } from '../services/beautyApi';
 import { AdminStatusBadge } from './admin/AdminStatusBadge';
+import { sessionCredentialEpoch } from '../lib/authSession';
 import { alphabetic } from '../lib/adminDisplayProfiles';
 import { presentationSearch, customerRowsCsv } from '../lib/presentationAdminData';
 import { adminMoney } from './admin/AdminOverview';
@@ -36,19 +37,20 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
   const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomer | null>(null);
   const [history, setHistory] = useState<AdminBooking[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const loadedCredential = useRef<{ token: string | null; epoch: number } | null>(null);
   const requestSequence = useRef(0); const historySequence = useRef(0);
 
   const loadCustomers = async () => {
-    const request = ++requestSequence.current; const token = getAccessToken();
-    setLoading(true); setExportReady(false);
+    const request = ++requestSequence.current; const token = getAccessToken(), epoch = sessionCredentialEpoch();
+    setLoading(true); setExportReady(false); loadedCredential.current = null;
     setError('');
     try {
       const rows = await beautyApi.adminCustomers(bookedRange ? { ...bookedRange, bookedOnly: true, includeDemo: false } : { includeDemo: false });
-      if (request === requestSequence.current && token === getAccessToken()) { setCustomers(rows); setPage(0); setExportReady(true); }
+      if (request === requestSequence.current && token === getAccessToken() && epoch === sessionCredentialEpoch()) { setCustomers(rows); setPage(0); loadedCredential.current = { token, epoch }; setExportReady(true); }
     } catch (err) {
-      if (request === requestSequence.current && token === getAccessToken()) setError(getApiErrorMessage(err, 'Không thể tải danh sách tài khoản khách hàng.'));
+      if (request === requestSequence.current && token === getAccessToken() && epoch === sessionCredentialEpoch()) setError(getApiErrorMessage(err, 'Không thể tải danh sách tài khoản khách hàng.'));
     } finally {
-      if (request === requestSequence.current && token === getAccessToken()) setLoading(false);
+      if (request === requestSequence.current && token === getAccessToken() && epoch === sessionCredentialEpoch()) setLoading(false);
     }
   };
 
@@ -75,6 +77,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
 
   const handleExport = async () => {
     const token = getAccessToken();
+    if (!token || loading || !exportReady || loadedCredential.current?.token !== token || loadedCredential.current?.epoch !== sessionCredentialEpoch()) return;
     setExporting(true);
     setError('');
     try {
@@ -116,7 +119,7 @@ export const AdminCustomersPage: React.FC<AdminCustomersPageProps> = ({ onBack, 
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#be185d] px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-pink-900/15 transition hover:bg-[#9d174d] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {exporting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-            Xuất kết quả đang lọc (.CSV)
+            Tải danh sách khách
           </button>
         </div>
 

@@ -77,7 +77,7 @@ test('local CSV cannot export stale or incomplete customer data while loading or
   const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost'});Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,sessionStorage:dom.window.sessionStorage});Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configurable:true});
   const root=createRoot(document.getElementById('root')!);const original=beautyApi.adminCustomers;let finish!:(rows:[])=>void;
   beautyApi.adminCustomers=()=>new Promise(resolve=>{finish=resolve;});
-  const exportButton=()=>[...document.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.includes('Xuất kết quả đang lọc'))!;
+  const exportButton=()=>[...document.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.includes('Tải danh sách khách'))!;
   try {await act(async()=>root.render(React.createElement(AdminCustomersPage,{embedded:true,adminName:'Admin',onBack(){},onLogout(){},onNavigate(){}})));assert.equal(exportButton().disabled,true);
     await act(async()=>finish([]));assert.equal(exportButton().disabled,false,'a successfully loaded empty dataset is valid');
     beautyApi.adminCustomers=async()=>{throw new Error('isolated temporary failure');};await act(async()=>document.querySelector<HTMLButtonElement>('[aria-label="Tải lại danh sách"]')!.click());assert.equal(exportButton().disabled,true,'a failed reload cannot export the previous scope');
