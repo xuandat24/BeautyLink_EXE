@@ -13,9 +13,9 @@ Existing BEAUTY50 / BEAUTY100 / PINK15 policies remain unchanged defaults until 
 - End time is exclusive. Admin datetime inputs use Asia/Ho_Chi_Minh. Invalid requests400, stale/duplicate409, missing404, unauthorized401/403. No client-side success/payment inference.
 
 ## Controlled deployment (not executed by Codex)
-1. Review/merge after exact-head CI. Obtain a current backup with isolated restore/checksum/schema verification. Inspect actual production schema and ddl-auto setting without exposing secrets; SQL files are not assumed to auto-run.
+1. Review after exact-head CI. Do not merge yet when main triggers automatic Railway deployment: approve/apply/verify the additive migration first. Obtain a current backup with isolated restore/checksum/schema verification. Inspect actual production schema and ddl-auto setting without exposing secrets; SQL files are not assumed to auto-run.
 2. With owner approval, apply backend/src/main/resources/db/migration/mysql/V20261101_01__promotions.sql once using the established secure DB operator. Additive only; no existing-table changes or default inserts. Check SHOW CREATE TABLE promotions; SHOW CREATE TABLE promotion_audits; verify unique code and actor FK. IF NOT EXISTS does not prove compatibility: compare actual columns/types.
-3. Deploy backend first. Read-only smoke: public catalog returns existing3 active defaults if no overrides; authenticated ADMIN list works; CUSTOMER/SUPPLIER/STAFF admin access denied; existing service quote keeps 5%/100% calculations. Do not create production bookings/payments to smoke.
+3. Only after schema verification, approve merge/backend rollout (main may automatically deploy Railway). Deploy backend first. Read-only smoke: public catalog returns existing3 active defaults if no overrides; authenticated ADMIN list works; CUSTOMER/SUPPLIER/STAFF admin access denied; existing service quote keeps 5%/100% calculations. Do not create production bookings/payments to smoke.
 4. Deploy frontend after backend is healthy. Confirm Admin list/form and customer voucher list; explicit approved administrative test code can be saved as DRAFT, audited, and left disabled. Publishing real discounts is an owner business action.
 5. Production rules are not written, SQL not applied and deployment not performed by this implementation task.
 
