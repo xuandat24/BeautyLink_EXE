@@ -947,6 +947,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
         adminName={currentUser?.name || 'Quản trị viên'}
         bookedRange={adminBookedCustomerRange}
         initialReturning={adminSearch === 'returning'}
+        initialRoster={adminSearch === 'salon-roster'}
       />
     );
   }

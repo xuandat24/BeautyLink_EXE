@@ -8,6 +8,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public final class AdminV2Dtos {
     private AdminV2Dtos() {}
+    public record SalonRosterRow(String key, String kind, Long accountId, Long practitionerId, Long salonId,
+            String salonName, String fullName, String email, Role accountRole, boolean active, boolean alsoPractitioner) {}
+    public record SalonRoster(List<SalonRosterRow> rows, long owners, long practitioners,
+            long excludedCatalogProfiles, long sharedOwnerProfiles) {}
     public enum Granularity { DAY, WEEK, MONTH }
     public enum ComparisonStatus { COMPARABLE, LOW_BASE, NEW_ACTIVITY, UNCHANGED, NO_DENOMINATOR, INSUFFICIENT_HISTORY, CURRENT_SNAPSHOT, NEGATIVE_VALUE }
     public enum MetricUnit { BOOKING, ACCOUNT, PARTNER, CUSTOMER, VND, PERCENT }
