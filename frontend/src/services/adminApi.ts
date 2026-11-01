@@ -1,12 +1,13 @@
 import type { EditSnapshot, PartnerProfileEdit, PartnerServiceEdit, PartnerPersonEdit, PartnerScheduleEdit } from '../types/adminV2';
-import { apiClient, adminPresentationData } from './beautyApi';
+import { apiClient, adminPresentationData, getAccessToken } from './beautyApi';
 import { alphabetic, displayAccount, displaySalon, type DisplayMetadata } from '../lib/adminDisplayProfiles';
-import { isPresentationUser, mergePresentationBookings, presentationBookings, presentationPage, presentationSearch } from '../lib/presentationAdminData';
+import { isPresentationUser, mergePresentationBookings, presentationBookings, presentationPage, presentationSearch, accountRowsCsv } from '../lib/presentationAdminData';
 import type { AdminPage } from '../types';
 import type { AdminInsights, AdminUserRow, AdminSalonRow, AdminSalonDetail, AdminReviewRow } from '../types/adminV2';
 import type { AdminAccountDetail, AdminProfilePatch, AdminServiceDetail, AdminPaymentLedger } from '../types/adminV2';
 import type { AdminBooking } from '../types';
 import type { ReportingPaymentSummary } from '../types/adminV2';
+import { sessionCredentialEpoch, sessionSnapshot } from '../lib/authSession';
 import { selectReturningPresentationCustomers } from '../lib/returningPresentationCustomers';
 export type AdminRange = { from: string; to: string; includeDemo: boolean };
 export function adminRangeError({ from, to }: Pick<AdminRange, 'from' | 'to'>): string | null {
@@ -78,6 +79,30 @@ export const adminV2Api = {
     }
     const rows = snapshot?.returningCustomerIds ? users.filter(user => snapshot.returningCustomerIds!.includes(user.id)) : selectReturningPresentationCustomers(users);
     return presentationPage(alphabetic(rows.filter(user => presentationSearch(`${user.fullName} ${user.email}`, params.query)), user => user.fullName), params.page, params.size);
+  },
+  exportDirectory: async (params: { query?: string; role?: string; returning?: boolean }, isCurrent: () => boolean): Promise<Blob> => {
+    const token = getAccessToken(), epoch = sessionCredentialEpoch();
+    const guard = () => { if (!token || token !== getAccessToken() || epoch !== sessionCredentialEpoch() || sessionSnapshot().phase !== 'verified' || !isCurrent()) throw new Error('Đã hủy tải vì bộ lọc hoặc phiên đăng nhập thay đổi.'); };
+    guard();
+    const snapshot = await adminPresentationData(); guard();
+    let rows: AdminUserRow[];
+    if (snapshot) {
+      rows = params.returning ? snapshot.returningCustomerIds ? snapshot.users.filter(user => snapshot.returningCustomerIds!.includes(user.id)) : selectReturningPresentationCustomers(snapshot.users) : snapshot.users;
+      rows = rows.filter(user => (!params.role || user.role === params.role) && presentationSearch(`${user.fullName} ${user.email}`, params.query));
+    } else {
+      // Existing bulk/page endpoints only. No per-account detail requests and no fabricated history fields.
+      const fetchPage = (page: number) => params.returning ? adminV2Api.returningUsers({ query: params.query, page, size: 100 }) : adminV2Api.users({ query: params.query, role: params.role, page, size: 100 });
+      const first = await fetchPage(0); guard(); rows = [];
+      if (!Number.isSafeInteger(first.totalElements) || first.totalElements < 0 || first.size !== 100 || first.totalPages !== Math.ceil(first.totalElements / first.size)) throw new Error('Danh sách không đầy đủ; vui lòng tải lại.');
+      for (let page = 0; page < Math.max(1, first.totalPages); page++) {
+        const result = page === 0 ? first : await fetchPage(page); guard();
+        if (result.page !== page || result.size !== first.size || result.totalElements !== first.totalElements || result.totalPages !== first.totalPages || result.content.length !== Math.min(first.size, first.totalElements - page * first.size)) throw new Error('Danh sách thay đổi hoặc tải thiếu; vui lòng tải lại.');
+        rows.push(...result.content);
+      }
+      if (rows.length !== first.totalElements) throw new Error('Không thể tải đầy đủ danh sách.');
+    }
+    if (new Set(rows.map(user => user.id)).size !== rows.length) throw new Error('Danh sách có hồ sơ trùng; đã hủy xuất.');
+    guard(); const blob = accountRowsCsv(rows); guard(); return blob;
   },
   salons: async (params: { query?: string; includeDemo: boolean; page: number; size: number }): Promise<AdminPage<AdminSalonRow>> => {
     const data = (await apiClient.get('/v1/admin/salons', { params })).data;

@@ -204,7 +204,7 @@ try {
       await page.getByRole('button', { name: 'Khách hàng & lịch sử / CSV', exact: true }).click();
       await page.getByRole('heading', { name: 'Tài khoản khách hàng', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Xem', exact: true }).first().waitFor(); await checkLayout();
-      const customerDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Xuất kết quả đang lọc (.CSV)', exact: true }).click();
+      const customerDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Tải danh sách khách', exact: true }).click();
       assert.match((await customerDownload).suggestedFilename(), /beautylink-customers.*csv/);
       await page.getByRole('button', { name: 'Xem', exact: true }).first().click(); await page.getByRole('dialog', { name: 'Lịch sử khách hàng' }).waitFor(); await checkLayout();
       await page.getByRole('dialog', { name: 'Lịch sử khách hàng' }).getByRole('button', { name: 'Đóng', exact: true }).last().click();

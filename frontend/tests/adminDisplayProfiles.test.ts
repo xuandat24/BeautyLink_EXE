@@ -77,7 +77,7 @@ test('local CSV cannot export stale or incomplete customer data while loading or
   const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost'});Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,sessionStorage:dom.window.sessionStorage});Object.defineProperty(globalThis,'IS_REACT_ACT_ENVIRONMENT',{value:true,configurable:true});
   const root=createRoot(document.getElementById('root')!);const original=beautyApi.adminCustomers;let finish!:(rows:[])=>void;
   beautyApi.adminCustomers=()=>new Promise(resolve=>{finish=resolve;});
-  const exportButton=()=>[...document.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.includes('Xuất kết quả đang lọc'))!;
+  const exportButton=()=>[...document.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.includes('Tải danh sách khách'))!;
   try {await act(async()=>root.render(React.createElement(AdminCustomersPage,{embedded:true,adminName:'Admin',onBack(){},onLogout(){},onNavigate(){}})));assert.equal(exportButton().disabled,true);
     await act(async()=>finish([]));assert.equal(exportButton().disabled,false,'a successfully loaded empty dataset is valid');
     beautyApi.adminCustomers=async()=>{throw new Error('isolated temporary failure');};await act(async()=>document.querySelector<HTMLButtonElement>('[aria-label="Tải lại danh sách"]')!.click());assert.equal(exportButton().disabled,true,'a failed reload cannot export the previous scope');
@@ -89,4 +89,11 @@ test('v2 display date and contact preserve authoritative registration, contact a
  const raw={id:12,fullName:'Đặng An',email:'an@outlook.com',createdAt:'2026-08-01T00:00:00Z',status:'DISABLED'};
  const metadata={displayProfiles:[{id:12,source:'CONTACT_DISPLAY' as const,fullName:raw.fullName,email:'dangan1234@gmail.com',reportCreatedAt:'2026-09-22T00:00:00Z',original:{createdAt:raw.createdAt}}]};
  const view=displayAccount(raw,metadata) as typeof raw & {actualCreatedAt:string};assert.equal(view.createdAt,metadata.displayProfiles[0].reportCreatedAt);assert.equal(view.actualCreatedAt,raw.createdAt);assert.equal(view.status,'DISABLED');assert.equal(raw.email,'an@outlook.com');assert.equal(raw.createdAt,'2026-08-01T00:00:00Z');assert.deepEqual(displayAccount(view,metadata),view);
+});
+
+
+test('actual registration from JPA metadata takes precedence over legacy JDBC source encoding',()=>{
+ const raw={id:12,fullName:'Đặng An',email:'an@outlook.com',createdAt:'2026-10-01T17:00:00Z'};
+ const metadata={displayProfiles:[{id:12,source:'CONTACT_DISPLAY' as const,fullName:raw.fullName,email:'dangan1234@gmail.com',reportCreatedAt:'2026-09-22T00:00:00Z',actualCreatedAt:raw.createdAt,original:{createdAt:'2026-10-01T10:00:00Z'}}]};
+ const view=displayAccount(raw,metadata) as typeof raw & {actualCreatedAt:string};assert.equal(view.actualCreatedAt,raw.createdAt);assert.equal(view.createdAt,'2026-09-22T00:00:00Z');assert.equal(raw.email,'an@outlook.com');
 });

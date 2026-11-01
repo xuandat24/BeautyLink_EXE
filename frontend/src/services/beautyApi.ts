@@ -170,12 +170,16 @@ async function reviewAllocation(): Promise<PresentationReviewAllocation | null> 
   }
 }
 
-async function readAdminPages<T>(path: string, params: Record<string, unknown> = {}): Promise<T[]> {
+async function readAdminPages<T extends { id: number }>(path: string, params: Record<string, unknown> = {}): Promise<T[]> {
   const first = (await apiClient.get<AdminPage<T>>(path, { params: { ...params, page: 0, size: 100 } })).data;
-  const rows = [...first.content];
-  for (let page = 1; page < first.totalPages; page++) {
-    rows.push(...(await apiClient.get<AdminPage<T>>(path, { params: { ...params, page, size: 100 } })).data.content);
+  if (!Number.isSafeInteger(first.totalElements) || first.totalElements < 0 || first.size !== 100 || first.totalPages !== Math.ceil(first.totalElements / 100)) throw new Error('Danh sách tải thiếu hoặc thay đổi; vui lòng tải lại.');
+  const rows: T[] = [];
+  for (let page = 0; page < Math.max(1, first.totalPages); page++) {
+    const result = page === 0 ? first : (await apiClient.get<AdminPage<T>>(path, { params: { ...params, page, size: 100 } })).data;
+    if (result.page !== page || result.size !== first.size || result.totalElements !== first.totalElements || result.totalPages !== first.totalPages || result.content.length !== Math.min(first.size, first.totalElements - page * first.size)) throw new Error('Danh sách tải thiếu hoặc thay đổi; vui lòng tải lại.');
+    rows.push(...result.content);
   }
+  if (new Set(rows.map(row => row.id)).size !== rows.length) throw new Error('Danh sách tải về có dòng trùng; đã hủy xuất.');
   return rows;
 }
 
