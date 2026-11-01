@@ -39,6 +39,7 @@ import {
   VOUCHERS,
 } from '../data/mockData';
 import { cache } from '../lib/cache';
+import { bookingRowsCsv } from '../lib/adminBookingCsv';
 import { presentationEnabled, presentationReviewAllocation, presentationService, type PresentationReviewAllocation } from '../lib/presentationData';
 import { mergePersistentPresentationData, isPresentationBooking, isPresentationUser, mergePresentationBookings, presentationBookings, presentationCustomerCsv, presentationCustomers, presentationPage, type PresentationAdminData } from '../lib/presentationAdminData';
 import type { AdminUserRow } from '../types/adminV2';
@@ -170,12 +171,15 @@ async function reviewAllocation(): Promise<PresentationReviewAllocation | null> 
   }
 }
 
-async function readAdminPages<T extends { id: number }>(path: string, params: Record<string, unknown> = {}): Promise<T[]> {
+async function readAdminPages<T extends { id: number }>(path: string, params: Record<string, unknown> = {}, guard: () => void = () => {}): Promise<T[]> {
+  guard();
   const first = (await apiClient.get<AdminPage<T>>(path, { params: { ...params, page: 0, size: 100 } })).data;
+  guard();
   if (!Number.isSafeInteger(first.totalElements) || first.totalElements < 0 || first.size !== 100 || first.totalPages !== Math.ceil(first.totalElements / 100)) throw new Error('Danh sách tải thiếu hoặc thay đổi; vui lòng tải lại.');
   const rows: T[] = [];
   for (let page = 0; page < Math.max(1, first.totalPages); page++) {
     const result = page === 0 ? first : (await apiClient.get<AdminPage<T>>(path, { params: { ...params, page, size: 100 } })).data;
+    guard();
     if (result.page !== page || result.size !== first.size || result.totalElements !== first.totalElements || result.totalPages !== first.totalPages || result.content.length !== Math.min(first.size, first.totalElements - page * first.size)) throw new Error('Danh sách tải thiếu hoặc thay đổi; vui lòng tải lại.');
     rows.push(...result.content);
   }
@@ -1112,6 +1116,16 @@ export const beautyApi = {
     const rows = await unwrap<AdminPage<AdminBooking>>(apiClient.get('/v1/admin/bookings', { params }));
     const snapshot = await adminPresentationData(params);
     return snapshot ? presentationPage(presentationBookings({ ...snapshot, bookings: mergePresentationBookings(snapshot.bookings, rows.content) }, params), params.page, params.size) : rows;
+  },
+
+  async exportAdminBookingsCsv(params: { from: string; to: string; status?: string; paymentStatus?: string; query?: string }, isCurrent: () => boolean): Promise<Blob> {
+    const token = getAccessToken(), epoch = sessionCredentialEpoch();
+    const guard = () => { if (!token || token !== getAccessToken() || epoch !== sessionCredentialEpoch() || sessionSnapshot().phase !== 'verified' || !isCurrent()) throw new Error('Đã hủy tải vì bộ lọc hoặc phiên đăng nhập thay đổi.'); };
+    guard();
+    const snapshot = await adminPresentationData(params); guard();
+    // Reuse the same merged source, display profiles, filters and ordering as the booking table.
+    const rows = snapshot ? presentationBookings(snapshot, params) : await readAdminPages<AdminBooking>('/v1/admin/bookings', { ...params, includeDemo: false }, guard);
+    guard(); const blob = bookingRowsCsv(rows); guard(); return blob;
   },
 
   async adminBooking(id: number): Promise<AdminBooking> {

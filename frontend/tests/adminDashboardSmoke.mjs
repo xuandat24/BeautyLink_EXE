@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
 const base = process.env.BEAUTYLINK_SMOKE_URL || 'http://localhost:5173';
@@ -129,6 +130,15 @@ try {
       await search.press('Enter'); await page.getByRole('button', { name: 'Chi tiết SMOKE-MANUAL', exact: true }).waitFor();
       await search.fill(''); await search.press('Enter');
       await navigate('Lịch đặt');
+      const bookingCsvButton = page.getByRole('button', { name: 'Tải danh sách lịch đặt (CSV)', exact: true });
+      await bookingCsvButton.waitFor(); await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Tải danh sách lịch đặt (CSV)' && !button.disabled));
+      const expectedBookings = await page.evaluate(async () => { const { beautyApi } = await import('/src/services/beautyApi.ts'); const inputs = document.querySelectorAll('input[type="date"]'); return beautyApi.adminBookings({ from: inputs[0].value, to: inputs[1].value, includeDemo: false, page: 0, size: 100 }); });
+      const bookingDownload = page.waitForEvent('download'); await bookingCsvButton.click(); const bookingFile = await bookingDownload;
+      assert.match(bookingFile.suggestedFilename(), /^beautylink-lich-dat-.*\.csv$/); const bookingBytes = await readFile(await bookingFile.path()); assert.deepEqual([...bookingBytes.subarray(0, 3)], [239, 187, 191]);
+      const bookingLines = bookingBytes.toString('utf8').replace(/^\uFEFF/, '').split('\r\n');
+      assert.equal(bookingLines[0], (await page.locator('thead th').allTextContents()).map(label => `"${label}"`).join(',')); assert.equal(bookingLines.length, expectedBookings.totalElements + 1);
+      if (expectedBookings.content.length) { assert.ok(bookingLines[1].includes(`"${expectedBookings.content[0].bookingCode}"`)); assert.ok(bookingLines[1].endsWith('"Xem chi tiết"')); }
+      await checkLayout(); await capture('bookings-csv');
       const detail = page.getByRole('button', { name: /^Chi tiết / }).first(); await detail.waitFor(); await detail.click();
       await page.getByRole('dialog', { name: 'Chi tiết lịch hẹn' }).waitFor(); await page.getByRole('button', { name: 'Đóng', exact: true }).click();
       await navigate('Thanh toán'); await page.getByRole('heading', { name: 'Thanh toán', exact: true }).waitFor();
