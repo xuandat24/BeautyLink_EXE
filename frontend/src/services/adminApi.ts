@@ -18,6 +18,8 @@ export function adminRangeError({ from, to }: Pick<AdminRange, 'from' | 'to'>): 
   return null;
 }
 export const adminV2Api = {
+  promotions: async (): Promise<import('../types/promotions').Promotion[]> => (await apiClient.get('/v1/admin/promotions')).data,
+  savePromotion: async (data: import('../types/promotions').PromotionWrite, create: boolean): Promise<import('../types/promotions').Promotion> => (await (create ? apiClient.post('/v1/admin/promotions', data) : apiClient.put(`/v1/admin/promotions/${encodeURIComponent(data.code)}`, data))).data,
   salonRoster: async (): Promise<import('../types/adminV2').SalonRoster> => (await apiClient.get('/v1/admin/salon-directory')).data,
   displayProfiles: async (): Promise<DisplayMetadata> => (await apiClient.get('/v1/admin/presentation/profiles')).data,
   reportPayments: async (params: { from: string; to: string; salonId?: number; page: number; size?: number }): Promise<ReportingPaymentSummary> => {

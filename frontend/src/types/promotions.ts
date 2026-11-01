@@ -1,0 +1,2 @@
+export type Promotion = { code: string; name: string; discountType: 'FIXED' | 'PERCENT'; value: number; minimumOrder: number; maximumDiscount: number | null; startsAt: string | null; endsAt: string | null; status: 'DRAFT' | 'ENABLED' | 'PAUSED'; state: 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'PAUSED' | 'EXPIRED'; revision: number };
+export type PromotionWrite = Omit<Promotion, 'state' | 'revision'> & { expectedRevision: number };

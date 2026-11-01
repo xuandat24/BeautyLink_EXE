@@ -46,7 +46,7 @@ class PresentationPaymentBatchValidatorTest {
         assertEquals(new BigDecimal("1828800"),PresentationPaymentBatchValidator.validate(source,plan));
     }
     @Test void depositCalculationAgreesWithAuthoritativeQuoteIncludingHalfUpBoundaries() {
-        var quotes=new PaymentQuoteService(mock(ServiceOfferingRepository.class));
+        var quotes=new PaymentQuoteService(mock(ServiceOfferingRepository.class), new com.example.backend.service.PromotionService(mock(com.example.backend.repository.PromotionRepository.class), mock(com.example.backend.repository.PromotionAuditRepository.class), new com.fasterxml.jackson.databind.ObjectMapper()));
         for(int amount:new int[]{40000,40009,40010,254000,299000,359000,599000,999000})
             assertEquals(quotes.calculate(BigDecimal.valueOf(amount),PaymentOption.DEPOSIT_05,null).amount(),PresentationPaymentBatchValidator.deposit(BigDecimal.valueOf(amount)));
     }

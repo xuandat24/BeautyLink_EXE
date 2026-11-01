@@ -20,9 +20,11 @@ public class PaymentQuoteService {
     private static final BigDecimal DEPOSIT_RATE = new BigDecimal("0.05");
 
     private final ServiceOfferingRepository services;
+    private final PromotionService promotions;
 
-    public PaymentQuoteService(ServiceOfferingRepository services) {
+    public PaymentQuoteService(ServiceOfferingRepository services, PromotionService promotions) {
         this.services = services;
+        this.promotions = promotions;
     }
 
     @Transactional(readOnly = true)
@@ -32,6 +34,7 @@ public class PaymentQuoteService {
         return calculate(service.getPrice(), option, voucherCode);
     }
 
+    @Transactional(readOnly = true)
     public PaymentQuoteResponse calculate(BigDecimal bookingTotal, PaymentOption option, String rawVoucherCode) {
         if (option == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMENT_OPTION_REQUIRED", "Vui lòng chọn hình thức thanh toán");
@@ -42,7 +45,7 @@ public class PaymentQuoteService {
         }
         BigDecimal original = bookingTotal.max(BigDecimal.ZERO).setScale(0, RoundingMode.HALF_UP);
         String voucherCode = normalizeVoucher(rawVoucherCode);
-        BigDecimal discount = calculateDiscount(original, voucherCode);
+        BigDecimal discount = promotions.discount(original, voucherCode);
         BigDecimal payable = original.subtract(discount).max(BigDecimal.ZERO);
         BigDecimal amount = option == PaymentOption.DEPOSIT_05
                 ? payable.multiply(DEPOSIT_RATE).setScale(0, RoundingMode.HALF_UP)
@@ -76,17 +79,4 @@ public class PaymentQuoteService {
         return voucherCode == null || voucherCode.isBlank() ? null : voucherCode.trim().toUpperCase(Locale.ROOT);
     }
 
-    private BigDecimal calculateDiscount(BigDecimal total, String code) {
-        if (code == null) return BigDecimal.ZERO;
-        return switch (code) {
-            case "BEAUTY50" -> total.compareTo(new BigDecimal("200000")) >= 0 ? new BigDecimal("50000") : invalidVoucher();
-            case "BEAUTY100" -> total.compareTo(new BigDecimal("500000")) >= 0 ? new BigDecimal("100000") : invalidVoucher();
-            case "PINK15" -> total.multiply(new BigDecimal("0.15")).min(new BigDecimal("150000")).setScale(0, RoundingMode.HALF_UP);
-            default -> throw new ApiException(HttpStatus.BAD_REQUEST, "VOUCHER_INVALID", "Mã voucher không hợp lệ hoặc đã hết hạn");
-        };
-    }
-
-    private BigDecimal invalidVoucher() {
-        throw new ApiException(HttpStatus.BAD_REQUEST, "VOUCHER_MINIMUM_NOT_MET", "Đơn hàng chưa đạt giá trị tối thiểu của voucher");
-    }
 }

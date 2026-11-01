@@ -22,8 +22,9 @@ async function environment(check: (render: (element: React.ReactNode) => Promise
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage });
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { value: true, configurable: true });
   setAccessToken(sessionToken());
-  const original = { capacity: beautyApi.serviceCapacity, quote: beautyApi.servicePaymentQuote, create: beautyApi.createBooking, payment: beautyApi.createPayOSPayment, status: beautyApi.payOSPaymentStatus, booking: beautyApi.myBooking, current: beautyApi.currentBookingPayment };
+  const original = { promotions: beautyApi.activePromotions, capacity: beautyApi.serviceCapacity, quote: beautyApi.servicePaymentQuote, create: beautyApi.createBooking, payment: beautyApi.createPayOSPayment, status: beautyApi.payOSPaymentStatus, booking: beautyApi.myBooking, current: beautyApi.currentBookingPayment };
   const calls = { capacity: 0, creates: 0, payments: 0, payload: undefined as unknown, navigations: 0 };
+  beautyApi.activePromotions = async () => [];
   beautyApi.serviceCapacity = async (_id, date) => { calls.capacity++; return { date, qualifiedPractitioners: 1, reason: null, slots: [{ time: '13:00:00', availablePractitioners: 1, state: 'AVAILABLE' }, { time: '14:00:00', availablePractitioners: 0, state: 'FULLY_BOOKED' }] }; };
   beautyApi.servicePaymentQuote = async (_id, option) => ({ ...quote, paymentOption: option });
   beautyApi.createBooking = async data => { calls.creates++; calls.payload = data; return booking; };
@@ -35,7 +36,7 @@ async function environment(check: (render: (element: React.ReactNode) => Promise
   try { await check(async element => { await act(async () => root.render(element)); }, calls); }
   finally {
     await act(async () => root.unmount());
-    Object.assign(beautyApi, { serviceCapacity: original.capacity, servicePaymentQuote: original.quote, createBooking: original.create, createPayOSPayment: original.payment, payOSPaymentStatus: original.status, myBooking: original.booking, currentBookingPayment: original.current });
+    Object.assign(beautyApi, { activePromotions: original.promotions, serviceCapacity: original.capacity, servicePaymentQuote: original.quote, createBooking: original.create, createPayOSPayment: original.payment, payOSPaymentStatus: original.status, myBooking: original.booking, currentBookingPayment: original.current });
     dom.window.close();
   }
 }
@@ -83,4 +84,12 @@ test('cart checkout chooses one service without modifying the saved cart or quan
     assert.equal(store.cartItems.length, 2); assert.equal(store.cartItems[0].quantity, 2);
     await act(async () => store.clearCart());
   });
+});
+
+test('checkout accepts a new server promotion and uses only the authoritative returned quote', async () => {
+ await environment(async render => {
+  beautyApi.activePromotions = async () => [{code:'AUTUMN10',name:'Ưu đãi mùa thu',discountType:'FIXED',value:10000,minimumOrder:0,maximumDiscount:null,startsAt:null,endsAt:null,status:'ENABLED',state:'ACTIVE',revision:0}];
+  const requests:string[]=[];beautyApi.servicePaymentQuote=async(_id,option,code)=>{if(code)requests.push(code);return{...quote,paymentOption:option,discountAmount:code?10000:0,payableAmount:code?210000:220000,amount:code?10500:11000,remainingAmount:code?199500:209000};};
+  await render(React.createElement(CheckoutPage,{currentUser:user,directService:service,preselectedDate:bookingDay(1),onBack(){},onViewBookings(){},onNeedLogin(){}}));await click(/13:00/);await click(/Tiếp tục: Chọn hình thức/);await click(/AUTUMN10/);assert.deepEqual(requests,['AUTUMN10']);assert.ok(document.body.textContent!.includes('AUTUMN10'));assert.doesNotMatch(document.body.textContent!,/Mã voucher không hợp lệ/);
+ });
 });

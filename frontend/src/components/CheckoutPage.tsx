@@ -67,13 +67,6 @@ const getInitials = (str: string) =>
     .join('')
     .toUpperCase();
 
-// Available vouchers
-const AVAILABLE_VOUCHERS = [
-  { code: 'BEAUTY50', label: 'Giảm 50.000đ cho đơn từ 200k', minOrder: 200000, discount: 50000, type: 'fixed' },
-  { code: 'BEAUTY100', label: 'Giảm 100.000đ cho đơn từ 500k', minOrder: 500000, discount: 100000, type: 'fixed' },
-  { code: 'PINK15', label: 'Giảm 15% tối đa 150k cho thành viên', minOrder: 0, discount: 0.15, maxDiscount: 150000, type: 'percent' },
-];
-
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   currentUser,
   onBack,
@@ -157,6 +150,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     description: string;
   } | null>(null);
   const [voucherError, setVoucherError] = useState('');
+  const [availableVouchers, setAvailableVouchers] = useState<import('../types/promotions').Promotion[]>([]);
+  useEffect(() => { let active = true; if (currentStep !== 2) return; beautyApi.activePromotions().then(rows => { if (active) setAvailableVouchers(rows); }).catch(() => { if (active) setAvailableVouchers([]); }); return () => { active = false; }; }, [currentStep]);
   const [paymentQuote, setPaymentQuote] = useState<PaymentQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState('');
@@ -262,15 +257,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
     const code = validation.data;
-    const found = AVAILABLE_VOUCHERS.find((v) => v.code === code);
-    if (!found) {
-      setVoucherError('Mã voucher không hợp lệ hoặc đã hết hạn.');
-      return;
-    }
+    const found = availableVouchers.find((v) => v.code === code);
     setPaymentQuote(null);
     setAppliedVoucher({
-      code: found.code,
-      description: found.label,
+      code,
+      description: found?.name ?? `Mã ${code}`,
     });
     setVoucherCodeInput('');
     setVoucherError('');
@@ -969,15 +960,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
               {/* Quick voucher chips */}
               <div className="mt-3 flex flex-wrap gap-2 pt-2 border-t border-pink-50">
-                <span className="text-[11px] font-bold text-slate-400 self-center">Mã hot:</span>
-                {AVAILABLE_VOUCHERS.map((v) => (
+                {availableVouchers.length > 0 && <span className="text-[11px] font-bold text-slate-400 self-center">Ưu đãi hiện có:</span>}
+                {availableVouchers.map((v) => (
                   <button
                     key={v.code}
                     type="button"
                     onClick={() => handleApplyVoucher(v.code)}
                     className="px-2.5 py-1 rounded-lg bg-pink-50 hover:bg-pink-100 text-[11px] font-bold text-[#be185d] border border-pink-200 transition cursor-pointer"
                   >
-                    +{v.code} ({v.type === 'fixed' ? `-${formatCurrency(v.discount as number)}` : '-15%'})
+                    +{v.code} ({v.discountType === 'FIXED' ? `-${formatCurrency(v.value)}` : `-${v.value}%`})
                   </button>
                 ))}
               </div>

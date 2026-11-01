@@ -660,6 +660,7 @@ function startAuthentication() {
   };
 }
 export const beautyApi = {
+  activePromotions: async (): Promise<import('../types/promotions').Promotion[]> => unwrap(apiClient.get('/v1/catalog/promotions')),
   async sessionActivity(): Promise<void> { await apiClient.post('/v1/auth/session/activity'); },
   async logoutSession(token: string): Promise<void> {
     await apiClient.post('/v1/auth/session/logout', {}, { headers: { Authorization: `Bearer ${token}` } });
