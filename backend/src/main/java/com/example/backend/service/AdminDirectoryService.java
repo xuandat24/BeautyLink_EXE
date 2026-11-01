@@ -32,6 +32,33 @@ public class AdminDirectoryService {
         if (value != null && value.length() > 120) throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_SEARCH", "Tìm kiếm tối đa 120 ký tự.");
         return "%" + (value == null ? "" : value.strip().toLowerCase(Locale.ROOT)) + "%";
     }
+    /** Display-only workforce directory. Never rewrites accounts, practitioner capacity or report KPIs. */
+    public SalonRoster salonRoster() {
+        var mapping=profiles.profiles();
+        @SuppressWarnings("unchecked") List<Object[]> owners=em.createQuery("select s.id,s.name,u.id,u.fullName,u.email,u.role,u.status from Supplier s join s.owner u where s.demoData=false order by s.id").setMaxResults(1001).getResultList();
+        @SuppressWarnings("unchecked") List<Object[]> people=em.createQuery("select p.id,p.displayName,p.bio,p.active,s.id,s.name,u.id,u.fullName,u.email,u.role,u.status,s.owner.id from Practitioner p join p.supplier s left join p.user u where s.demoData=false order by p.id").setMaxResults(1001).getResultList();
+        if(owners.size()>1000||people.size()>1000)throw new ApiException(HttpStatus.BAD_REQUEST,"ROSTER_TOO_LARGE","Danh sách cần được chia trang trước khi tải.");
+        var ownerIds=new HashSet<Long>();owners.forEach(o->ownerIds.add((Long)o[2]));
+        var sharedOwners=new HashSet<Long>();var rows=new ArrayList<SalonRosterRow>();long catalog=0,shared=0;
+        for(var p:people) {
+            Long accountId=(Long)p[6];
+            // Owners providing services remain one OWNER row; their operational practitioner stays intact.
+            if(accountId!=null&&ownerIds.contains(accountId)){sharedOwners.add(accountId);shared++;continue;}
+            // Exact provenance written by PartnerCatalogSeeder, only for unlinked placeholder profiles.
+            if(accountId==null&&Objects.equals(p[2],"Chuyên viên của "+p[5])){catalog++;continue;}
+            var profile=accountId==null?null:mapping.get(accountId);
+            rows.add(new SalonRosterRow("PRACTITIONER:"+p[0],"PRACTITIONER",accountId,(Long)p[0],(Long)p[4],(String)p[5],
+                    profile==null?(String)p[1]:profile.path("fullName").asText(),profile==null?(String)p[8]:profile.path("email").asText(),
+                    (Role)p[9],(Boolean)p[3],false));
+        }
+        long practitionerCount=rows.size();var seen=new HashSet<Long>();
+        for(var o:owners){Long id=(Long)o[2];if(!seen.add(id))throw new IllegalStateException("Duplicate salon owner in directory");var profile=mapping.get(id);
+            rows.add(new SalonRosterRow("OWNER:"+id,"OWNER",id,null,(Long)o[0],(String)o[1],profile==null?(String)o[3]:profile.path("fullName").asText(),
+                    profile==null?(String)o[4]:profile.path("email").asText(),(Role)o[5],o[6]==AccountStatus.ACTIVE,sharedOwners.contains(id)));
+        }
+        rows.sort((a,b)->{int c=VietnameseDirectoryOrder.compare(a.fullName(),b.fullName());if(c!=0)return c;c=Long.compare(a.accountId()!=null?a.accountId():a.practitionerId(),b.accountId()!=null?b.accountId():b.practitionerId());return c!=0?c:a.key().compareTo(b.key());});
+        return new SalonRoster(List.copyOf(rows),seen.size(),practitionerCount,catalog,shared);
+    }
     public AdminPageResponse<UserRow> users(String query, Role role, int page, int size) {
         return users(query,role,page,size,false);
     }

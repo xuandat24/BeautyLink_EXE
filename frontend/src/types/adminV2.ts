@@ -45,3 +45,6 @@ export type PartnerProfileEdit = { id?: number; name: string; businessType: stri
 export type PartnerServiceEdit = { id?: number; categoryId: number; name: string; description: string | null; price: number; originalPrice: number | null; durationMinutes: number; imageUrl: string | null; active: boolean };
 export type PartnerPersonEdit = { id?: number; displayName: string; specialty: string | null; bio: string | null; avatarUrl: string | null; active: boolean; supportedServiceIds: number[]; serviceAssignmentsRestricted: boolean };
 export type PartnerScheduleEdit = { id?: number; dayOfWeek: string; startTime: string; endTime: string; breakStart: string | null; breakEnd: string | null; slotMinutes: number; active: boolean };
+
+export type SalonRosterRow = { key: string; kind: 'OWNER' | 'PRACTITIONER'; accountId: number | null; practitionerId: number | null; salonId: number; salonName: string; fullName: string; email: string | null; accountRole: AdminUserRow['role'] | null; active: boolean; alsoPractitioner: boolean };
+export type SalonRoster = { rows: SalonRosterRow[]; owners: number; practitioners: number; excludedCatalogProfiles: number; sharedOwnerProfiles: number };

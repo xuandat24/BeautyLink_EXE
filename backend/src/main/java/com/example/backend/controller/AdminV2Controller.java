@@ -24,6 +24,7 @@ public class AdminV2Controller {
             @RequestParam(defaultValue="false") boolean includeDemo,@RequestParam(defaultValue="DAY") Granularity granularity) {
         return insights.insights(from,to,includeDemo,granularity);
     }
+    @GetMapping("/salon-directory") public SalonRoster salonRoster() { return directory.salonRoster(); }
     @GetMapping("/users") public AdminPageResponse<UserRow> users(@RequestParam(required=false) String query,@RequestParam(required=false) Role role,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size,@RequestParam(defaultValue="false") boolean forEdit) { return directory.users(query,role,page,size,forEdit); }
     @GetMapping("/salons") public AdminPageResponse<SalonRow> salons(@RequestParam(required=false) String query,@RequestParam(defaultValue="false") boolean includeDemo,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size) { return directory.salons(query,includeDemo,page,size); }
     @GetMapping("/salons/{id}") public SalonDetail salon(@PathVariable Long id,@RequestParam(defaultValue="false") boolean includeDemo,@RequestParam(defaultValue="false") boolean headerOnly) { return headerOnly?details.salonHeader(id):directory.salon(id,includeDemo); }

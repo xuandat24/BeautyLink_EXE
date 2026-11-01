@@ -50,6 +50,32 @@ class AdminDashboardV2IntegrationTest {
     final Instant start=Instant.parse("2026-10-01T17:00:00Z");
     final LocalDate day=LocalDate.of(2026,10,2);
 
+    @Test void salonRosterHasRealOwnersAndUnlinkedPractitionerProfilesWithoutChangingLedgersOrCapacity() throws Exception {
+        for(int i=0;i<12;i++)salon("Business"+i,false);
+        for(int i=0;i<25;i++)salon("HiddenDemo"+i,true);
+        for(int i=0;i<24;i++){var p=person(i%2==0?a:b);p.setDisplayName("Nguyễn Hoài An "+i);p.setBio("DEMO BeautyLink");people.saveAndFlush(p);}
+        for(int i=0;i<10;i++){var p=person(a);p.setBio("Chuyên viên của "+a.getName());people.saveAndFlush(p);}
+        var ownerPerson=person(a);ownerPerson.setUser(a.getOwner());people.saveAndFlush(ownerPerson);
+        long accounts=users.count(),bookingsBefore=bookings.count(),paymentsBefore=payments.count(),servicesBefore=services.count(),peopleBefore=people.count();
+        var before=insights.insights(day,day,false,Granularity.DAY);em.flush();em.clear();
+        var roster=directory.salonRoster();assertEquals(14,roster.owners());assertEquals(26,roster.practitioners());assertEquals(40,roster.rows().size());assertEquals(10,roster.excludedCatalogProfiles());assertEquals(1,roster.sharedOwnerProfiles());
+        assertEquals(40,roster.rows().stream().map(r->r.key()).distinct().count());
+        assertTrue(roster.rows().stream().filter(r->r.kind().equals("PRACTITIONER")).allMatch(r->r.accountId()==null&&r.email()==null&&r.accountRole()==null));
+        assertTrue(roster.rows().stream().filter(r->r.kind().equals("OWNER")).allMatch(r->r.accountRole()==Role.SUPPLIER));
+        assertTrue(roster.rows().stream().anyMatch(r->r.accountId()!=null&&r.accountId().equals(a.getOwner().getId())&&r.salonId().equals(a.getId())&&r.alsoPractitioner()));
+        assertFalse(roster.rows().stream().anyMatch(r->r.salonId().equals(demo.getId())));
+        assertEquals(accounts,users.count());assertEquals(bookingsBefore,bookings.count());assertEquals(paymentsBefore,payments.count());assertEquals(servicesBefore,services.count());assertEquals(peopleBefore,people.count());
+        var after=insights.insights(day,day,false,Granularity.DAY);assertEquals(before.totalBookings(),after.totalBookings());assertEquals(before.revenue(),after.revenue());assertEquals(before.activePartners(),after.activePartners());assertEquals(before.users(),after.users());
+        mvc.perform(get("/api/v1/admin/salon-directory").header("Authorization","Bearer "+jwt.createToken(users.findById(admin.getId()).orElseThrow()))).andExpect(status().isOk()).andExpect(jsonPath("$.rows.length()").value(40)).andExpect(jsonPath("$.owners").value(14)).andExpect(jsonPath("$.practitioners").value(26));
+    }
+    @Test void salonRosterIsAdminOnlyAndDoesNotConfuseLoginRolesWithSalonResponsibilities() throws Exception {
+        mvc.perform(get("/api/v1/admin/salon-directory")).andExpect(status().isUnauthorized());
+        for(var role:List.of(Role.CUSTOMER,Role.SUPPLIER,Role.STAFF))mvc.perform(get("/api/v1/admin/salon-directory").header("Authorization","Bearer "+jwt.createToken(user("Denied"+role,role)))).andExpect(status().isForbidden());
+        var colleague=user("Employee",Role.STAFF);var p=person(a);p.setUser(colleague);p.setBio("Chuyên viên của "+a.getName());people.saveAndFlush(p);
+        var result=directory.salonRoster().rows().stream().filter(r->p.getId().equals(r.practitionerId())).findFirst().orElseThrow();assertEquals("PRACTITIONER",result.kind());assertEquals(Role.STAFF,result.accountRole());assertEquals(colleague.getId(),result.accountId());assertEquals(a.getId(),result.salonId());
+        assertEquals(Role.STAFF,users.findById(colleague.getId()).orElseThrow().getRole());
+    }
+
     @Test void recoveredHistoryIsPrivateReadOnlyAndScopedWithoutChangingTheOperationalLedger() throws Exception {
         long bookingCount=bookings.count(), paymentCount=payments.count();
         var before=insights.insights(day,day,false,Granularity.DAY);

@@ -148,6 +148,12 @@ try {
       const revenueDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Tải CSV', exact: true }).click();
       assert.match((await revenueDownload).suggestedFilename(), /beautylink-revenue.*csv/);
       await navigate('Người dùng'); await page.locator('tbody tr').first().waitFor();
+      await page.getByRole('button', { name: 'Salon & chuyên viên', exact: true }).click(); await page.getByTestId('admin-salon-roster').waitFor();
+      await page.getByRole('button', { name: 'Tải danh sách hồ sơ (CSV)', exact: true }).waitFor(); await page.waitForFunction(() => ![...document.querySelectorAll('button')].find(button => button.textContent === 'Tải danh sách hồ sơ (CSV)').disabled);
+      const roster = await page.evaluate(async () => { const { adminV2Api } = await import('/src/services/adminApi.ts'); return adminV2Api.salonRoster(); });
+      assert.equal(roster.rows.length, roster.owners + roster.practitioners); const rosterDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Tải danh sách hồ sơ (CSV)', exact: true }).click(); const rosterBytes = await readFile(await (await rosterDownload).path()); assert.equal(rosterBytes.toString('utf8').replace(/^\uFEFF/, '').split('\r\n').length, roster.rows.length + 1);
+      await page.getByRole('combobox', { name: 'Vai trò trong salon', exact: true }).selectOption('OWNER'); assert.equal(await page.locator('tbody tr').count(), Math.min(20,roster.owners)); await checkLayout(); await capture('salon-roster');
+      await page.getByRole('button', { name: 'Tất cả tài khoản', exact: true }).click(); await page.locator('tbody tr').first().waitFor();
       await capture('users');
       const nextPage = page.waitForResponse(r => r.url().includes('/admin/users?') && r.url().includes('page=1'));
       await page.getByRole('button', { name: 'Trang sau', exact: true }).click(); await nextPage;
