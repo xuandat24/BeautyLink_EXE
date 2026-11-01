@@ -7,6 +7,8 @@ import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 import java.util.*;
 public interface PractitionerRepository extends JpaRepository<Practitioner, Long> {
+    @Query("select distinct p from Practitioner p left join fetch p.supportedServices where p.supplier.id in :ids and p.active=true")
+    List<Practitioner> findPublicBySupplierIds(@Param("ids") Collection<Long> ids);
     List<Practitioner> findBySupplierIdAndActiveTrue(Long supplierId);
     List<Practitioner> findBySupplierIdOrderById(Long supplierId);
     Optional<Practitioner> findByIdAndSupplierOwnerId(Long id, Long ownerId);

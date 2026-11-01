@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useTransition } from 'react';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { FeaturedCategories } from './components/FeaturedCategories';
@@ -11,7 +11,8 @@ import { WhyChooseUs } from './components/WhyChooseUs';
 import { Footer } from './components/Footer';
 
 // Pages
-import { CategoryServicePage } from './components/CategoryServicePage';
+const loadCategoryPage = () => import('./components/CategoryServicePage').then(m => ({ default: m.CategoryServicePage }));
+const CategoryServicePage = React.lazy(loadCategoryPage);
 import type { AdminSection } from './components/admin/AdminNav';
 import { AuthPage } from './components/AuthPage';
 import { continuationDestination, setPaymentBookingId } from './lib/paymentNavigation';
@@ -27,8 +28,7 @@ import type { SessionPhase } from './lib/authSession';
 import { CartDrawer } from './components/CartDrawer';
 import { VoucherModal } from './components/VoucherModal';
 import { LocationSelectModal } from './components/LocationSelectModal';
-import { BlogModal } from './components/BlogModal';
-import { ViewAllServicesModal, ViewAllContext } from './components/ViewAllServicesModal';
+import type { ViewAllContext } from './components/ViewAllServicesModal';
 import { FavoriteToast, FavoriteToastInfo } from './components/FavoriteToast';
 
 import { parseAdminDetailHash, adminDetailHash } from './components/admin/adminRoutes';
@@ -43,8 +43,11 @@ const BookingsPage = React.lazy(() => import('./components/BookingsPage').then(m
 const ReportsPage = React.lazy(() => import('./components/ReportsPage').then(module => ({ default: module.ReportsPage })));
 const AccountPage = React.lazy(() => import('./components/AccountPage').then(module => ({ default: module.AccountPage })));
 const CheckoutPage = React.lazy(() => import('./components/CheckoutPage').then(module => ({ default: module.CheckoutPage })));
-const FilterExplorePage = React.lazy(() => import('./components/FilterExplorePage').then(module => ({ default: module.FilterExplorePage })));
-const PartnerDetailPage = React.lazy(() => import('./components/PartnerDetailPage').then(module => ({ default: module.PartnerDetailPage })));
+const loadExplorePage = () => import('./components/FilterExplorePage').then(m => ({ default: m.FilterExplorePage }));
+const FilterExplorePage = React.lazy(loadExplorePage);
+const loadPartnerPage = () => import('./components/PartnerDetailPage').then(m => ({ default: m.PartnerDetailPage }));
+const PartnerDetailPage = React.lazy(loadPartnerPage);
+const preloadPublicPage = (view: string) => { const load = view === 'service' ? loadCategoryPage : view === 'filter-explore' ? loadExplorePage : view === 'partner-detail' ? loadPartnerPage : null; if (load) void load().catch(() => {}); };
 
 // Central Store & Types
 import { useBeautyStore } from './store/beautyStore';
@@ -278,7 +281,6 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
-  const [isBlogModalOpen, setIsBlogModalOpen] = useState(false);
 
 
   // Page Routing & Hash Navigation
@@ -304,6 +306,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     if (currentUser?.id != null) continuationAccount.current = currentUser.id;
   }, [currentUser?.id]);
   const [selectedCategory, setSelectedCategory] = useState<BackendCategory | null>(null);
+  const [routePending, startRouteTransition] = useTransition();
   const [serviceCategories, setServiceCategories] = useState<BackendCategory[]>([]);
   const [onboardingLocations, setOnboardingLocations] = useState<Awaited<ReturnType<typeof beautyApi.locations>>>([]);
   const [returnTarget, setReturnTarget] = useState<string>('home');
@@ -323,11 +326,11 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   // Load categories
   useEffect(() => {
     let active = true;
-    Promise.all([beautyApi.categories(), beautyApi.locations()]).then(([categories, locations]) => {
-      if (!active) return;
-      setServiceCategories(categories); setOnboardingLocations(locations);
-      validateOnboardingOptions(locations, categories.map(category => category.slug));
-    }).catch(() => { if (active) setServiceCategories([]); });
+    const categories = beautyApi.categories().then(rows => { if (active) setServiceCategories(rows); return rows; });
+    const locations = beautyApi.locations().then(rows => { if (active) setOnboardingLocations(rows); return rows; });
+    Promise.all([categories, locations]).then(([categories, locations]) => {
+      if (active) validateOnboardingOptions(locations, categories.map(category => category.slug));
+    }).catch(() => { /* A failed option request does not hide a successful independent list. */ });
     return () => { active = false; };
   }, [validateOnboardingOptions]);
 
@@ -367,9 +370,9 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       } else if (hash === '#checkout') {
         setCurrentPage('checkout');
       } else if (hash === '#filter-explore' || hash === '#filter' || hash === '#explore') {
-        setCurrentPage('filter-explore');
+        preloadPublicPage('filter-explore'); startRouteTransition(() => setCurrentPage('filter-explore'));
       } else if (hash === '#partner-detail') {
-        setCurrentPage('partner-detail');
+        preloadPublicPage('partner-detail'); startRouteTransition(() => setCurrentPage('partner-detail'));
       } else if (!hash || hash === '#home') {
         setCurrentPage('home');
       }
@@ -383,7 +386,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
 
   const navigateTo = useCallback((view: AppView, fallbackReturn = 'home') => {
     setReturnTarget(fallbackReturn);
-    setCurrentPage(view);
+    if (['service', 'filter-explore', 'partner-detail'].includes(view)) { preloadPublicPage(view); startRouteTransition(() => setCurrentPage(view)); }
+    else setCurrentPage(view);
     const next = new URL(window.location.href); next.searchParams.delete('serviceId');
     if (communityRoute()) { next.pathname = '/'; next.hash = view; window.history.pushState(null, '', next); }
     else { if (next.search !== window.location.search) window.history.replaceState(null, '', next); window.location.hash = view; }
@@ -546,12 +550,15 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   }, [showToast]);
 
   // Load Homepage Services
-  const [loadingServices, setLoadingServices] = useState<boolean>(true);
-  const [rawServices, setRawServices] = useState<BackendService[]>([]);
+  const needsPublicCatalog = ['home', 'service', 'filter-explore', 'partner-detail'].includes(currentPage);
+  const [rawServices, setRawServices] = useState<BackendService[]>(() => beautyApi.cachedHomepageServices(selectedLocationId || undefined) ?? []);
+  const [loadingServices, setLoadingServices] = useState<boolean>(() => beautyApi.cachedHomepageServices(selectedLocationId || undefined) === null);
 
   useEffect(() => {
     let isMounted = true;
-    setLoadingServices(true);
+    if (!needsPublicCatalog) { setLoadingServices(false); return; }
+    const cached = beautyApi.cachedHomepageServices(selectedLocationId || undefined);
+    setRawServices(cached ?? []); setLoadingServices(cached === null);
 
     (async () => {
       try {
@@ -562,8 +569,8 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
         if (isMounted) setRawServices(list);
       } catch {
         if (isMounted) {
-          setRawServices([]);
-          showToast('Không thể tải danh mục từ cơ sở dữ liệu.');
+          if (!cached) setRawServices([]);
+          showToast(cached ? 'Đang hiển thị danh mục đã lưu. Chưa thể cập nhật dữ liệu mới.' : 'Không thể tải danh mục từ cơ sở dữ liệu.');
         }
       } finally {
         if (isMounted) setLoadingServices(false);
@@ -573,7 +580,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
     return () => {
       isMounted = false;
     };
-  }, [selectedLocationId, showToast]);
+  }, [selectedLocationId, showToast, needsPublicCatalog]);
 
   // Auth Callbacks
   const handleUserSuccess = (user: CurrentUser) => {
@@ -623,15 +630,6 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
   }, [eligibleHomeVisit, isVisitorOnboardingRequired]);
 
   // View All Services Modal
-  const [viewAllModal, setViewAllModal] = useState<{
-    isOpen: boolean;
-    context: ViewAllContext;
-    initialCategory?: string;
-  }>({
-    isOpen: false,
-    context: 'deals',
-  });
-
   const openViewAll = useCallback((context: ViewAllContext, initialCategory?: string) => {
     setFilterExploreContext(context as any);
     if (initialCategory) setFilterExploreCategory(initialCategory);
@@ -786,7 +784,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
 
   const handleSelectServiceCategory = useCallback((cat: BackendCategory) => {
     setSelectedCategory(cat);
-    setCurrentPage('service');
+    preloadPublicPage('service'); startRouteTransition(() => setCurrentPage('service'));
     window.location.hash = 'service';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
@@ -1064,6 +1062,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
       <div className="min-h-screen bg-[#FFF9FA] font-sans text-slate-800 antialiased selection:bg-[#fce7f3] selection:text-[#B42D58] flex flex-col justify-between">
         {/* Unified Platform Header */}
         <Header
+        onHome={handleBackToHome}
           onOpenCommunity={communityEnabled ? () => goCommunity() : undefined}
           authPending={hideAccountState}
           cartCount={cartItems.length}
@@ -1168,6 +1167,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
 
       {/* Main Header */}
       <Header
+        onHome={handleBackToHome}
         onOpenCommunity={communityEnabled ? () => goCommunity() : undefined}
         authPending={hideAccountState}
         cartCount={cartItems.length}
@@ -1204,6 +1204,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
         onToggleSound={() => setSoundEnabled((prev) => !prev)}
       />
 
+      {routePending && <div role="status" aria-live="polite" className="fixed bottom-4 left-4 z-40 rounded-full border border-pink-100 bg-white px-4 py-2 text-xs text-pink-700 shadow-sm">Đang mở nội dung…</div>}
       {/* Main Content Sections */}
       <main className="flex-1">
         {currentPage === 'service' && selectedCategory ? (
@@ -1364,7 +1365,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
 
             if (matched) {
               setSelectedCategory(matched);
-              setCurrentPage('service');
+              preloadPublicPage('service'); startRouteTransition(() => setCurrentPage('service'));
               window.location.hash = 'service';
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
@@ -1378,23 +1379,6 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
               : '';
           showToast(`Chào mừng bạn đến với BeautyLink tại ${name}${catLabel}!`);
         }}
-      />
-
-      <BlogModal
-        isOpen={isBlogModalOpen}
-        onClose={() => setIsBlogModalOpen(false)}
-      />
-
-      <ViewAllServicesModal
-        isOpen={viewAllModal.isOpen}
-        onClose={() => setViewAllModal((prev) => ({ ...prev, isOpen: false }))}
-        context={viewAllModal.context}
-        initialCategory={viewAllModal.initialCategory}
-        onBookDeal={handleBookDeal}
-        onAddToCart={handleAddToCart}
-        deals={deals}
-        salons={salons}
-        partners={partners}
       />
 
       {/* Professional Favorite Toast */}

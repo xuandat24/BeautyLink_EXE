@@ -39,6 +39,8 @@ try {
       const loaded = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?') && r.url().includes('includeDemo=false'));
       await page.getByRole('button', { name: 'Đăng nhập ngay', exact: true }).click();
       const data = await (await loaded).json();
+      assert.equal(new URL((await loaded).url()).searchParams.get('from'), '2026-09-20');
+      await page.locator('[aria-label="Khoảng ngày nhanh"]').getByRole('button', { name: 'Tổng quan', exact: true }).waitFor();
       assert.equal(data.timezone, 'Asia/Ho_Chi_Minh');
       assert.ok(Date.parse(data.currentPeriod.endExclusive) <= Date.parse(data.asOf));
       assert.equal(Date.parse(data.currentPeriod.endExclusive) - Date.parse(data.currentPeriod.startInclusive), Date.parse(data.previousPeriod.endExclusive) - Date.parse(data.previousPeriod.startInclusive));
@@ -114,7 +116,12 @@ try {
       await page.getByRole('columnheader', { name: 'Giờ làm', exact: true }).waitFor(); assert.equal(await page.locator('details[open] tbody tr').first().locator('td').first().textContent(), 'Thứ Hai'); await capture('salon-people');
       await salonNav.getByRole('button', { name: 'Lịch đặt', exact: true }).click(); await page.getByRole('heading', { name: 'Lịch đặt của salon', exact: true }).waitFor();
       await checkLayout(); await salonNav.getByRole('button', { name: 'Thanh toán', exact: true }).click(); await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();
-      await page.getByRole('button', { name: 'Xem lịch', exact: true }).first().waitFor(); await checkLayout();
+      // A broader initial cohort may rank a salon without receipts in its detail page's selected period.
+      const salonLedger = await page.evaluate(async salonId => { const { adminV2Api } = await import('/src/services/adminApi.ts'); const dates = document.querySelectorAll('input[type=date]'); return adminV2Api.reportPayments({ salonId, from: dates[0].value, to: dates[1].value, page: 0 }); }, data.topSalons[0].id);
+      if (salonLedger.rows.content.length) await page.getByRole('button', { name: 'Xem lịch', exact: true }).first().waitFor();
+      else await page.getByText('Chưa có khoản thanh toán trong kỳ.', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: 'Xem lịch', exact: true }).count(), salonLedger.rows.content.length);
+      await checkLayout();
       const salonUrl = page.url(); await page.reload(); await page.getByRole('heading', { name: data.topSalons[0].name, exact: true }).waitFor(); assert.equal(page.url(), salonUrl);
       await page.getByRole('heading', { name: 'Tổng thanh toán báo cáo', exact: true }).waitFor();
       await page.getByRole('button', { name: '← Danh sách salon', exact: true }).click(); await page.getByRole('button', { name: 'Xem chi tiết', exact: true }).first().waitFor(); await capture('salons');

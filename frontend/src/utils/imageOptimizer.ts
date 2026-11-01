@@ -2,7 +2,6 @@
  * Image Processing & Optimization Utility
  * Automatically resizes, crops, and compresses backend service images to match exact card display dimensions.
  */
-import imageCompression from 'browser-image-compression';
 
 export type ImagePreset =
   | 'deal-card'       // 240x240 (1:1 square for HotDealsSection)
@@ -52,8 +51,9 @@ export function getOptimizedImageUrl(
   const quality = config.quality || 78;
 
   try {
+    if (url.startsWith('/api/v1/')) { const base = import.meta.env?.VITE_API_BASE_URL; return base && /^https?:\/\//.test(base) ? new URL(url, base).toString() : url; }
     // 1. Unsplash Images Optimization
-    if (url.includes('images.unsplash.com')) {
+    if (new URL(url).hostname === 'images.unsplash.com') {
       const parsed = new URL(url);
       parsed.searchParams.set('w', targetWidth.toString());
       if (targetHeight) {
@@ -70,16 +70,15 @@ export function getOptimizedImageUrl(
     }
 
     // 2. Cloudinary Images Optimization
-    if (url.includes('res.cloudinary.com')) {
+    if (new URL(url).hostname === 'res.cloudinary.com') {
       const uploadIdx = url.indexOf('/upload/');
       if (uploadIdx !== -1) {
+        let suffix = url.slice(uploadIdx + 8);
+        if (suffix.startsWith('s--')) return url; // Never invalidate a signed delivery URL.
+        const generated = /^(?:(?:w_\d+|h_\d+|c_fill|q_\d+|f_webp)(?:,|$))+$/;
+        while (suffix.includes('/') && generated.test(suffix.slice(0, suffix.indexOf('/')))) suffix = suffix.slice(suffix.indexOf('/') + 1);
         const transform = `w_${targetWidth}${targetHeight ? `,h_${targetHeight},c_fill` : ''},q_${quality},f_webp`;
-        return (
-          url.slice(0, uploadIdx + 8) +
-          transform +
-          '/' +
-          url.slice(uploadIdx + 8)
-        );
+        return url.slice(0, uploadIdx + 8) + transform + '/' + suffix;
       }
     }
 
@@ -153,6 +152,7 @@ export async function compressAndResizeClientImage(
       fileToCompress = new File([blob], 'service-image.webp', { type: blob.type });
     }
 
+    const { default: imageCompression } = await import('browser-image-compression');
     const compressedBlob = await imageCompression(fileToCompress, {
       maxWidthOrHeight: Math.max(maxWidth, maxHeight),
       useWebWorker: true,

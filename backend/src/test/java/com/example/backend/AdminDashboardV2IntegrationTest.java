@@ -37,7 +37,7 @@ class AdminDashboardV2IntegrationTest {
     @Autowired PractitionerRepository people; @Autowired BookingRepository bookings;
     @Autowired PaymentTransactionRepository payments; @Autowired BookingReviewRepository reviews;
     @Autowired EntityManager em; @Autowired AdminInsightsService insights; @Autowired AdminDirectoryService directory;
-    @Autowired AdminDashboardService dashboard;
+    @Autowired AdminDashboardService dashboard; @Autowired CatalogService catalog;
     @Autowired AdminDetailService details;
     @Autowired AdminPartnerEditService partnerEdits;
     @Autowired ReportingPaymentsService reportingPayments;
@@ -51,6 +51,32 @@ class AdminDashboardV2IntegrationTest {
     @Autowired GoogleAuthService googleAuth;
     final Instant start=Instant.parse("2026-10-01T17:00:00Z");
     final LocalDate day=LocalDate.of(2026,10,2);
+
+    @Test void catalogCompactImagesAndBatchedStatsPreserveServiceReviewWorkforceAndMoneyContracts() throws Exception {
+        var location=new Location();location.setName("Hà Nội");location.setSlug("ha-noi");location.setType(LocationType.PROVINCE_CITY);em.persist(location);
+        a=suppliers.findById(a.getId()).orElseThrow();a.setLocation(location);suppliers.save(a);
+        String data;
+        // Real PNG signature; repeated synthetic pixels make payload size deterministic, not production evidence.
+        var bytes=new byte[32768];System.arraycopy(new byte[]{(byte)137,80,78,71,13,10,26,10},0,bytes,0,8);data="data:image/png;base64,"+Base64.getEncoder().encodeToString(bytes);
+        sa.setImageUrl(data);sa.setFeatured(true);services.save(sa);for(int i=0;i<35;i++){var service=service(a,sa.getCategory());service.setImageUrl(data);service.setFeatured(true);services.save(service);}
+        pa.setServiceAssignmentsRestricted(true);pa.getSupportedServices().add(sa);people.save(pa);em.flush();em.clear();
+        var stats=em.getEntityManagerFactory().unwrap(org.hibernate.SessionFactory.class).getStatistics();stats.setStatisticsEnabled(true);stats.clear();
+        var compact=catalog.homepage(null,true);assertEquals(36,compact.size());long queries=stats.getPrepareStatementCount();assertTrue(queries<=8,"Catalog queries must not grow per service: "+queries);
+        var raw=catalog.homepage(null,false);assertEquals(raw.size(),compact.size());assertTrue(json.writeValueAsBytes(compact).length*5<json.writeValueAsBytes(raw).length,"Compact metadata must shed inline image bytes");
+        var source=raw.stream().filter(r->r.id().equals(sa.getId())).findFirst().orElseThrow();var row=compact.stream().filter(r->r.id().equals(sa.getId())).findFirst().orElseThrow();assertEquals(data,source.imageUrl());assertTrue(row.imageUrl().startsWith("/api/v1/services/"+sa.getId()+"/cover/"));assertEquals(source.price(),row.price());assertEquals(source.practitioners(),row.practitioners());assertEquals(source.rating(),row.rating());assertEquals(source.serviceReviewCount(),row.serviceReviewCount());assertEquals(source.supplierRating(),row.supplierRating());assertEquals(source.bookedOrCompletedCount(),row.bookedOrCompletedCount());
+        var another=compact.stream().filter(r->!r.id().equals(sa.getId())).findFirst().orElseThrow();assertTrue(another.practitioners().stream().noneMatch(p->p.id().equals(pa.getId())),"Service assignments remain scoped");
+        mvc.perform(get(row.imageUrl())).andExpect(status().isOk()).andExpect(content().bytes(bytes)).andExpect(header().string("Cache-Control",org.hamcrest.Matchers.containsString("immutable"))).andExpect(header().string("X-Content-Type-Options","nosniff"));
+        String hash=com.example.backend.service.PublicCatalogImages.digest(data);mvc.perform(get(row.imageUrl()).header("If-None-Match","\""+hash+"\"")).andExpect(status().isNotModified());
+        mvc.perform(get("/api/v1/services/"+sa.getId()+"/cover/"+"0".repeat(64))).andExpect(status().isNotFound());
+        sa=services.findById(sa.getId()).orElseThrow();sa.setActive(false);services.saveAndFlush(sa);mvc.perform(get(row.imageUrl())).andExpect(status().isNotFound());
+        System.out.println("CATALOG_PERFORMANCE_EVIDENCE rows="+compact.size()+" queries="+queries+" legacyJsonBytes="+json.writeValueAsBytes(raw).length+" compactJsonBytes="+json.writeValueAsBytes(compact).length);
+    }
+    @Test void publicCatalogImageDoesNotProxyUrlsOrServeNonImagePayloads() {
+        String html="data:image/png;base64,"+Base64.getEncoder().encodeToString("<script>bad</script>".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertNull(com.example.backend.service.PublicCatalogImages.decode(html,com.example.backend.service.PublicCatalogImages.digest(html)));
+        assertNull(com.example.backend.service.PublicCatalogImages.decode("https://example.test/private", "0".repeat(64)));
+        assertNull(com.example.backend.service.PublicCatalogImages.reference("data:image/svg+xml;base64,PHN2Zz4=","services",1L));
+    }
 
     private com.example.backend.dto.PromotionDtos.Write promotion(String code,String type,String value,String cap,String status,Instant start,Instant end,long revision) {
         return new com.example.backend.dto.PromotionDtos.Write(code,"Ưu đãi làm đẹp",type,new BigDecimal(value),new BigDecimal("200000"),cap==null?null:new BigDecimal(cap),start,end,status,revision);

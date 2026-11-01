@@ -33,26 +33,25 @@ public class CatalogService {
                 .map(this::location).toList();
     }
     public List<CategoryResponse> categories() { return categories.findByActiveTrueOrderByDisplayOrderAsc().stream().map(this::category).toList(); }
-    public List<ServiceResponse> services(String slug, Long locationId) {
+    public List<ServiceResponse> services(String slug, Long locationId) { return services(slug,locationId,false); }
+    public List<ServiceResponse> services(String slug, Long locationId, boolean compact) {
         categories.findBySlugAndActiveTrue(slug).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CATEGORY_NOT_FOUND", "Không tìm thấy danh mục dịch vụ"));
         List<ServiceOffering> result = locationId == null ? services.findByCategorySlugAndActiveTrue(slug) : services.findActiveInLocationTree(slug, locationId);
-        Map<Long, Long> bookingCounts = bookingCounts(result);
-        return result.stream().sorted(MANUAL_SUPPLIERS_FIRST).map(s -> service(s, bookingCounts)).toList();
+        return responses(result.stream().sorted(MANUAL_SUPPLIERS_FIRST).toList(),compact);
     }
-    public List<ServiceResponse> publicServices() {
+    public List<ServiceResponse> publicServices() { return publicServices(false); }
+    public List<ServiceResponse> publicServices(boolean compact) {
         List<ServiceOffering> offerings = services.findPublicServices();
-        Map<Long, Long> bookingCounts = bookingCounts(offerings);
-        return offerings.stream().sorted(MANUAL_SUPPLIERS_FIRST).map(s -> service(s, bookingCounts)).toList();
+        return responses(offerings.stream().sorted(MANUAL_SUPPLIERS_FIRST).toList(),compact);
     }
     public ServiceResponse service(Long id) { return service(services.findById(id).filter(ServiceOffering::isActive).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SERVICE_NOT_FOUND", "Không tìm thấy dịch vụ"))); }
-    public PublicSupplierShopResponse supplierShop(Long id) {
+    public PublicSupplierShopResponse supplierShop(Long id) { return supplierShop(id,false); }
+    public PublicSupplierShopResponse supplierShop(Long id, boolean compact) {
         Supplier supplier = supplierRepository.findByIdAndVerificationStatus(id, DomainEnums.VerificationStatus.VERIFIED)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND", "Không tìm thấy cửa hàng"));
         List<ServiceOffering> offerings = services.findBySupplierIdAndActiveTrue(id);
-        Map<Long, Long> bookingCounts = bookingCounts(offerings);
-        List<ServiceResponse> shopServices = offerings.stream()
-                .sorted(Comparator.comparing(ServiceOffering::isFeatured).reversed().thenComparing(ServiceOffering::getId, Comparator.reverseOrder()))
-                .map(s -> service(s, bookingCounts)).toList();
+        List<ServiceResponse> shopServices = responses(offerings.stream()
+                .sorted(Comparator.comparing(ServiceOffering::isFeatured).reversed().thenComparing(ServiceOffering::getId, Comparator.reverseOrder())).toList(),compact);
         List<PublicReviewResponse> publicReviews = reviews.findBySupplierIdOrderByCreatedAtDesc(id, PageRequest.of(0, 100)).stream()
                 .map(this::publicReview)
                 .toList();
@@ -62,14 +61,13 @@ public class CatalogService {
         double rating = totalCount == 0 ? 0 : roundRating((double) liveSum / totalCount);
         return new PublicSupplierShopResponse(supplier.getId(), supplier.getName(), supplier.getSlug(), supplier.getBusinessType(),
                 supplier.getDescription(), supplier.getAddressLine(), supplier.getLocation() == null ? null : supplier.getLocation().getName(),
-                supplier.getImageUrl(), supplier.getLatitude(), supplier.getLongitude(), supplier.getVerificationStatus(), rating,
+                compact ? PublicCatalogImages.reference(supplier.getImageUrl(),"suppliers",supplier.getId()) : supplier.getImageUrl(), supplier.getLatitude(), supplier.getLongitude(), supplier.getVerificationStatus(), rating,
                 Math.toIntExact(totalCount), supplier.getCreatedAt(), shopServices, publicReviews);
     }
-    public List<ServiceResponse> homepage(Long locationId) {
+    public List<ServiceResponse> homepage(Long locationId) { return homepage(locationId,false); }
+    public List<ServiceResponse> homepage(Long locationId, boolean compact) {
         List<ServiceOffering> offerings = services.findHomepageServices(locationId);
-        Map<Long, Long> bookingCounts = bookingCounts(offerings);
-        return offerings.stream().sorted(MANUAL_SUPPLIERS_FIRST)
-                .map(s -> service(s, bookingCounts)).toList();
+        return responses(offerings.stream().sorted(MANUAL_SUPPLIERS_FIRST).toList(),compact);
     }
     public PublicReviewPageResponse serviceReviews(Long id, int page, int size) {
         services.findById(id).filter(ServiceOffering::isActive)
@@ -110,21 +108,21 @@ public class CatalogService {
         }
         return counts;
     }
-    private ServiceResponse service(ServiceOffering s) { return service(s, bookingCounts(List.of(s))); }
-    private ServiceResponse service(ServiceOffering s, Map<Long, Long> bookingCounts) {
-        Supplier supplier = s.getSupplier();
-        List<PractitionerResponse> people = practitioners.findBySupplierIdAndActiveTrue(supplier.getId()).stream()
-                .filter(p -> p.supports(s)).map(p -> new PractitionerResponse(p.getId(), p.getDisplayName(), p.getSpecialty(), p.getAvatarUrl(), p.getBio())).toList();
-        long serviceReviewCount = reviews.countByServiceIdAndTargetType(s.getId(), DomainEnums.ReviewTargetType.SERVICE);
-        Double serviceAverage = reviews.averageByService(s.getId(), DomainEnums.ReviewTargetType.SERVICE);
-        double serviceRating = serviceAverage == null ? 0 : roundRating(serviceAverage);
-        long liveSupplierCount = reviews.countBySupplierIdAndTargetType(supplier.getId(), DomainEnums.ReviewTargetType.SUPPLIER);
-        long liveSupplierSum = Optional.ofNullable(reviews.ratingSumBySupplier(supplier.getId(), DomainEnums.ReviewTargetType.SUPPLIER)).orElse(0L);
-        long supplierReviewCount = liveSupplierCount;
-        double supplierRating = supplierReviewCount == 0 ? 0 : roundRating((double) liveSupplierSum / supplierReviewCount);
-        return new ServiceResponse(s.getId(), s.getName(), s.getDescription(), s.getPrice(), s.getDurationMinutes(), s.getImageUrl(), s.getCategory().getSlug(), supplier.getId(), supplier.getName(), supplier.getAddressLine(), serviceRating, Math.toIntExact(serviceReviewCount), supplierRating, people,
+    private ServiceResponse service(ServiceOffering s) { return responses(List.of(s),false).getFirst(); }
+    private List<ServiceResponse> responses(List<ServiceOffering> offerings,boolean compact) {
+        if(offerings.isEmpty())return List.of();var serviceIds=offerings.stream().map(ServiceOffering::getId).toList();var supplierIds=offerings.stream().map(o->o.getSupplier().getId()).distinct().toList();
+        var serviceStats=new HashMap<Long,Object[]>();for(var row:reviews.publicStatsByServiceIds(serviceIds,DomainEnums.ReviewTargetType.SERVICE))serviceStats.put((Long)row[0],row);
+        var supplierStats=new HashMap<Long,Object[]>();for(var row:reviews.publicStatsBySupplierIds(supplierIds,DomainEnums.ReviewTargetType.SUPPLIER))supplierStats.put((Long)row[0],row);
+        var staff=practitioners.findPublicBySupplierIds(supplierIds).stream().collect(java.util.stream.Collectors.groupingBy(p->p.getSupplier().getId()));var counts=bookingCounts(offerings);
+        return offerings.stream().map(s->service(s,counts,serviceStats,supplierStats,staff,compact)).toList();
+    }
+    private ServiceResponse service(ServiceOffering s,Map<Long,Long> bookingCounts,Map<Long,Object[]> serviceStats,Map<Long,Object[]> supplierStats,Map<Long,List<Practitioner>> staff,boolean compact) {
+        Supplier supplier=s.getSupplier();var people=staff.getOrDefault(supplier.getId(),List.of()).stream().filter(p->p.supports(s)).sorted(Comparator.comparing(Practitioner::getId)).map(p->new PractitionerResponse(p.getId(),p.getDisplayName(),p.getSpecialty(),p.getAvatarUrl(),p.getBio())).toList();
+        var stats=serviceStats.get(s.getId());long serviceReviewCount=stats==null?0:((Number)stats[1]).longValue();double serviceRating=stats==null?0:roundRating(((Number)stats[2]).doubleValue());
+        var supplierRow=supplierStats.get(supplier.getId());long supplierReviewCount=supplierRow==null?0:((Number)supplierRow[1]).longValue();double supplierRating=supplierReviewCount==0?0:roundRating(((Number)supplierRow[2]).doubleValue()/supplierReviewCount);
+        return new ServiceResponse(s.getId(), s.getName(), s.getDescription(), s.getPrice(), s.getDurationMinutes(), compact?PublicCatalogImages.reference(s.getImageUrl(),"services",s.getId()):s.getImageUrl(), s.getCategory().getSlug(), supplier.getId(), supplier.getName(), supplier.getAddressLine(), serviceRating, Math.toIntExact(serviceReviewCount), supplierRating, people,
                 s.getOriginalPrice() == null ? s.getPrice() : s.getOriginalPrice(), s.getHighlightText(), s.isFeatured(),
-                supplier.getImageUrl(), supplier.getBusinessType(), Math.toIntExact(supplierReviewCount), supplier.isDemoData(),
+                compact?PublicCatalogImages.reference(supplier.getImageUrl(),"suppliers",supplier.getId()):supplier.getImageUrl(), supplier.getBusinessType(), Math.toIntExact(supplierReviewCount), supplier.isDemoData(),
                 supplier.isNearbyFeatured(), supplier.isNewPartner(), supplier.getLatitude(), supplier.getLongitude(),
                 bookingCounts.getOrDefault(s.getId(), 0L));
     }
