@@ -57,7 +57,7 @@ class PaymentServiceSecurityTest {
     @BeforeEach
     void setUp() {
         service = new PaymentService(payments, bookings, practitioners, gateway, mock(com.example.backend.service.AvailabilityService.class), mock(org.springframework.transaction.PlatformTransactionManager.class), new com.example.backend.service.BookingCompletionPolicy(),
-                new PaymentQuoteService(mock(com.example.backend.repository.ServiceOfferingRepository.class)), bookingNotifications,
+                new PaymentQuoteService(mock(com.example.backend.repository.ServiceOfferingRepository.class), new com.example.backend.service.PromotionService(mock(com.example.backend.repository.PromotionRepository.class), mock(com.example.backend.repository.PromotionAuditRepository.class), new com.fasterxml.jackson.databind.ObjectMapper())), bookingNotifications,
                 "https://frontend/success", "https://frontend/cancel", 60, 120);
     }
 
@@ -446,6 +446,13 @@ class PaymentServiceSecurityTest {
         assertEquals(PaymentTransactionStatus.PAID,result.status());assertEquals(paidAt,captured.get().getPaidAt());
         org.junit.jupiter.api.Assertions.assertNull(captured.get().getProviderCreatedAt());org.junit.jupiter.api.Assertions.assertNull(captured.get().getQrCode());
         assertEquals(new BigDecimal("25000"),captured.get().getAmount());assertEquals(BookingStatus.CONFIRMED,b.getStatus());
+    }
+
+    @Test void reservedVoucherPaymentKeepsItsExactPriceWithoutReevaluatingChangedPromotion() {
+        var p=pendingPayment();p.setExpiresAt(Instant.now().plusSeconds(600));p.setCheckoutUrl("https://pay.payos.vn/web/frozen");p.setPaymentOption(PaymentOption.DEPOSIT_05);p.setVoucherCode("BEAUTY50");p.setAmount(new BigDecimal("22500"));p.setRemainingAmount(new BigDecimal("427500"));p.setLastReconciledAt(Instant.now());
+        when(bookings.findByIdForUpdate(p.getBooking().getId())).thenReturn(Optional.of(p.getBooking()));when(payments.findAllByBookingIdForUpdate(p.getBooking().getId())).thenReturn(List.of(p));
+        var result=service.create(p.getBooking().getCustomer(),p.getBooking().getId(),new CreatePayOSPaymentRequest(PaymentOption.DEPOSIT_05,"BEAUTY50"));
+        assertEquals(new BigDecimal("22500"),result.amount());assertEquals(new BigDecimal("427500"),result.remainingAmount());assertEquals(PaymentTransactionStatus.PENDING,p.getStatus());verify(gateway,never()).create(any());verify(payments,never()).saveAndFlush(any());
     }
 
     @Test void reuseCannotBypassFailedProviderVerificationAndNeverCreatesAReplacement() {

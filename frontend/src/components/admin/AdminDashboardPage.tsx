@@ -1,6 +1,6 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, Download, Loader2, RefreshCw, Search, X,
+  AlertTriangle, Download, Loader2, Search, X,
 } from 'lucide-react';
 import type { AdminBooking, AdminPaymentSummary, AdminRevenueRow } from '../../types';
 import { beautyApi, getAccessToken, getApiErrorMessage } from '../../services/beautyApi';
@@ -62,7 +62,6 @@ export const BookingDetail = ({ booking, onClose }: { booking: AdminBooking; onC
         <AdminStatusBadge kind="payment" value={booking.paymentStatus} />
         {booking.paymentReviewRequired && <AdminStatusBadge kind="paymentReview" value="REVIEW_REQUIRED" />}
       </div>
-      <p className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">Trang quản trị chỉ đọc. Trạng thái thanh toán và lịch hẹn chỉ thay đổi qua chính sách nghiệp vụ hiện có.</p>
     </aside>
   </div>
 );
@@ -78,7 +77,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
   const [bookingExportError, setBookingExportError] = useState('');
   const [bookingPage, setBookingPage] = useState<{ content: AdminBooking[]; totalElements: number; totalPages: number; page: number } | null>(null);
   const [query, setQuery] = useState(initialSearch);
-  const [overviewRefresh, setOverviewRefresh] = useState(0);
   const [status, setStatus] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
   const [page, setPage] = useState(0);
@@ -175,7 +173,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
     <main className="min-w-0 px-4 py-5 lg:ml-60 lg:px-6">
       <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div><h1 className="text-2xl font-extrabold">{mode === 'overview' ? 'Tổng quan kinh doanh' : mode === 'bookings' ? 'Lịch hẹn toàn hệ thống' : 'Thanh toán'}</h1></div>
-        <button type="button" onClick={() => mode === 'overview' ? setOverviewRefresh(v => v + 1) : (summaryCache.current = null, void load())} disabled={loading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black hover:border-pink-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-600 focus-visible:ring-offset-2"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Làm mới</button>
       </div>
 
 
@@ -183,7 +180,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
       {error && <div role="alert" className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700"><span>{error}</span><button onClick={() => void load()} className="underline">Thử lại</button></div>}
       {loading && !error && mode !== 'overview' && !bookingPage && !payments ? <div className="grid min-h-80 place-items-center"><div className="text-center text-sm font-bold text-slate-500"><Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-pink-600" />Đang tổng hợp dữ liệu...</div></div> : null}
 
-      {!error && mode === 'overview' && <AdminOverview params={requestParams} refreshKey={overviewRefresh} onNavigate={(section, bookingStatus, customerTab) => { if (section === 'bookings') { setStatus(bookingStatus ?? ''); setPaymentStatus(''); setQuery(''); setPage(0); } onNavigate(section, customerTab); }} renderBookings={rows => <BookingTable title="Đơn đặt lịch gần đây" bookings={rows} onSelect={setSelected} onViewAll={() => { setStatus(''); setPaymentStatus(''); setPage(0); setQuery(''); onNavigate('bookings'); }} />} onSalon={id => onOpenSalon?.(id, false)} onBookedCustomers={() => onOpenBookedCustomers(from, to)} />}
+      {!error && mode === 'overview' && <AdminOverview params={requestParams} refreshKey={0} onNavigate={(section, bookingStatus, customerTab) => { if (section === 'bookings') { setStatus(bookingStatus ?? ''); setPaymentStatus(''); setQuery(''); setPage(0); } onNavigate(section, customerTab); }} renderBookings={rows => <BookingTable title="Đơn đặt lịch gần đây" bookings={rows} onSelect={setSelected} onViewAll={() => { setStatus(''); setPaymentStatus(''); setPage(0); setQuery(''); onNavigate('bookings'); }} />} onSalon={id => onOpenSalon?.(id, false)} onBookedCustomers={() => onOpenBookedCustomers(from, to)} />}
       {mode === 'bookings' && <>
         <section className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-3">
           <label className="relative md:col-span-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Mã lịch, khách, salon, dịch vụ" className="min-h-10 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm" /></label>

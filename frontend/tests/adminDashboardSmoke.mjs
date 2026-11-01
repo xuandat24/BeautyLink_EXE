@@ -95,11 +95,11 @@ try {
       // Deliberate UI-only stress response in this isolated test: not accounting evidence.
       await page.route('**/api/v1/admin/dashboard/insights?*', async route => { const response = await route.fetch(); const json = await response.json(); const metric = json.reportPayments ?? json.revenue; metric.currentValue = metric.value = 1234567890123; await route.fulfill({ response, json }); }, { times: 1 });
       const stress = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?'));
-      await page.getByRole('button', { name: 'Làm mới', exact: true }).click(); await stress;
+      await page.getByRole('button', { name: 'Theo tuần', exact: true }).click(); await stress;
       const formatted = `${data.reportPayments ? '≈ ' : ''}${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(data.reportPayments ? 1234567890000 : 1234567890123)}`;
       await page.waitForFunction(value => document.querySelectorAll('[data-admin-value]')[2]?.textContent === value, formatted); await checkLayout();
       const restored = page.waitForResponse(r => r.url().includes('/admin/dashboard/insights?'));
-      await page.getByRole('button', { name: 'Làm mới', exact: true }).click(); await restored; await page.getByTestId('admin-overview').waitFor();
+      await page.getByRole('button', { name: 'Theo ngày', exact: true }).click(); await restored; await page.getByTestId('admin-overview').waitFor();
       assert.ok(data.topSalons.length > 0);
       await page.getByRole('button', { name: `Xem salon ${data.topSalons[0].name}`, exact: true }).click();
       await page.getByRole('heading', { name: data.topSalons[0].name, exact: true }).waitFor();
@@ -217,7 +217,7 @@ try {
         await page.goto(editUrl); await page.getByLabel('Tên salon', { exact: true }).waitFor(); await page.getByRole('button', { name: '← Danh sách người dùng', exact: true }).click(); await page.getByLabel('Lọc vai trò').waitFor();
       }
 
-      await page.getByRole('button', { name: 'Khách hàng & lịch sử / CSV', exact: true }).click();
+      await page.getByRole('button', { name: 'Khách hàng & lịch sử', exact: true }).click();
       await page.getByRole('heading', { name: 'Tài khoản khách hàng', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Xem', exact: true }).first().waitFor(); await checkLayout();
       const customerDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Tải danh sách khách', exact: true }).click();
@@ -225,8 +225,14 @@ try {
       await page.getByRole('button', { name: 'Xem', exact: true }).first().click(); await page.getByRole('dialog', { name: 'Lịch sử khách hàng' }).waitFor(); await checkLayout();
       await page.getByRole('dialog', { name: 'Lịch sử khách hàng' }).getByRole('button', { name: 'Đóng', exact: true }).last().click();
       await navigate('Đánh giá'); await page.getByRole('heading', { name: 'Đánh giá', exact: true }).waitFor(); await checkLayout();
-      await navigate('Khuyến mãi'); await page.getByRole('heading', { name: 'Quản lý chiến dịch chưa được triển khai', exact: true }).waitFor(); await checkLayout();
-      await navigate('Cài đặt'); await page.getByRole('heading', { name: 'Thông tin quản trị · chỉ đọc', exact: true }).waitFor(); await checkLayout();
+      await navigate('Khuyến mãi'); await page.getByTestId('admin-promotions').waitFor(); await page.getByRole('button', { name:'Tạo khuyến mãi', exact:true }).waitFor();
+      await page.waitForFunction(()=>![...document.querySelectorAll('button')].find(b=>b.textContent?.includes('Tạo khuyến mãi')).disabled);
+      await page.getByRole('button', {name:'Tạo khuyến mãi',exact:true}).click(); await page.getByLabel('Tên chương trình',{exact:true}).fill(`Ưu đãi ${width}`); const promoCode=`SMOKE_PROMO_${width}`; await page.getByLabel('Mã giảm giá',{exact:true}).fill(promoCode);await page.getByRole('button',{name:'Tiếp tục',exact:true}).click();await page.getByLabel('Giá trị giảm',{exact:true}).fill('10000');await page.getByLabel('Đơn tối thiểu',{exact:true}).fill('100000');await page.getByRole('button',{name:'Tiếp tục',exact:true}).click();
+      const promoSaved=page.waitForResponse(r=>r.url().includes('/admin/promotions')&&r.request().method()==='POST');await page.getByRole('button',{name:'Lưu & kích hoạt',exact:true}).click();assert.equal((await promoSaved).status(),200);const promoRow=page.getByRole('row').filter({has:page.getByText(promoCode,{exact:true})});await promoRow.getByText('Đang chạy',{exact:true}).waitFor();await checkLayout();await capture('promotions');
+      const promoQuote=await page.evaluate(async code=>{const catalog=await(await fetch('/api/v1/catalog/services')).json();const service=catalog.find(s=>s.price>=100000);if(!service)throw new Error('Isolated promotion fixture needs an eligible service');const{beautyApi}=await import('/src/services/beautyApi.ts');return beautyApi.servicePaymentQuote(service.id,'FULL_100',code);},promoCode);assert.equal(promoQuote.discountAmount,10000);
+      await promoRow.getByRole('button',{name:'Chỉnh sửa',exact:true}).click();await page.getByRole('button',{name:'Tiếp tục',exact:true}).click();await page.getByRole('button',{name:'Tiếp tục',exact:true}).click();const paused=page.waitForResponse(r=>r.url().includes(`/admin/promotions/${promoCode}`)&&r.request().method()==='PUT');await page.getByRole('button',{name:'Tạm dừng chương trình',exact:true}).click();assert.equal((await paused).status(),200);await page.getByRole('row').filter({has:page.getByText(promoCode,{exact:true})}).getByText('Tạm dừng',{exact:true}).waitFor();
+
+      await navigate('Cài đặt'); await page.getByRole('heading', { name: 'Thông tin quản trị', exact: true }).waitFor(); await checkLayout();
       const reportResponse = page.waitForResponse(r => r.url().includes('/api/v1/reports') && r.request().method() === 'GET');
       await navigate('Báo cáo'); const reports = await (await reportResponse).json();
       await page.getByRole('heading', { name: 'Trung tâm hỗ trợ', exact: true }).waitFor();

@@ -41,6 +41,8 @@ class AdminDashboardV2IntegrationTest {
     @Autowired AdminDetailService details;
     @Autowired AdminPartnerEditService partnerEdits;
     @Autowired ReportingPaymentsService reportingPayments;
+    @Autowired PromotionService promotionRules; @Autowired PaymentQuoteService quoteRules;
+    @Autowired PromotionAuditRepository promotionAudits;
     @Autowired com.fasterxml.jackson.databind.ObjectMapper json;
     @Autowired org.springframework.security.crypto.password.PasswordEncoder encoder;
     @Autowired MockMvc mvc; @Autowired JwtService jwt;
@@ -49,6 +51,41 @@ class AdminDashboardV2IntegrationTest {
     @Autowired GoogleAuthService googleAuth;
     final Instant start=Instant.parse("2026-10-01T17:00:00Z");
     final LocalDate day=LocalDate.of(2026,10,2);
+
+    private com.example.backend.dto.PromotionDtos.Write promotion(String code,String type,String value,String cap,String status,Instant start,Instant end,long revision) {
+        return new com.example.backend.dto.PromotionDtos.Write(code,"Ưu đãi làm đẹp",type,new BigDecimal(value),new BigDecimal("200000"),cap==null?null:new BigDecimal(cap),start,end,status,revision);
+    }
+    @Test void promotionsLifecycleUsesAuthoritativeMoneyTimeBoundariesOptimisticRevisionAndAtomicAudit() {
+        var now=Instant.parse("2026-11-01T00:00:00Z");ReflectionTestUtils.setField(promotionRules,"clock",Clock.fixed(now,ZoneOffset.UTC));
+        long auditBefore=promotionAudits.count(),bookingsBefore=bookings.count(),paymentsBefore=payments.count();var start=now.plusSeconds(3600);var end=start.plusSeconds(3600);
+        var draft=promotionRules.save(admin,null,promotion("NEW_15","PERCENT","15","150000","DRAFT",start,end,-1),true);assertEquals("DRAFT",draft.state());assertFalse(promotionRules.active().stream().anyMatch(p->p.code().equals("NEW_15")));
+        assertThrows(com.example.backend.exception.ApiException.class,()->quoteRules.calculate(new BigDecimal("500000"),PaymentOption.DEPOSIT_05,"NEW_15"));
+        var scheduled=promotionRules.save(admin,"NEW_15",promotion("NEW_15","PERCENT","15","150000","ENABLED",start,end,draft.revision()),false);assertEquals("SCHEDULED",scheduled.state());
+        ReflectionTestUtils.setField(promotionRules,"clock",Clock.fixed(start,ZoneOffset.UTC));var quote=quoteRules.calculate(new BigDecimal("500000"),PaymentOption.DEPOSIT_05," new_15 ");assertEquals(75000,quote.discountAmount().intValueExact());assertEquals(21250,quote.amount().intValueExact());assertEquals(403750,quote.remainingAmount().intValueExact());assertEquals(quote.payableAmount(),quote.amount().add(quote.remainingAmount()));assertEquals(150000,quoteRules.calculate(new BigDecimal("2000000"),PaymentOption.FULL_100,"NEW_15").discountAmount().intValueExact());
+        assertThrows(com.example.backend.exception.ApiException.class,()->quoteRules.calculate(new BigDecimal("199999"),PaymentOption.FULL_100,"NEW_15"));
+        var stale=assertThrows(com.example.backend.exception.ApiException.class,()->promotionRules.save(admin,"NEW_15",promotion("NEW_15","PERCENT","20","150000","ENABLED",start,end,draft.revision()),false));assertEquals("PROMOTION_CHANGED",stale.getCode());
+        ReflectionTestUtils.setField(promotionRules,"clock",Clock.fixed(end,ZoneOffset.UTC));assertThrows(com.example.backend.exception.ApiException.class,()->quoteRules.calculate(new BigDecimal("500000"),PaymentOption.FULL_100,"NEW_15"));
+        promotionRules.save(admin,"NEW_15",promotion("NEW_15","PERCENT","15","150000","PAUSED",start,end,scheduled.revision()),false);assertEquals(auditBefore+3,promotionAudits.count());assertEquals(bookingsBefore,bookings.count());assertEquals(paymentsBefore,payments.count());
+    }
+    @Test void disablingBuiltInVoucherDoesNotFallBackAndRepublishingRestoresTheSamePolicy() {
+        assertEquals(50000,quoteRules.calculate(new BigDecimal("500000"),PaymentOption.FULL_100,"BEAUTY50").discountAmount().intValueExact());
+        var paused=promotionRules.save(admin,"BEAUTY50",promotion("BEAUTY50","FIXED","50000",null,"PAUSED",null,null,-1),false);
+        assertThrows(com.example.backend.exception.ApiException.class,()->quoteRules.calculate(new BigDecimal("500000"),PaymentOption.FULL_100,"BEAUTY50"));
+        assertFalse(promotionRules.active().stream().anyMatch(p->p.code().equals("BEAUTY50")));
+        promotionRules.save(admin,"BEAUTY50",promotion("BEAUTY50","FIXED","50000",null,"ENABLED",null,null,paused.revision()),false);
+        assertEquals(22500,quoteRules.calculate(new BigDecimal("500000"),PaymentOption.DEPOSIT_05,"BEAUTY50").amount().intValueExact());
+    }
+    @Test void promotionApisEnforceAdminAndRejectInvalidOrDuplicateRules() throws Exception {
+        mvc.perform(get("/api/v1/catalog/promotions")).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3));
+        mvc.perform(get("/api/v1/admin/promotions")).andExpect(status().isUnauthorized());
+        var write=promotion("HTTP_PROMO","FIXED","50000",null,"ENABLED",null,null,-1);String body=json.writeValueAsString(write);
+        for(var role:List.of(Role.CUSTOMER,Role.SUPPLIER,Role.STAFF)){var token=jwt.createToken(user("NoPromo"+role,role));mvc.perform(post("/api/v1/admin/promotions").header("Authorization","Bearer "+token).contentType("application/json").content(body)).andExpect(status().isForbidden());mvc.perform(get("/api/v1/admin/promotions").header("Authorization","Bearer "+token)).andExpect(status().isForbidden());}
+        var token=jwt.createToken(admin);mvc.perform(post("/api/v1/admin/promotions").header("Authorization","Bearer "+token).contentType("application/json").content(body)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("ACTIVE"));
+        mvc.perform(post("/api/v1/admin/promotions").header("Authorization","Bearer "+token).contentType("application/json").content(body)).andExpect(status().isConflict());
+        mvc.perform(post("/api/v1/admin/promotions").header("Authorization","Bearer "+token).contentType("application/json").content(json.writeValueAsString(promotion("BAD_PERCENT","PERCENT","101","100000","ENABLED",null,null,-1)))).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/admin/promotions").header("Authorization","Bearer "+token).contentType("application/json").content(json.writeValueAsString(promotion("BAD_FRACTION","FIXED","1.5",null,"ENABLED",null,null,-1)))).andExpect(status().isBadRequest());
+        mvc.perform(put("/api/v1/admin/promotions/HTTP_PROMO").header("Authorization","Bearer "+token).contentType("application/json").content(json.writeValueAsString(promotion("OTHER_CODE","FIXED","50000",null,"ENABLED",null,null,0)))).andExpect(status().isBadRequest());
+    }
 
     @Test void salonRosterHasRealOwnersAndUnlinkedPractitionerProfilesWithoutChangingLedgersOrCapacity() throws Exception {
         for(int i=0;i<12;i++)salon("Business"+i,false);

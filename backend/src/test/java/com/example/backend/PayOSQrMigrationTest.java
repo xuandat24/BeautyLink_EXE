@@ -8,6 +8,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @EnabledIfEnvironmentVariable(named="REVIEW_TEST_JDBC_URL",matches="jdbc:mysql://127\\.0\\.0\\.1:3306/beautylink_review_test")
 class PayOSQrMigrationTest {
+    @Test void promotionMigrationIsAdditiveRepeatableAndProtectsCodeAndAuditForeignKey() throws Exception {
+        try(var c=DriverManager.getConnection(System.getenv("REVIEW_TEST_JDBC_URL"),System.getenv("REVIEW_TEST_USERNAME"),System.getenv("REVIEW_TEST_PASSWORD"));var sql=c.createStatement()) {
+            sql.execute("CREATE TABLE promo_user_probe(id BIGINT PRIMARY KEY)");sql.execute("INSERT INTO promo_user_probe VALUES(1)");
+            try {String migration;try(var input=getClass().getResourceAsStream("/db/migration/mysql/V20261101_01__promotions.sql")){assertNotNull(input);migration=new String(input.readAllBytes(),StandardCharsets.UTF_8).replaceAll("(?m)^--.*$","").replace("promotion_audits","promo_audit_probe").replace("promotions","promo_rules_probe").replace("REFERENCES user_accounts","REFERENCES promo_user_probe").replace("fk_promotion_audit_actor","fk_promo_probe_actor");}
+                for(int run=0;run<2;run++)for(String statement:migration.split(";"))if(!statement.isBlank())sql.execute(statement.strip());
+                sql.execute("INSERT INTO promo_rules_probe(code,name,discount_type,discount_value,minimum_order,status,updated_at) VALUES('TEST_RULE','Test','FIXED',50000,200000,'ENABLED',CURRENT_TIMESTAMP)");
+                assertThrows(java.sql.SQLException.class,()->sql.execute("INSERT INTO promo_rules_probe(code,name,discount_type,discount_value,minimum_order,status,updated_at) VALUES('TEST_RULE','Duplicate','FIXED',1,0,'ENABLED',CURRENT_TIMESTAMP)"));
+                sql.execute("INSERT INTO promo_audit_probe(actor_id,code,action,after_json,created_at) VALUES(1,'TEST_RULE','CREATE','{}',CURRENT_TIMESTAMP)");
+                assertThrows(java.sql.SQLException.class,()->sql.execute("INSERT INTO promo_audit_probe(actor_id,code,action,after_json,created_at) VALUES(999,'TEST_RULE','CREATE','{}',CURRENT_TIMESTAMP)"));
+                try(var r=sql.executeQuery("SELECT COUNT(*) FROM promo_user_probe")){assertTrue(r.next());assertEquals(1,r.getInt(1));}
+            }finally{sql.execute("DROP TABLE IF EXISTS promo_audit_probe");sql.execute("DROP TABLE IF EXISTS promo_rules_probe");sql.execute("DROP TABLE promo_user_probe");}
+        }
+    }
+
     @Test void nullableTransferColumnsPreserveExistingAttemptsAndExactProviderPayload() throws Exception {
         String url=System.getenv("REVIEW_TEST_JDBC_URL");
         if(!"jdbc:mysql://127.0.0.1:3306/beautylink_review_test".equals(url))throw new IllegalStateException("Isolated test database only");

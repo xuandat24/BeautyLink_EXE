@@ -16,7 +16,7 @@ class PaymentQuoteServiceTest {
 
     @BeforeEach
     void setUp() {
-        quotes = new PaymentQuoteService(mock(ServiceOfferingRepository.class));
+        quotes = new PaymentQuoteService(mock(ServiceOfferingRepository.class), new com.example.backend.service.PromotionService(mock(com.example.backend.repository.PromotionRepository.class), mock(com.example.backend.repository.PromotionAuditRepository.class), new com.fasterxml.jackson.databind.ObjectMapper()));
     }
 
     @Test
