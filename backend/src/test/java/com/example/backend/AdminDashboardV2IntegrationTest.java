@@ -203,12 +203,13 @@ class AdminDashboardV2IntegrationTest {
     }
     @Test void displayV2PrecedenceRollbackAndRegistrationCohortsKeepRawContactsAndLedger() throws Exception {
         customer.setEmail("eligible@outlook.com");users.saveAndFlush(customer);
-        var source=json.createObjectNode();var rows=source.putArray("users");for(var u:users.findAll())rows.addObject().put("id",u.getId()).put("fullName",u.getFullName()).put("email",u.getEmail()).put("role",u.getRole().name()).put("createdAt",u.getCreatedAt().toString());
+        var source=json.createObjectNode();var rows=source.putArray("users");for(var u:users.findAll())rows.addObject().put("id",u.getId()).put("fullName",u.getFullName()).put("email",u.getEmail()).put("role",u.getRole().name()).put("createdAt",operatorDate(u.getCreatedAt()).toString());
         source.putArray("salons");var v1=PresentationProfilePatch.plan(source);source.set("priorProfilePlan",v1);var v2=PresentationProfileRevision.plan(source);((com.fasterxml.jackson.databind.node.ObjectNode)v2.path("profiles").get(0)).put("reportCreatedAt",PresentationProfileRevision.START.toString());
         long before=insights.insights(day,day,false,Granularity.DAY).users().currentValue().longValue(),beforePrevious=insights.insights(day,day,false,Granularity.DAY).users().previousValue().longValue();var money=dashboard.paymentSummary(day,day,false);long bc=bookings.count(),pc=payments.count();
         for(var plan:List.of(v1,v2))em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",plan.path("id").asText()).setParameter("payload",plan.toString()).executeUpdate();em.clear();
         var profile=v2.path("profiles").get(0);assertEquals(customer.getId().longValue(),profile.path("id").asLong());
-        var view=directory.users("Customer",Role.CUSTOMER,0,20).content().getFirst();assertEquals(profile.path("email").asText(),view.email());assertEquals(Instant.parse(profile.path("reportCreatedAt").asText()),view.createdAt());
+        var view=directory.users("Customer",Role.CUSTOMER,0,20).content().getFirst();assertEquals(profile.path("email").asText(),view.email());
+        var runtimeProfile=new PresentationDisplayProfiles(json);ReflectionTestUtils.setField(runtimeProfile,"em",em);assertEquals(customer.getCreatedAt().toString(),runtimeProfile.metadata().path("displayProfiles").get(0).path("actualCreatedAt").asText());assertEquals(Instant.parse(profile.path("reportCreatedAt").asText()),view.createdAt());
         assertEquals("eligible@outlook.com",details.account(customer.getId()).email());assertEquals(customer.getCreatedAt(),directory.users("eligible@",Role.CUSTOMER,0,20,true).content().getFirst().createdAt());
         assertEquals(before,insights.insights(day,day,false,Granularity.DAY).users().currentValue().longValue(),"Same cumulative total at current cutoff");assertEquals(beforePrevious+1,insights.insights(day,day,false,Granularity.DAY).users().previousValue().longValue(),"Earlier display date shifts prior cutoff once; real registration unchanged");
         mvc.perform(get("/api/v1/admin/presentation/profiles").header("Authorization","Bearer "+jwt.createToken(admin))).andExpect(status().isOk()).andExpect(jsonPath("$.profileVersion").value(2));
@@ -219,10 +220,15 @@ class AdminDashboardV2IntegrationTest {
     @Test void displayRevisionUsesPersistedTimestampPrecisionWithoutWeakeningOriginalChecks() throws Exception {
         var u=new UserAccount();u.setFullName("Đặng Precision");u.setEmail("precision@outlook.com");u.setRole(Role.CUSTOMER);
         ReflectionTestUtils.setField(u,"createdAt",Instant.parse("2026-10-25T00:00:00.123456789Z"));users.saveAndFlush(u);Instant managed=u.getCreatedAt();long id=u.getId();em.clear();u=users.findById(id).orElseThrow();Instant persisted=u.getCreatedAt();assertNotEquals(managed,persisted,"Database stores microsecond precision");
-        var source=json.createObjectNode();var original=source.putArray("users").addObject().put("id",id).put("fullName",u.getFullName()).put("email",u.getEmail()).put("role","CUSTOMER").put("createdAt",persisted.toString());var plan=PresentationProfileRevision.plan(source);
-        assertTrue(PresentationProfileRevision.matches(plan.path("profiles").get(0),original));var stale=original.deepCopy().put("createdAt",managed.toString());assertFalse(PresentationProfileRevision.matches(plan.path("profiles").get(0),stale));
+        var source=json.createObjectNode();var original=source.putArray("users").addObject().put("id",id).put("fullName",u.getFullName()).put("email",u.getEmail()).put("role","CUSTOMER").put("createdAt",operatorDate(persisted).toString());var plan=PresentationProfileRevision.plan(source);
+        assertTrue(PresentationProfileRevision.matches(plan.path("profiles").get(0),original));var stale=original.deepCopy().put("createdAt",operatorDate(managed).toString());assertFalse(PresentationProfileRevision.matches(plan.path("profiles").get(0),stale));
         em.createNativeQuery("insert into presentation_recovery(id,payload) values (:id,:payload)").setParameter("id",PresentationProfileRevision.ID).setParameter("payload",plan.toString()).executeUpdate();em.clear();
         assertTrue(directory.users("dang precision",Role.CUSTOMER,0,20).content().getFirst().email().endsWith("@gmail.com"));assertEquals("precision@outlook.com",details.account(id).email());
+        em.createNativeQuery("update user_accounts set created_at=:changed where id=:id").setParameter("changed",persisted.plusSeconds(25200)).setParameter("id",id).executeUpdate();em.clear();assertEquals("precision@outlook.com",directory.users("dang precision",Role.CUSTOMER,0,20).content().getFirst().email(),"A real registration change must not match either an old UTC or local value");
+    }
+    private Instant operatorDate(Instant actual) {
+        boolean mysql=em.unwrap(org.hibernate.Session.class).doReturningWork(c->c.getMetaData().getDatabaseProductName().equals("MySQL"));
+        return mysql?actual.minusSeconds(7*3600):actual;
     }
     @BeforeEach void fixture() {
         ReflectionTestUtils.setField(insights,"clock",Clock.fixed(Instant.parse("2026-11-01T17:00:00Z"),ZoneOffset.UTC));

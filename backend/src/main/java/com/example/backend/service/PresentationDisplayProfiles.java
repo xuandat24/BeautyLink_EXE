@@ -22,13 +22,14 @@ public class PresentationDisplayProfiles {
             var originals=new HashMap<Long,JsonNode>();
             var base=em.find(PresentationRecovery.class,"beautylink-presentation-20261031");
             if(base!=null)json.readTree(base.getPayload()).path("data").path("users").forEach(u->originals.put(u.path("id").asLong(),u));
+            var exportedDates=revision?exportedRegistrationTimes():Map.<Long,java.time.Instant>of();
             @SuppressWarnings("unchecked") List<Object[]> live=em.createQuery("select u.id,u.fullName,u.email,u.role,u.createdAt from UserAccount u").getResultList();
-            for(var u:live)originals.put((Long)u[0],json.createObjectNode().put("id",(Long)u[0]).put("fullName",(String)u[1]).put("email",(String)u[2]).put("role",u[3].toString()).put("createdAt",((java.time.Instant)u[4]).toString()));
+            for(var u:live)originals.put((Long)u[0],json.createObjectNode().put("id",(Long)u[0]).put("fullName",(String)u[1]).put("email",(String)u[2]).put("role",u[3].toString()).put("createdAt",exportedDates.getOrDefault((Long)u[0],(java.time.Instant)u[4]).toString()).put("actualCreatedAt",((java.time.Instant)u[4]).toString()));
             var owners=new HashSet<Long>();for(Object id:em.createQuery("select s.owner.id from Supplier s").getResultList())owners.add(((Number)id).longValue());
             var candidates=new HashMap<Long,JsonNode>();
             for(var p:plan.path("profiles")) {
                 long id=p.path("id").asLong();var original=originals.get(id);
-                if((revision?PresentationProfileRevision.matches(p,original):PresentationProfilePatch.matches(p,original))&&p.path("source").asText().equals(revision?PresentationProfileRevision.source(original,owners):PresentationProfilePatch.source(original,owners)))candidates.put(id,p);
+                if((revision?PresentationProfileRevision.matches(p,original):PresentationProfilePatch.matches(p,original))&&p.path("source").asText().equals(revision?PresentationProfileRevision.source(original,owners):PresentationProfilePatch.source(original,owners))){var candidate=(ObjectNode)p.deepCopy();if(original.has("actualCreatedAt"))candidate.set("actualCreatedAt",original.path("actualCreatedAt"));candidates.put(id,candidate);}
                 else out.withArray("profileExceptions").addObject().put("id",id).put("reason","SOURCE_CHANGED");
             }
             // A later real account may claim an alias: keep its real contact and suppress conflicting display aliases.
@@ -42,6 +43,26 @@ public class PresentationDisplayProfiles {
             out.set("returningCustomerIds",plan.path("returningCustomerIds"));out.set("profilePlanExceptions",plan.path("exceptions"));out.put("profileVersion",plan.path("version").asInt());out.put("profilePlanId",row.getId());
             return out;
         }catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException("Invalid display profile partition",e);}
+    }
+    /** Match the immutable v2 operator's JDBC source encoding, not an arbitrary +/- timezone tolerance.
+     * MySQL DATETIME is exported as local wall time in Asia/Bangkok by RecoveryStore.query;
+     * Hibernate's Instant projection represents the same column as UTC. Keep both meanings explicit.
+     */
+    private Map<Long,java.time.Instant> exportedRegistrationTimes() {
+        return em.unwrap(org.hibernate.Session.class).doReturningWork(connection->{
+            var dates=new HashMap<Long,java.time.Instant>();
+            try(var statement=connection.createStatement()) {statement.setQueryTimeout(30);
+                try(var rows=statement.executeQuery("select id,created_at from user_accounts")) {while(rows.next()) {
+                    Object value=rows.getObject(2);java.time.Instant at;
+                    if(value instanceof java.time.LocalDateTime local)at=local.atZone(java.time.ZoneId.of("Asia/Bangkok")).toInstant();
+                    else if(value instanceof java.sql.Timestamp)at=rows.getTimestamp(2,Calendar.getInstance(TimeZone.getTimeZone("Asia/Bangkok"))).toInstant();
+                    else if(value instanceof java.time.OffsetDateTime offset)at=offset.toInstant();
+                    else if(value instanceof java.time.Instant instant)at=instant;
+                    else throw new IllegalStateException("Unsupported account source timestamp encoding");
+                    dates.put(rows.getLong(1),at);
+                }}
+            }return dates;
+        });
     }
     public Map<Long,JsonNode> profiles(){var map=new HashMap<Long,JsonNode>();metadata().path("displayProfiles").forEach(p->map.put(p.path("id").asLong(),p));return map;}
     public void decorate(ObjectNode data) {

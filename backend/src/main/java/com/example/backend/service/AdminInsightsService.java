@@ -135,7 +135,7 @@ public class AdminInsightsService {
         long count = ((Number) read.query("select count(u) from UserAccount u where u.createdAt < :cutoff", range).setParameter("cutoff", cutoff).getSingleResult()).longValue();
         JsonNode metadata=stored==null?recovery.profileMetadata():stored;
         if(metadata!=null)for(var p:metadata.path("displayProfiles"))if(p.path("id").asLong()<8_000_000_000L&&p.has("reportCreatedAt")) {
-            Instant original=Instant.parse(p.path("original").path("createdAt").asText()),display=Instant.parse(p.path("reportCreatedAt").asText());
+            Instant original=Instant.parse(p.has("actualCreatedAt")?p.path("actualCreatedAt").asText():p.path("original").path("createdAt").asText()),display=Instant.parse(p.path("reportCreatedAt").asText());
             count+=(display.isBefore(cutoff)?1:0)-(original.isBefore(cutoff)?1:0);
         }
         var ids = new HashSet<Long>();
