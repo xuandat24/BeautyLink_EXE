@@ -6,6 +6,8 @@ const browser=await chromium.launch({headless:true});const base=process.env.BEAU
 try {
   for(const [width,height] of [[1366,768],[390,844]]) {
     const context=await browser.newContext({viewport:{width,height}});const page=await context.newPage();const errors=[];
+    // Chat layering is covered separately by chatWidgetSmoke. This directory/CSV test must not depend on the vendor's live greeting timing.
+    await page.route('https://chat.topaichat.vn/sdk.js', route => route.fulfill({contentType:'application/javascript',body:'/* no outbound chat traffic in the isolated directory CSV smoke */'}));
     page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.url().includes('/api/v1/')&&r.status()>=500)errors.push(`HTTP ${r.status()}`);});
     await page.goto(`${base}/#login`);await page.locator('#customer-identifier').fill('0901234599');await page.locator('#customer-password').fill('Synthetic Admin123!');await page.getByRole('button',{name:'Đăng nhập ngay',exact:true}).click();await page.getByTestId('admin-overview').waitFor();
     const metadata=await page.evaluate(async()=>{const {adminV2Api}=await import('/src/services/adminApi.ts');return adminV2Api.displayProfiles();});assert.equal(metadata.profileVersion,2,'browser uses the new persisted revision, not v1 fallback');
