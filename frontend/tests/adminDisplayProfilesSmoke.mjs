@@ -7,6 +7,7 @@ try {
     const context=await browser.newContext({viewport:{width,height}});const page=await context.newPage();const errors=[];
     page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.url().includes('/api/v1/')&&r.status()>=500)errors.push(`HTTP ${r.status()}`);});
     await page.goto(`${base}/#login`);await page.locator('#customer-identifier').fill('0901234599');await page.locator('#customer-password').fill('Synthetic Admin123!');await page.getByRole('button',{name:'Đăng nhập ngay',exact:true}).click();await page.getByTestId('admin-overview').waitFor();
+    const metadata=await page.evaluate(async()=>{const {adminV2Api}=await import('/src/services/adminApi.ts');return adminV2Api.displayProfiles();});assert.equal(metadata.profileVersion,2,'browser uses the new persisted revision, not v1 fallback');
     let loads=0;page.on('domcontentloaded',()=>loads++);
     const nav=async label=>{if(width<1024)await page.getByRole('button',{name:'Mở menu quản trị',exact:true}).click();await page.getByRole('navigation',{name:'Điều hướng quản trị'}).getByRole('button',{name:label,exact:true}).click();};
     await nav('Người dùng');await page.locator('tbody tr').first().waitFor();
@@ -17,7 +18,7 @@ try {
     const second=await page.locator('tbody tr td:nth-child(2)').allTextContents();assert.ok(collator.compare(names.at(-1),second[0])<=0);
     const search=page.getByRole('textbox',{name:'Tìm người dùng'});await search.fill('phandinhkhoi');await page.waitForFunction(()=>document.querySelectorAll('tbody tr').length===1&&document.querySelector('tbody tr td')?.textContent==='1');
     assert.equal(await page.locator('tbody tr td:nth-child(2)').textContent(),'Phan Dinh Khoi');assert.match(await page.locator('tbody tr td:nth-child(3)').textContent(),/^[a-z0-9]+@gmail\.com$/);
-    const alias=await page.locator('tbody tr td:nth-child(3)').textContent();await page.getByRole('button',{name:'Xem chi tiết',exact:true}).click();await page.getByRole('heading',{name:'Phan Dinh Khoi',exact:true}).waitFor();assert.ok((await page.locator('main').textContent()).includes(alias));
+    const alias=await page.locator('tbody tr td:nth-child(3)').textContent();await page.getByRole('button',{name:'Xem chi tiết',exact:true}).click();await page.getByRole('heading',{name:'Phan Dinh Khoi',exact:true}).waitFor();assert.ok((await page.locator('main').textContent()).includes(alias));await page.getByText('Ngày hồ sơ báo cáo',{exact:true}).waitFor();await page.getByText('Đăng ký vận hành',{exact:true}).waitFor();
     assert.equal(loads,0,'SPA filters/details never reload document');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
     await page.screenshot({path:`backend/target/admin-display-${width}-detail.png`,fullPage:true});
     await nav('Đối tác/Salon');await page.getByRole('columnheader',{name:'STT',exact:true}).waitFor();await page.locator('tbody tr').first().waitFor();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);await page.screenshot({path:`backend/target/admin-display-${width}-salons.png`,fullPage:true});

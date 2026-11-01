@@ -91,7 +91,7 @@ public class AdminInsightsService {
         return new Insights(requested.response(), granularity, current, previous, ZONE.getId(), asOf, lowBase, smallDenominator,
                 totalMetric,
                 compare(BigDecimal.valueOf(currentUsers), BigDecimal.valueOf(previousUsers), ACCOUNT,
-                        "Tổng tích lũy tài khoản còn lưu (CUSTOMER, SUPPLIER, STAFF, ADMIN) có createdAt < mốc kết thúc mỗi kỳ; gồm hồ sơ báo cáo đã lưu. Không phải người dùng mới trong kỳ; không tái dựng tài khoản đã xóa."),
+                        "Tổng tích lũy tài khoản còn lưu (CUSTOMER, SUPPLIER, STAFF, ADMIN) có createdAt < mốc kết thúc mỗi kỳ; gồm hồ sơ báo cáo đã lưu. Hồ sơ có overlay dùng ngày hồ sơ báo cáo nhất quán với danh sách; ngày đăng ký vận hành gốc không đổi. Không phải người dùng mới trong kỳ; không tái dựng tài khoản đã xóa."),
                 compare(now.revenue(), before.revenue(), VND,
                         scope + "Nguồn PaymentTransaction, không cộng presentation_recovery. Doanh thu ở đây là tổng thu online xác minh (gross) theo paidAt: PAID đầu tiên mỗi booking, không manual review, paidAt hợp lệ. Chỉ cộng amount đã nhận (cọc 5% không phải 100% giá dịch vụ); không gồm tiền tại salon, không phải hoa hồng. Giữ chính sách sổ thu hiện có: chưa trừ hoàn tiền ngoài app vì không có sổ hoàn tiền/thời điểm hoàn tiền."),
                 unavailable(BigDecimal.valueOf(active), PARTNER, "Snapshot vận hành tại asOf: Supplier VERIFIED và chủ tài khoản ACTIVE; loại demo theo bộ lọc. Không có lịch sử trạng thái nên không so sánh theo kỳ hoặc dùng trạng thái lưu trong báo cáo thay trạng thái vận hành.", CURRENT_SNAPSHOT),
@@ -133,6 +133,11 @@ public class AdminInsightsService {
 
     private long users(Instant cutoff, JsonNode stored, AdminDashboardService.Range range) {
         long count = ((Number) read.query("select count(u) from UserAccount u where u.createdAt < :cutoff", range).setParameter("cutoff", cutoff).getSingleResult()).longValue();
+        JsonNode metadata=stored==null?recovery.profileMetadata():stored;
+        if(metadata!=null)for(var p:metadata.path("displayProfiles"))if(p.path("id").asLong()<8_000_000_000L&&p.has("reportCreatedAt")) {
+            Instant original=Instant.parse(p.path("original").path("createdAt").asText()),display=Instant.parse(p.path("reportCreatedAt").asText());
+            count+=(display.isBefore(cutoff)?1:0)-(original.isBefore(cutoff)?1:0);
+        }
         var ids = new HashSet<Long>();
         if (stored != null) for (var u : stored.path("users")) if (u.path("id").asLong() >= 8_000_000_000L && instant(u).isBefore(cutoff)) ids.add(u.path("id").asLong());
         return count + ids.size();

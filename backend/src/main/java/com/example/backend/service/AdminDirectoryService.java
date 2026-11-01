@@ -38,7 +38,7 @@ public class AdminDirectoryService {
     public AdminPageResponse<UserRow> users(String query, Role role, int page, int size, boolean forEdit) {
         page(page,size);search(query);var mapping=forEdit?Map.<Long,com.fasterxml.jackson.databind.JsonNode>of():profiles.profiles();
         List<Object[]> rows=userRows(role);
-        var result=rows.stream().map(r->{var p=mapping.get((Long)r[0]);return new UserRow((Long)r[0],p==null?(String)r[1]:p.path("fullName").asText(),p==null?(String)r[2]:p.path("email").asText(),(Role)r[3],(AccountStatus)r[4],(Instant)r[5]);})
+        var result=rows.stream().map(r->{var p=mapping.get((Long)r[0]);return new UserRow((Long)r[0],p==null?(String)r[1]:p.path("fullName").asText(),p==null?(String)r[2]:p.path("email").asText(),(Role)r[3],(AccountStatus)r[4],p!=null&&p.has("reportCreatedAt")?Instant.parse(p.path("reportCreatedAt").asText()):(Instant)r[5]);})
             .filter(u->matches(u.fullName()+" "+u.email(),query)).sorted((a,b)->{int c=VietnameseDirectoryOrder.compare(a.fullName(),b.fullName());return c!=0?c:a.id().compareTo(b.id());}).toList();
         return slice(result,page,size);
     }

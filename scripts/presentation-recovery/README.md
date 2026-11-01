@@ -251,3 +251,70 @@ Tài khoản/owner/salon/booking/payment ID, role/status, password, Google ident
   được cấu hình; connector Railway không cung cấp SQL query. Owner chạy inventory/check để lấy số thật.
 - Postman collection `postman/admin-display-profiles.postman_collection.json` chỉ nhận loopback,
   kiểm tra401, ADMIN metadata, trang2 và raw editor; token test chỉ lưu trong file target tạm.
+
+
+## Follow-up v2: report contacts/dates and separately approved partner activation
+
+Base: PR49 merged at `5e631442d4248efc947ab6a0d83b6ff1ca2853d3`.
+This revision is an explicit **display/report overlay**, not verified mailbox ownership or a claim of real registration history.
+No schema changes, reseeding, booking/payment update or automatic deployment/startup hook.
+
+- Immutable `beautylink-display-profiles-20261101-v2` takes precedence over v1. Rollback inserts its own marker and reveals v1; original payloads remain untouched.
+- Domains requested by the owner: beautylink.local, seed.beautylink.test, outlook.com, maxxspace.com, yahoo.com (case/outer whitespace normalized). Existing seed/report identities retain provenance; otherwise use `CONTACT_DISPLAY`. Raw contacts, OTP/reset/notification destinations and Google identities are never rewritten.
+- Stable natural ASCII-letter/digit Gmail aliases are display-only, collision checked with Gmail dot/plus canonicalization. Preserve v1 aliases and frozen71 membership. Existing real canonical collisions are exceptions, never silently rewritten.
+- Separate `reportCreatedAt`: 20Sep–30Oct2026 inclusive, Asia/Ho_Chi_Minh, no later than earliest saved activity. True `user_accounts.created_at` stays intact. Early/unverifiable activity keeps its original date and reports an exception. Lists/detail/users reporting use the same display cutoff policy. Detail also shows true operational registration. Date-based account cohorts may change; financial/booking cohorts do not.
+- Approval hashes use canonical JSON (sorted object keys, equivalent decimal scales). Cross-time plans retain all payment identity/amount/status/review/optimistic-version fields; only last_reconciled_at/updated_at observation timestamps are excluded. Full within-transaction account/supplier/booking/payment hashes still must match.
+
+### Read-only preflight with the existing Windows DPAPI connection
+
+Run in PowerShell7 as the same Windows owner that saved the connection. No Administrator requirement; fresh owner-only DACL, no SACL copying.
+
+```powershell
+Set-Location C:\Temp\beautylink-payos-qr-hotfix
+pwsh -NoProfile -File .\scripts\presentation-recovery\ProductionProfilePreflight.ps1 -MavenCommand 'D:\Code_Netbeans_IDE\apache-maven-3.9.12\bin\mvn.cmd'
+```
+
+The wrapper compiles tools, validates exact acela.proxy.rlwy.net:10050/railway, then runs export/plan/check only. Unique private reports under `backend/target/private-profile-<id>` are owner-only and gitignored. Do not upload source/plan files or credentials to PR/CI. New business changes invalidate the plan: inventory/review again, never bypass the check.
+
+### Activation scope and approval gates
+
+`PartnerActivationPlan` identifies non-demo salons with an existing SUPPLIER owner in DISABLED and VERIFIED supplier approval. SUSPENDED, rejected/pending approval, wrong-role or changed-owner records are blocked. Current production excludes26 demo salons. No blanket SQL update or cosmetic active override. Existing status badges remain truthful until apply.
+
+Activation writes only the reviewed owner status, authVersion and updated_at; revokes that owner's old sessions; appends per-salon support_reports audit and an immutable operator batch. It changes active-partner KPI and authentication eligibility. It does not create credentials, reset passwords or send mail. Catalog seed accounts contain unknown generated passwords; usable owner login still needs legitimately verified operational contact/credentials through normal workflows.
+
+Required **before any write**: review exact target IDs/impact and plan hash; explicit owner approval; fresh (<24h) full dump with successful isolated restore/checksum/schema/FK/orphan/application-read evidence produced by existing `BackupAndVerify.ps1`. `VerifiedBackupEvidence` rechecks dump file lengths/hashes, complete manifest and schema/table count. Never restore production or modify the old backup.
+
+After controlled backend-first rollout and API smoke, an approved operator uses the compiled classpath from the preflight and its private files. These are NOT authorization to run now:
+
+```powershell
+# Within the same secure scoped MYSQL_PUBLIC_URL process used by the preflight; never print it.
+# $profileCp = 'target/classes;target/display-tools;' + <existing Jackson/MySQL dependency paths>
+# Run from backend. $private is the exact reviewed report folder; $backup is the verified backup ROOT (contains dump/).
+$env:VERIFIED_BACKUP_DIR = $backup
+$env:APPROVE_DISPLAY_PROFILE_WRITE = $reviewedDisplayPlanSha256
+$env:APPROVE_PARTNER_ACTIVATION = $reviewedActivationPlanSha256
+$env:ACTIVATION_AUDIT_ADMIN_ID = $reviewedAuditAdminId
+try {
+    java -cp $profileCp DisplayProfileRevisionStore apply "$private/display-plan.json"
+    if ($LASTEXITCODE) { throw 'Display apply failed; inspect committed/no-op state before retry' }
+    java -cp $profileCp PartnerActivationStore apply "$private/activation-plan.json"
+    if ($LASTEXITCODE) { throw 'Activation stopped; inspect actual state, never blindly retry' }
+} finally {
+    'VERIFIED_BACKUP_DIR','APPROVE_DISPLAY_PROFILE_WRITE','APPROVE_PARTNER_ACTIVATION','ACTIVATION_AUDIT_ADMIN_ID' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
+}
+```
+
+Display apply is first because activation changes user state and invalidates a previously exported display baseline. Activation baseline excludes display-only rows, so display apply does not invalidate it. Each operation is its own atomic transaction; they are NOT a combined transaction. If activation fails, the display overlay may already be committed. Verify it, then choose a reviewed retry or display rollback. Every tool is default read-only unless an explicit apply/rollback command AND exact approval hash are present.
+
+Same commands with `rollback` insert immutable rollback markers: profile rollback reveals v1; activation rollback restores only prior DISABLED statuses and revokes credentials again. Never undo bookings/payments or restore old tokens. Activation rollback blocks if supplier/workforce/booking/payment/Google data changed after activation; review a controlled suspension separately. Repeated identical apply/rollback is no-op; a rolled-back batch never implicitly reactivates. Never restore the production database for rollback.
+
+### Read-only production inventory, 1Nov2026 (not applied)
+
+- Operational accounts217: CUSTOMER175, SUPPLIER40, ADMIN1, STAFF1; merged directory286.
+- Display186: REPORT69, SEED_CUSTOMER79, SEED_PARTNER36, CONTACT_DISPLAY2. Frozen71 IDs unchanged.186 eligible report dates;100 other contacts/registrations preserved. One pre-existing canonical real-email collision reported; no new alias collision.
+- September report-profile registrations63→88; October180→198; November0→0. Total directory unchanged. These are report-date cohorts, not a rewrite of real account registration history.
+- Non-demo salons14:4 already active,10 candidates,0 blockers;26 demo excluded. Expected operational active partners4→14, ten audit entries and old-owner-session revocation.
+- Baseline93 operational bookings,71 payment attempts, service-value sum53,261,000VND (NOT revenue), verified PayOS gross1,215,458VND. SELECT-only preflight validated; writes0. Read-only values are snapshots and must be checked again before write.
+- Latest locally found backup27Oct2026 is older than24h. Fresh usable evidence has NOT been verified for this operation; production writes remain gated.
+
+Tests: `PresentationProfileRevisionTest` (planner/date/hash), existing `AdminDashboardV2IntegrationTest` (Hibernate view/raw editor/cutoffs/v1 fallback/ledger), frontend adminDisplayProfiles tests, existing desktop/mobile browser fixture upgraded to v2. Standalone `ProfileOperationsTest` tests real SQL status/session/audit rollback on isolated H2 and MySQL8.4. Its backup files are synthetic validator fixtures, NOT real backup/restore evidence. CI backend runs this standalone test with existing test dependencies and no production connection.
