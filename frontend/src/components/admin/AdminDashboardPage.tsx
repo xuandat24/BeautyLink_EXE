@@ -67,7 +67,7 @@ export const BookingDetail = ({ booking, onClose }: { booking: AdminBooking; onC
 );
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, adminName, onNavigate, onHome, onLogout, onOpenBookedCustomers, onOpenSalon, initialSearch = '' }) => {
-  const [from, setFrom] = useState(() => `${daysAgo(0).slice(0, 7)}-01`);
+  const [from, setFrom] = useState('2026-09-20');
   const [to, setTo] = useState(daysAgo(0));
   const [payments, setPayments] = useState<AdminPaymentSummary | null>(null);
   const [revenuePage, setRevenuePage] = useState<{ content: AdminRevenueRow[]; totalElements: number; totalPages: number } | null>(null);
@@ -159,7 +159,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ mode, ad
 
   const filters = (
       <section aria-label="Bộ lọc báo cáo" className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3">
-        <div role="group" aria-label="Khoảng ngày nhanh" className="flex flex-wrap gap-2">{[[1, 'Hôm nay'], [7, '7 ngày'], [30, '30 ngày']].map(([days, label]) => {
+        <div role="group" aria-label="Khoảng ngày nhanh" className="flex flex-wrap gap-2"><button type="button" aria-pressed={from === '2026-09-20' && to === daysAgo(0)} onClick={() => { setFrom('2026-09-20'); setTo(daysAgo(0)); }} className={`min-h-10 rounded-xl px-3 py-2 text-xs font-bold focus-visible:ring-2 focus-visible:ring-pink-600 ${from === '2026-09-20' && to === daysAgo(0) ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-pink-50'}`}>Tổng quan</button>{[[1, 'Hôm nay'], [7, '7 ngày'], [30, '30 ngày']].map(([days, label]) => {
           const selected = from === daysAgo(Number(days) - 1) && to === daysAgo(0);
           return <button key={days} type="button" aria-pressed={selected} onClick={() => preset(Number(days))} className={`cursor-pointer rounded-xl px-3 py-2 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-600 focus-visible:ring-offset-2 ${selected ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-pink-50 hover:text-pink-800'}`}>{label}</button>;
         })}</div>

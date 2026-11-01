@@ -26,6 +26,7 @@ export function computeHash(obj: unknown): string {
 class CacheManager {
   private memoryCache: Map<string, CacheEntry<any>> = new Map();
   private prefix = 'beautylink_v2_';
+  private inFlight = new Map<string, Promise<unknown>>();
 
   constructor() {
     // Warm up memory cache from persistent storage on startup
@@ -136,25 +137,25 @@ class CacheManager {
    * Returns cached data immediately if available.
    * If missing or expired, executes the fetcher and caches the result.
    */
-  async getOrFetch<T>(
-    key: string,
-    fetcher: () => Promise<T> | T,
-    ttlMs = 10 * 60 * 1000 // 10 minutes default
-  ): Promise<T> {
-    const cached = this.get<T>(key);
-    if (cached !== null) {
-      return cached;
-    }
-
-    const freshData = await fetcher();
-    this.set(key, freshData, ttlMs);
-    return freshData;
+  async getOrFetch<T>(key: string, fetcher: () => Promise<T> | T, ttlMs = 10 * 60 * 1000, freshForMs = ttlMs): Promise<T> {
+    const cached = this.get<T>(key), entry = this.memoryCache.get(key);
+    if (cached !== null && entry && (freshForMs === 0 || Date.now() - entry.timestamp < freshForMs)) return cached;
+    const existing = this.inFlight.get(key); if (existing) return existing as Promise<T>;
+    const pending = Promise.resolve().then(fetcher).then(data => {
+      if (this.inFlight.get(key) === pending) {
+        // A successful fresh observation renews TTL even when the payload hash is unchanged.
+        this.memoryCache.delete(key); this.set(key, data, ttlMs);
+      }
+      return data;
+    }).finally(() => { if (this.inFlight.get(key) === pending) this.inFlight.delete(key); });
+    this.inFlight.set(key, pending); return pending;
   }
 
   /**
    * Delete an item from cache
    */
   delete(key: string): void {
+    this.inFlight.delete(key);
     this.memoryCache.delete(key);
     if (typeof window !== 'undefined') {
       try {
@@ -169,6 +170,7 @@ class CacheManager {
    * Clear all app-specific caches
    */
   clear(): void {
+    this.inFlight.clear();
     this.memoryCache.clear();
     if (typeof window !== 'undefined') {
       try {

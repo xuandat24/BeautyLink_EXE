@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface HeroSectionProps {
@@ -63,10 +64,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onBookDirect }) => {
   return (
     <section className="mx-auto max-w-7xl px-4 py-3 sm:px-6 md:py-4">
       <div className="group relative h-[210px] overflow-hidden rounded-3xl bg-slate-900 shadow-lg shadow-pink-900/5 sm:h-[220px]">
-        <div
-          className="absolute inset-0 scale-105 bg-cover bg-center transition-transform duration-700 ease-out group-hover:scale-100"
-          style={{ backgroundImage: `url(${slide.image})` }}
-        />
+        <img src={getOptimizedImageUrl(slide.image,{width:1280,height:360,quality:75})}
+          srcSet={[640,1280,1920].map(width=>`${getOptimizedImageUrl(slide.image,{width,height:Math.round(width*360/1280),quality:75})} ${width}w`).join(', ')} sizes="(max-width: 1280px) 100vw, 1280px"
+          alt="" aria-hidden="true" width={1280} height={360} loading="eager" fetchPriority={currentSlide===0?'high':'auto'} decoding="async"
+          className="absolute inset-0 h-full w-full scale-105 object-cover object-center transition-transform duration-700 ease-out group-hover:scale-100" />
         <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/62 to-black/20" />
         <div className="absolute inset-0 shadow-[inset_0_0_72px_rgba(15,23,42,0.5)]" />
 

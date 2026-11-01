@@ -80,8 +80,8 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
   onOpenLocationModal,
 }) => {
   const [activeCategorySlug, setActiveCategorySlug] = useState(category.slug);
-  const [allServices, setAllServices] = useState<BackendService[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [allServices, setAllServices] = useState<BackendService[]>(() => beautyApi.cachedServices(category.slug, locationId || undefined) ?? []);
+  const [loading, setLoading] = useState(() => beautyApi.cachedServices(category.slug, locationId || undefined) === null);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('all');
@@ -97,7 +97,8 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const cached = beautyApi.cachedServices(activeCategorySlug, locationId || undefined);
+    setAllServices(cached ?? []); setLoading(cached === null);
     setError('');
 
     beautyApi
@@ -109,7 +110,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
       })
       .catch((requestError) => {
         if (!active) return;
-        setAllServices([]);
+        if (!cached) setAllServices([]);
         setError(getApiErrorMessage(requestError, 'Không thể tải danh sách đối tác.'));
       })
       .finally(() => {
@@ -410,7 +411,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
             </div>
           )}
 
-          {!loading && !error && visiblePartners.length > 0 && (
+          {!loading && visiblePartners.length > 0 && (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {visiblePartners.map((partner) => (
                 <button
@@ -473,7 +474,7 @@ export const CategoryServicePage: React.FC<CategoryServicePageProps> = ({
             </div>
           )}
 
-          {!loading && !error && totalPages > 1 && (
+          {!loading && totalPages > 1 && (
             <nav className="mt-8 flex items-center justify-center gap-2" aria-label="Phân trang đối tác">
               <button
                 type="button"

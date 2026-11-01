@@ -67,6 +67,8 @@ interface PartnerServiceOffer {
   reviewsCount: number;
 }
 
+const serviceOffers = (items: BackendService[]): PartnerServiceOffer[] => items.map(item => ({ id:item.id,service:item,name:item.name,price:item.price,originalPrice:item.originalPrice??item.price,durationMinutes:item.durationMinutes,highlight:item.highlightText??'',category:item.categorySlug,image:item.imageUrl,...serviceReviewSummary(item) }));
+
 export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
   partner,
   currentUser,
@@ -81,22 +83,20 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
   const [previewCert, setPreviewCert] = useState<PartnerCertificate | null>(null);
   const [favoriteToast, setFavoriteToast] = useState<FavoriteToastInfo | null>(null);
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
-  const [shopState, setShopState] = useState<{ supplierId?: number; services: PartnerServiceOffer[]; error: string; loading: boolean }>({ services: [], error: '', loading: true });
+  const [shopState, setShopState] = useState<{ supplierId?: number; services: PartnerServiceOffer[]; error: string; loading: boolean }>(() => { const cached=validDatabaseId(partner.supplierId)?beautyApi.cachedSupplierServices(partner.supplierId):null;return { supplierId:partner.supplierId,services:serviceOffers(cached??[]),error:'',loading:cached===null }; });
   const [shopAttempt, setShopAttempt] = useState(0);
   const shopServices = shopState.supplierId === partner.supplierId ? shopState.services : [];
   useEffect(() => {
     let active = true;
-    const empty = { supplierId: partner.supplierId, services: [], error: '', loading: true };
+    const cached = validDatabaseId(partner.supplierId) ? beautyApi.cachedSupplierServices(partner.supplierId) : null;
+    const empty = { supplierId: partner.supplierId, services: serviceOffers(cached ?? []), error: '', loading: cached === null };
     setShopState(empty);
     if (!validDatabaseId(partner.supplierId)) {
       setShopState({ ...empty, loading: false, error: 'Không xác định được nhà cung cấp.' });
       return () => { active = false; };
     }
-    beautyApi.publicSupplierServices(partner.supplierId).then((items) => {
-      if (active) setShopState({ ...empty, loading: false, services: items.map(item => ({ id: item.id, service: item, name: item.name, price: item.price,
-        originalPrice: item.originalPrice ?? item.price, durationMinutes: item.durationMinutes,
-        highlight: item.highlightText ?? '', category: item.categorySlug, image: item.imageUrl,
-        ...serviceReviewSummary(item) })) });
+    beautyApi.publicSupplierServices(partner.supplierId, shopAttempt > 0 || reviewsUpdateTrigger > 0).then((items) => {
+      if (active) setShopState({ ...empty, loading: false, services: serviceOffers(items) });
     }).catch(err => { if (active) setShopState({ ...empty, loading: false, error: getApiErrorMessage(err, 'Không thể tải dịch vụ.') }); });
     return () => { active = false; };
   }, [partner.supplierId, shopAttempt, reviewsUpdateTrigger]);

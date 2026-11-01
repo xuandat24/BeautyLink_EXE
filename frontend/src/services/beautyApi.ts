@@ -159,7 +159,7 @@ async function reviewAllocation(): Promise<PresentationReviewAllocation | null> 
   if (!presentationEnabled) return null;
   if (presentationAllocation) return presentationAllocation;
   if (!presentationCatalogPromise) {
-    presentationCatalogPromise = unwrap<BackendService[]>(apiClient.get('/v1/catalog/services'));
+    presentationCatalogPromise = unwrap<BackendService[]>(apiClient.get('/v1/catalog/services', { params: { compactImages: true } }));
   }
   try {
     const catalog = await presentationCatalogPromise;
@@ -217,6 +217,40 @@ export async function adminPresentationData(range?: { from?: string; to?: string
     }
     return snapshot;
   } catch (error) { if (adminPresentationPromise === pending) adminPresentationPromise = null; throw error; }
+}
+
+// Public catalog snapshots only; never cache availability, quotes, payment or authentication state.
+const publicCatalogKey = (resource: string, locationId?: number) =>
+  `public-catalog-compact-v1:${API_BASE_URL}:${resource}:${locationId ?? 'all'}`;
+function validPublicCatalog(value: unknown): value is BackendService[] {
+  return Array.isArray(value) && value.every(s => s && Number.isSafeInteger(s.id) && s.id > 0 &&
+    Number.isSafeInteger(s.supplierId) && typeof s.name === 'string' && typeof s.supplierName === 'string' &&
+    Number.isFinite(s.price) && Number.isFinite(s.durationMinutes));
+}
+function cachedPublicCatalog(key: string) {
+  const value = cache.get<BackendService[]>(key);
+  if (value !== null && !validPublicCatalog(value)) { cache.delete(key); return null; }
+  return value;
+}
+function mapPublicCatalog(list: BackendService[], allocation: PresentationReviewAllocation | null) {
+  return list.map(s => ({ ...presentationService(s, allocation),
+    imageUrl: getOptimizedImageUrl(s.imageUrl, 'service-card'),
+    supplierImageUrl: s.supplierImageUrl ? getOptimizedImageUrl(s.supplierImageUrl, 'salon-card') : s.supplierImageUrl,
+  }));
+}
+async function readPublicCatalog(resource: string, locationId?: number) {
+  const key = publicCatalogKey(resource, locationId);
+  cachedPublicCatalog(key); // Reject a malformed persisted snapshot before attempting reuse.
+  return cache.getOrFetch(key, async () => {
+    const path = resource === 'home' ? '/v1/homepage/services' : resource.startsWith('supplier:')
+      ? `/v1/suppliers/${Number(resource.slice(9))}` : `/v1/categories/${encodeURIComponent(resource)}/services`;
+    const response = await unwrap<BackendService[] | { services: BackendService[] }>(apiClient.get(path, {
+      params: { compactImages: true, ...(locationId ? { locationId } : {}) },
+    }));
+    const value = Array.isArray(response) ? response : response?.services;
+    if (!validPublicCatalog(value)) throw new Error('Danh mục trả về không hợp lệ.');
+    return value;
+  }, 5 * 60 * 1000, 60 * 1000);
 }
 
 export function setAccessToken(token: string, rememberMe = false) {
@@ -786,65 +820,13 @@ export const beautyApi = {
   // ==========================================
   // Services & Availability
   // ==========================================
-  async services(categorySlug: string, locationId?: number): Promise<BackendService[]> {
-    const allocation = await reviewAllocation();
-    const mapServices = (list: BackendService[]) =>
-      list.map((s) => ({
-        ...presentationService(s, allocation),
-        imageUrl: getOptimizedImageUrl(s.imageUrl, 'service-card'),
-        supplierImageUrl: s.supplierImageUrl
-          ? getOptimizedImageUrl(s.supplierImageUrl, 'salon-card')
-          : s.supplierImageUrl,
-      }));
-
-    if (!categorySlug || categorySlug === 'all') {
-      return this.homepageServices(locationId);
-    }
-
-    try {
-      const res = await unwrap<BackendService[]>(
-        apiClient.get(`/v1/categories/${categorySlug}/services`, {
-          params: locationId ? { locationId } : {},
-        })
-      );
-      if (Array.isArray(res)) return mapServices(res);
-      return [];
-    } catch (error) {
-      if (!DEMO_FALLBACK_ENABLED) throw error;
-      const filtered = DEFAULT_HOMEPAGE_SERVICES.filter((s) => {
-        const target = categorySlug.toLowerCase();
-        if (target === 'spa' && (s.categorySlug === 'spa')) return true;
-        if (target === 'duong-sinh' || target === 'goi-dau-duong-sinh') {
-          return s.categorySlug === 'spa' || s.name.toLowerCase().includes('gội đầu');
-        }
-        return s.categorySlug.toLowerCase() === target;
-      });
-      return mapServices(filtered.length > 0 ? filtered : DEFAULT_HOMEPAGE_SERVICES);
-    }
+  cachedHomepageServices(locationId?:number): BackendService[] | null { const rows=cachedPublicCatalog(publicCatalogKey('home',locationId));return rows?mapPublicCatalog(rows,presentationAllocation):null; },
+  cachedServices(categorySlug:string,locationId?:number): BackendService[] | null { const rows=cachedPublicCatalog(publicCatalogKey(!categorySlug||categorySlug==='all'?'home':categorySlug,locationId));return rows?mapPublicCatalog(rows,presentationAllocation):null; },
+  async services(categorySlug:string,locationId?:number):Promise<BackendService[]> {
+    try{const [rows,allocation]=await Promise.all([readPublicCatalog(!categorySlug||categorySlug==='all'?'home':categorySlug,locationId),reviewAllocation()]);return mapPublicCatalog(rows,allocation);}catch(error){if(!DEMO_FALLBACK_ENABLED)throw error;const target=categorySlug.toLowerCase();const filtered=DEFAULT_HOMEPAGE_SERVICES.filter(s=>target==='spa'?s.categorySlug==='spa':target==='duong-sinh'||target==='goi-dau-duong-sinh'?s.categorySlug==='spa'||s.name.toLowerCase().includes('gội đầu'):s.categorySlug.toLowerCase()===target);return mapPublicCatalog(filtered.length?filtered:DEFAULT_HOMEPAGE_SERVICES,presentationAllocation);}
   },
-
-  async homepageServices(locationId?: number): Promise<BackendService[]> {
-    const allocation = await reviewAllocation();
-    const mapServices = (list: BackendService[]) =>
-      list.map((s) => ({
-        ...presentationService(s, allocation),
-        imageUrl: getOptimizedImageUrl(s.imageUrl, 'service-card'),
-        supplierImageUrl: s.supplierImageUrl
-          ? getOptimizedImageUrl(s.supplierImageUrl, 'salon-card')
-          : s.supplierImageUrl,
-      }));
-
-    try {
-      const res = await unwrap<BackendService[]>(
-        apiClient.get('/v1/homepage/services', {
-          params: locationId ? { locationId } : {},
-        })
-      );
-      return Array.isArray(res) ? mapServices(res) : [];
-    } catch (error) {
-      if (DEMO_FALLBACK_ENABLED) return mapServices(DEFAULT_HOMEPAGE_SERVICES);
-      throw error;
-    }
+  async homepageServices(locationId?:number):Promise<BackendService[]> {
+    try{const [rows,allocation]=await Promise.all([readPublicCatalog('home',locationId),reviewAllocation()]);return mapPublicCatalog(rows,allocation);}catch(error){if(DEMO_FALLBACK_ENABLED)return mapPublicCatalog(DEFAULT_HOMEPAGE_SERVICES,presentationAllocation);throw error;}
   },
 
   async availability(serviceId: number, practitionerId: number, date: string): Promise<{ availableSlots: string[] }> {
@@ -893,11 +875,11 @@ export const beautyApi = {
     const resource = targetType === 'SERVICE' ? 'services' : 'suppliers';
     return unwrap(apiClient.get(`/v1/${resource}/${id}/reviews`, { params: { page, size: 20 } }));
   },
-  async publicSupplierServices(id: number): Promise<BackendService[]> {
-    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Không xác định được nhà cung cấp.');
-    const shop = await unwrap<{ services: BackendService[] }>(apiClient.get(`/v1/suppliers/${id}`));
-    const allocation = await reviewAllocation();
-    return shop.services.map(service => presentationService(service, allocation));
+  cachedSupplierServices(id:number):BackendService[]|null {const rows=cachedPublicCatalog(publicCatalogKey(`supplier:${id}`));return rows?mapPublicCatalog(rows,presentationAllocation):null;},
+  async publicSupplierServices(id:number,refresh=false):Promise<BackendService[]> {
+    if(!Number.isSafeInteger(id)||id<=0)throw new Error('Không xác định được nhà cung cấp.');
+    if(refresh)cache.delete(publicCatalogKey(`supplier:${id}`));
+    const [rows,allocation]=await Promise.all([readPublicCatalog(`supplier:${id}`),reviewAllocation()]);return mapPublicCatalog(rows,allocation);
   },
 
   async completeBooking(id: number): Promise<BackendBooking> {

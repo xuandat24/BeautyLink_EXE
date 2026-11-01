@@ -14,18 +14,18 @@ public class CatalogController {
     public CatalogController(CatalogService catalog, AvailabilityService availability, PaymentQuoteService paymentQuotes) { this.catalog = catalog; this.availability = availability; this.paymentQuotes = paymentQuotes; }
     @GetMapping("/locations") public List<LocationResponse> locations(@RequestParam(required = false) Long parentId) { return catalog.locations(parentId); }
     @GetMapping("/categories") public List<CategoryResponse> categories() { return catalog.categories(); }
-    @GetMapping("/categories/{slug}/services") public List<ServiceResponse> services(@PathVariable String slug, @RequestParam(required = false) Long locationId) { return catalog.services(slug, locationId); }
-    @GetMapping("/catalog/services") public List<ServiceResponse> publicServices() { return catalog.publicServices(); }
+    @GetMapping("/categories/{slug}/services") public List<ServiceResponse> services(@PathVariable String slug, @RequestParam(required = false) Long locationId, @RequestParam(defaultValue="false") boolean compactImages) { return catalog.services(slug, locationId,compactImages); }
+    @GetMapping("/catalog/services") public List<ServiceResponse> publicServices(@RequestParam(defaultValue="false") boolean compactImages) { return catalog.publicServices(compactImages); }
     @GetMapping("/services/{id}") public ServiceResponse service(@PathVariable Long id) { return catalog.service(id); }
     @GetMapping("/services/{id}/payment-quote") public PaymentQuoteResponse paymentQuote(
             @PathVariable Long id, @RequestParam PaymentOption paymentOption,
             @RequestParam(required = false) String voucherCode) {
         return paymentQuotes.quoteService(id, paymentOption, voucherCode);
     }
-    @GetMapping("/suppliers/{id}") public PublicSupplierShopResponse supplier(@PathVariable Long id) { return catalog.supplierShop(id); }
+    @GetMapping("/suppliers/{id}") public PublicSupplierShopResponse supplier(@PathVariable Long id,@RequestParam(defaultValue="false") boolean compactImages) { return catalog.supplierShop(id,compactImages); }
     @GetMapping("/services/{id}/reviews") public PublicReviewPageResponse serviceReviews(@PathVariable Long id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return catalog.serviceReviews(id, page, size); }
     @GetMapping("/suppliers/{id}/reviews") public PublicReviewPageResponse supplierReviews(@PathVariable Long id, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return catalog.supplierReviews(id, page, size); }
-    @GetMapping("/homepage/services") public List<ServiceResponse> homepage(@RequestParam(required = false) Long locationId) { return catalog.homepage(locationId); }
+    @GetMapping("/homepage/services") public List<ServiceResponse> homepage(@RequestParam(required = false) Long locationId,@RequestParam(defaultValue="false") boolean compactImages) { return catalog.homepage(locationId,compactImages); }
     @GetMapping("/services/{serviceId}/availability") public AvailabilityResponse availability(@PathVariable Long serviceId, @RequestParam Long practitionerId, @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) { return availability.availability(serviceId, practitionerId, date); }
     @GetMapping("/services/{serviceId}/capacity") public ServiceCapacityResponse capacity(@PathVariable Long serviceId, @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) { return availability.capacity(serviceId, date); }
 }

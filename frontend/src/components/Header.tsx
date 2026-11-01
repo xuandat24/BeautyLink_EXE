@@ -19,6 +19,7 @@ import { Star } from 'lucide-react';
 
 interface HeaderProps {
   cartCount: number;
+  onHome?: () => void;
   onOpenCommunity?: () => void;
   onOpenCart: () => void;
   onOpenPartnerModal: () => void;
@@ -52,6 +53,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   cartCount,
+  onHome,
   onOpenCommunity,
   onOpenCart,
   onOpenPartnerModal,
@@ -209,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-3 md:gap-5">
           {/* Logo BeautyLink */}
           <div className="flex items-center gap-3 shrink-0">
-            <a href="/" aria-label="BeautyLink — Trang chủ" className="flex items-center gap-2 group">
+            <a href="/" onClick={event => { if (onHome && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); setMobileMenuOpen(false); onHome(); } }} aria-label="BeautyLink — Trang chủ" className="flex items-center gap-2 group">
               <img src="/beautylink-icon.png" alt="" width={44} height={44}
                 className="h-9 w-9 sm:h-11 sm:w-11 shrink-0 object-contain" />
               <div className="flex flex-col">

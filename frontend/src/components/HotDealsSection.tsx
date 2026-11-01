@@ -327,6 +327,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = React.memo(({
                       src={deal.image}
                       alt={deal.title}
                       preset="deal-card"
+                      priority={idx < 2}
                       vignette
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 ease-out"
                       containerClassName="w-full h-full"
