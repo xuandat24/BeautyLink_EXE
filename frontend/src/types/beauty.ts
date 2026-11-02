@@ -377,6 +377,7 @@ export interface NewPartner {
   address: string;
   image: string;
   logo: string;
+  profileImage?: string | null;
   specialty: string;
   promoNotice: string;
 }
