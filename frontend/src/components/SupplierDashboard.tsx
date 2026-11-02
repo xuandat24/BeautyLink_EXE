@@ -257,8 +257,8 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({ onBack, on
         <aside className="min-w-0 border-b border-slate-200 bg-white p-4 lg:min-h-[calc(100vh-65px)] lg:border-b-0 lg:border-r lg:p-5">
           <div className="mb-5 hidden rounded-2xl bg-[#FFF0F3] p-4 lg:block">
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-[#EB0F51] shadow-sm">
-                <Store className="h-5 w-5" />
+              <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-white text-[#EB0F51] shadow-sm">
+                {profile?.imageUrl ? <img src={profile.imageUrl} alt="" className="h-full w-full object-cover" /> : <Store className="h-5 w-5" />}
               </span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-black">{profile?.name || 'Gian hàng'}</p>
@@ -938,7 +938,7 @@ const SupplierStoreTab: React.FC<SupplierStoreTabProps> = ({ profile, onProfileU
       {/* Store Profile Form */}
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-base font-black">Thông tin gian hàng</h2>
-        <p className="text-xs text-slate-500">Hiển thị trên thẻ dịch vụ và trang chủ.</p>
+        <p className="text-xs text-slate-500">Ảnh đại diện salon hiển thị trên trang salon và thẻ gian hàng. Ảnh dịch vụ được chỉnh sửa riêng bên dưới.</p>
 
         <form onSubmit={handleSaveStoreProfile} className="mt-5 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -972,7 +972,7 @@ const SupplierStoreTab: React.FC<SupplierStoreTabProps> = ({ profile, onProfileU
             />
           </label>
 
-          <PublicImageUploadField label="Ảnh gian hàng" value={storeForm.imageUrl}
+          <PublicImageUploadField label="Ảnh đại diện salon" value={storeForm.imageUrl}
             onChange={imageUrl => setStoreForm(previous => ({ ...previous, imageUrl }))}
             onBusyChange={setPreparingImage} disabled={savingProfile} />
 
@@ -1335,7 +1335,7 @@ const SupplierServiceModal: React.FC<SupplierServiceModalProps> = ({
             <input
               type="number"
               min={1000}
-              step={10000}
+              step={1}
               value={formData.price}
               onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
               className="field"
