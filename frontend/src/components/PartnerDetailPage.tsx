@@ -83,6 +83,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
   const [previewCert, setPreviewCert] = useState<PartnerCertificate | null>(null);
   const [favoriteToast, setFavoriteToast] = useState<FavoriteToastInfo | null>(null);
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
+  const [failedProfileImage, setFailedProfileImage] = useState<string | null>(null);
   const [shopState, setShopState] = useState<{ supplierId?: number; services: PartnerServiceOffer[]; error: string; loading: boolean }>(() => { const cached=validDatabaseId(partner.supplierId)?beautyApi.cachedSupplierServices(partner.supplierId):null;return { supplierId:partner.supplierId,services:serviceOffers(cached??[]),error:'',loading:cached===null }; });
   const [shopAttempt, setShopAttempt] = useState(0);
   const shopServices = shopState.supplierId === partner.supplierId ? shopState.services : [];
@@ -95,7 +96,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
       setShopState({ ...empty, loading: false, error: 'Không xác định được nhà cung cấp.' });
       return () => { active = false; };
     }
-    beautyApi.publicSupplierServices(partner.supplierId, shopAttempt > 0 || reviewsUpdateTrigger > 0).then((items) => {
+    beautyApi.publicSupplierServices(partner.supplierId, true).then((items) => {
       if (active) setShopState({ ...empty, loading: false, services: serviceOffers(items) });
     }).catch(err => { if (active) setShopState({ ...empty, loading: false, error: getApiErrorMessage(err, 'Không thể tải dịch vụ.') }); });
     return () => { active = false; };
@@ -174,6 +175,7 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
   };
 
   const reviewState = useBookingReviews(partner.supplierId, undefined, reviewsUpdateTrigger);
+  const profileImage = shopServices[0]?.service.supplierImageUrl || partner.profileImage;
   const { reviews } = reviewState;
   const headerReviewCount = reviewState.total || (presentationEnabled ? partnerProfile.reviewsCount : 0);
   const reviewRating = reviewState.total ? reviewState.rating.toFixed(1) : headerReviewCount ? partnerProfile.rating.toFixed(1) : "—";
@@ -218,8 +220,10 @@ export const PartnerDetailPage: React.FC<PartnerDetailPageProps> = ({
           {/* Top Row: Partner Shop Branding & Key Stats */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
             <div className="flex items-start sm:items-center gap-4">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-pink-50 to-pink-100 border-2 border-pink-300 flex items-center justify-center text-xl sm:text-2xl font-black text-[#be185d] shadow-sm shrink-0">
-                {partnerProfile.logo}
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-pink-50 to-pink-100 border-2 border-pink-300 flex items-center justify-center text-xl sm:text-2xl font-black text-[#be185d] shadow-sm shrink-0 overflow-hidden">
+                {profileImage && profileImage !== failedProfileImage ? (
+                  <img src={profileImage} alt={`Ảnh đại diện ${partner.name}`} className="w-full h-full object-cover" onError={() => setFailedProfileImage(profileImage)} />
+                ) : partnerProfile.logo}
               </div>
 
               <div>

@@ -183,6 +183,7 @@ const mapServiceToPartner = (item: BackendService): NewPartner => ({
   address: item.supplierAddress,
   image: item.supplierImageUrl || item.imageUrl,
   logo: getInitials(item.supplierName),
+  profileImage: item.supplierImageUrl,
   specialty: item.name,
   promoNotice: 'Đối tác mới · Ưu đãi độc quyền',
 });

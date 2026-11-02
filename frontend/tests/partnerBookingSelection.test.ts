@@ -84,6 +84,29 @@ test('partner booking passes the exact clicked backend service', async () => {
   }
 });
 
+test('partner profile shows the salon image and falls back to initials if it fails', async () => {
+  const { dom, root } = environment();
+  const originalServices = beautyApi.publicSupplierServices;
+  const originalReviews = beautyApi.publicBookingReviews;
+  const salonImage = 'https://example.test/salon.jpg';
+  beautyApi.publicSupplierServices = async () => [{ ...service(701, 'Nail'), supplierImageUrl: salonImage }];
+  beautyApi.publicBookingReviews = async () => ({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 20, rating: 0 });
+  const partner: NewPartner = { id: 'supplier-77', supplierId: 77, name: 'Nail nhà Chuối', subTitle: 'NAIL', address: 'Hà Nội', image: 'https://example.test/service.jpg', logo: 'NC', specialty: 'Nail', promoNotice: '' };
+  try {
+    await act(async () => root.render(React.createElement(PartnerDetailPage, { partner, currentUser: null, onBack() {}, onNeedLogin() {}, onBookService() {} })));
+    const image = document.querySelector<HTMLImageElement>('img[alt="Ảnh đại diện Nail nhà Chuối"]');
+    assert.equal(image?.src, salonImage);
+    await act(async () => image!.dispatchEvent(new dom.window.Event('error')));
+    assert.equal(document.querySelector('img[alt="Ảnh đại diện Nail nhà Chuối"]'), null);
+    assert.ok([...document.querySelectorAll('div')].some((element) => element.textContent === 'NC'));
+  } finally {
+    await act(async () => root.unmount());
+    beautyApi.publicSupplierServices = originalServices;
+    beautyApi.publicBookingReviews = originalReviews;
+    dom.window.close();
+  }
+});
+
 test('unavailable payment quote gives visible feedback instead of a dead button', async () => {
   const { dom, root } = environment();
   const originalQuote = beautyApi.servicePaymentQuote;
