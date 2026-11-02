@@ -26,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PublicImageApiIntegrationTest {
     static final String PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
     static final String URL = "https://res.cloudinary.com/test-cloud/image/upload/v123/beautylink/public/12345678-1234-1234-1234-123456789abc.webp";
+    static final String SERVICE_URL = "https://res.cloudinary.com/test-cloud/image/upload/v123/beautylink/public/87654321-1234-1234-1234-123456789abc.webp";
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @Autowired SupplierVerificationRepository verifications;
@@ -70,21 +71,24 @@ class PublicImageApiIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Lan Anh\",\"avatarUrl\":\"" + URL + "\"}"))
                 .andExpect(status().isOk());
         assertEquals(URL, practitioners.findById(practitioner).orElseThrow().getAvatarUrl());
+        doReturn(new CloudinaryImageGateway.UploadedImage("beautylink/public/87654321-1234-1234-1234-123456789abc", SERVICE_URL)).when(gateway).upload(PNG);
         long category = json.readTree(mvc.perform(get("/api/v1/categories")).andReturn().getResponse().getContentAsString()).get(0).path("id").asLong();
         long service = json.readTree(mvc.perform(post("/api/v1/supplier/services").header("Authorization", bearer)
                 .contentType(MediaType.APPLICATION_JSON).content("""
                 {"categoryId":%d,"name":"Makeup du tiec","price":450000,"durationMinutes":90,"imageUrl":"%s","active":true}
-                """.formatted(category, PNG))).andExpect(status().isCreated()).andExpect(jsonPath("$.imageUrl").value(URL))
+                """.formatted(category, PNG))).andExpect(status().isCreated()).andExpect(jsonPath("$.imageUrl").value(SERVICE_URL))
                 .andReturn().getResponse().getContentAsString()).path("id").asLong();
-        assertEquals(URL, services.findById(service).orElseThrow().getImageUrl());
+        assertEquals(SERVICE_URL, services.findById(service).orElseThrow().getImageUrl());
         mvc.perform(put("/api/v1/supplier/services/" + service).header("Authorization", bearer)
                 .contentType(MediaType.APPLICATION_JSON).content("""
                 {"categoryId":%d,"name":"Makeup du tiec","price":450000,"durationMinutes":90,"imageUrl":"%s","active":true}
                 """.formatted(category, PNG)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.imageUrl").value(URL));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.imageUrl").value(SERVICE_URL));
         verify(gateway, times(5)).upload(PNG);
         mvc.perform(get("/api/v1/supplier/profile").header("Authorization", bearer))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.imageUrl").value(URL));
+        mvc.perform(get("/api/v1/services/" + service)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.imageUrl").value(SERVICE_URL)).andExpect(jsonPath("$.supplierImageUrl").value(URL));
 
         when(gateway.upload(anyString())).thenThrow(new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "IMAGE_STORAGE_UNAVAILABLE", "safe"));
         mvc.perform(put("/api/v1/supplier/practitioners/" + practitioner).header("Authorization", bearer)

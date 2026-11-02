@@ -38,15 +38,18 @@ export function PublicImageUploadField({ label, value, onChange, onBusyChange, d
 
   return (
     <div className="space-y-2">
-      <label htmlFor={`${id}-file`} className="block text-xs font-bold text-slate-700">{label}</label>
+      <span id={`${id}-label`} className="block text-xs font-bold text-slate-700">{label}</span>
       {value && <img src={value} alt={`Xem trước ${label.toLowerCase()}`} className="h-28 w-40 rounded-xl object-cover" />}
-      <input id={`${id}-file`} type="file" accept="image/jpeg,image/png,image/webp"
-        disabled={disabled || busy} aria-describedby={`${id}-help ${id}-error`}
-        onChange={event => {
-          const file = event.target.files?.[0];
-          event.target.value = '';
-          void choose(file);
-        }} className="block w-full text-xs" />
+      <label htmlFor={`${id}-file`} className={`inline-flex min-h-11 items-center rounded-xl border border-pink-200 bg-pink-50 px-4 text-sm font-bold text-pink-700 focus-within:ring-2 focus-within:ring-pink-600 ${disabled || busy ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-pink-100'}`}>
+        <input id={`${id}-file`} type="file" accept="image/jpeg,image/png,image/webp"
+          disabled={disabled || busy} aria-labelledby={`${id}-label ${id}-choose`} aria-describedby={`${id}-help ${id}-error`}
+          onChange={event => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            void choose(file);
+          }} className="sr-only" />
+        <span id={`${id}-choose`}>{value ? 'Chọn ảnh khác' : 'Chọn ảnh từ thiết bị'}</span>
+      </label>
       <label htmlFor={`${id}-url`} className="block text-xs text-slate-500">Hoặc dùng URL ảnh hiện có</label>
       <input id={`${id}-url`} className="field" placeholder="https://..." disabled={disabled || busy}
         value={value.startsWith('data:') ? '' : value}
