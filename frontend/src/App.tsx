@@ -1293,13 +1293,7 @@ function BeautyLinkApp({ sessionPhase, retrySession, logoutSession }: {
               isLoading={loadingServices}
               locationPermission={locationPermission}
               onEnableLocation={handleEnableLocation}
-              onSelectSalon={(salon) => {
-                if (salon.serviceId) {
-                  handleOpenServiceById(salon.serviceId);
-                } else {
-                  handleBookDeal(salon.name, salon.name);
-                }
-              }}
+              onSelectSalon={(salon) => handleOpenPartnerBySupplier(salon.supplierId)}
               onViewAll={() => openViewAll('nearby')}
               favoritesList={favorites}
               onToggleFavorite={handleToggleFavoriteSalon}
