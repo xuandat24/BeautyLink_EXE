@@ -1335,7 +1335,7 @@ const SupplierServiceModal: React.FC<SupplierServiceModalProps> = ({
             <input
               type="number"
               min={1000}
-              step={10000}
+              step={1}
               value={formData.price}
               onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
               className="field"

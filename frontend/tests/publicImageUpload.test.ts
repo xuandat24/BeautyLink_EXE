@@ -137,6 +137,7 @@ test('salon owner can select and save distinct salon and service photos', async 
     await click('Tạo dịch vụ');
     const dialog = document.querySelector('[role="dialog"]')!;
     assert.match(dialog.textContent ?? '', /Ảnh dịch vụ/);
+    assert.equal([...dialog.querySelectorAll('input[type="number"]')].at(-1)?.getAttribute('step'), '1');
     await choose(dialog.querySelector<HTMLInputElement>('input[type="file"]')!);
     await act(async () => dialog.querySelector('form')!.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })));
     assert.equal(savedService, 'data:image/jpeg;base64,image2');
