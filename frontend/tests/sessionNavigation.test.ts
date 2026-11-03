@@ -27,7 +27,7 @@ test('focus/file-picker and deduplicated background checks preserve verified UI;
   const root = createRoot(document.getElementById('root')!);
   const user = { id: 42, fullName: 'Verified Customer', role: 'CUSTOMER' };
   try {
-    await act(async () => root.render(React.createElement(Harness)));
+    await act(async () => root.render(React.createElement(React.StrictMode, null, React.createElement(Harness))));
     assert.equal(document.body.textContent, 'checking'); assert.equal(calls, 1);
     await act(async () => finish(user)); phases.length = 0;
     await act(async () => { window.dispatchEvent(new dom.window.Event('focus')); document.dispatchEvent(new dom.window.Event('visibilitychange')); });

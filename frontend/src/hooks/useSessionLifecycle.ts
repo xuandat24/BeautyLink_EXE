@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { beautyApi, getAccessToken } from '../services/beautyApi';
 import { useBeautyStore } from '../store/beautyStore';
 import { mapBackendUser } from '../lib/authUser';
@@ -9,6 +9,7 @@ export function useSessionLifecycle() {
   // Child effects run before parent effects: mark restoration as checking on the first render.
   const [state, setState] = useState(() => peekAccessToken() ? { ...sessionSnapshot(), phase: 'checking' as const } : sessionSnapshot());
   const [retry, setRetry] = useState(0);
+  const verification = useRef<{ token: string; request: ReturnType<typeof beautyApi.me> } | null>(null);
   useEffect(() => {
     const unsubscribe = subscribeSession(() => {
       const next = sessionSnapshot(); setState(next);
@@ -27,8 +28,11 @@ export function useSessionLifecycle() {
       // A verified session stays mounted during background revalidation. Native file
       // pickers also fire focus: they must not turn ordinary UI actions into logout/loading.
       if (sessionSnapshot().phase !== 'verified') setSessionPhase('checking', token);
+      // Retain the in-flight request across StrictMode effect restarts/retry cleanup.
+      const pending = verification.current?.token === token ? verification.current : { token, request: beautyApi.me() };
+      verification.current = pending;
       try {
-        const user = await beautyApi.me();
+        const user = await pending.request;
         if (!stopped && token === getAccessToken()) {
           lastVerifiedAt = Date.now();
           lastVerifiedToken = token;
@@ -37,7 +41,10 @@ export function useSessionLifecycle() {
       } catch {
         // Definitive 401 is handled centrally. Network, 403 and 5xx never prove revocation.
         if (!stopped && token === getAccessToken()) setSessionPhase('locked', token);
-      } finally { verifying = false; }
+      } finally {
+        if (verification.current === pending) verification.current = null;
+        verifying = false;
+      }
     };
     if (getAccessToken() && sessionSnapshot().phase !== 'verified') void verify();
     const activity = (event: Event) => {

@@ -27,6 +27,17 @@
   Railway connector requires a link_id not exposed to this task. Current production SHAs NOT VERIFIED.
 - Migration and backend-first rollout/rollback instructions: latest section of DEPLOYMENT.md.
 - NEXT_ACTION: commit/push reviewed scoped files, create/reuse draft PR, require all four CI jobs at final HEAD.
+- Update: source `a45be3ddb5973cff0eeba5ce6d1a220ece42fbc5` was pushed; owner created and merged PR #16
+  to `821debf7c745e32358236e291cbf44a13d354fad` while verification was still in progress. Agent did not merge/deploy.
+  All four jobs PASS at a45be3d: https://github.com/xuandat24/BeautyLink_EXE/actions/runs/40120722128
+  Backend: 389 tests, zero failures/errors, 4 MySQL opt-in skips, Docker image build PASS. Separate MySQL
+  job includes avatar migration. Browser logs confirm booking/review smoke and desktop Chromium,
+  mobile Chromium and mobile WebKit Profile/file chooser/upload/reload/logout PASS with real Spring/JWT/H2.
+- Final review reproduced StrictMode's doubled initial /me (2 requests vs 1). A hook-local in-flight ref now
+  shares that request across effect restarts. The same test runs inside StrictMode; frontend 98/98,
+  typecheck/build PASS again. This follow-up needs its own PR/CI because #16 is already merged.
+- NEXT_ACTION (supersedes above): push StrictMode follow-up on this branch, create draft PR against current
+  main, then require all four CI checks on the follow-up HEAD. Do not merge/deploy automatically.
 - DO_NOT_REPEAT: Google fix implementation, OTP/session-policy redesign, production backup/restore, full repository audit.
 
 ## Latest hotfix checkpoint — session-aware CI fixtures, 2026-10-24
